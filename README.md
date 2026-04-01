@@ -1,9 +1,9 @@
 # ZClaw 🦞
 
-[![NPM Version](https://img.shields.io/npm/v/zclaw.svg?style=flat-square)](https://www.npmjs.com/package/zclaw)
-[![NPM Downloads](https://img.shields.io/npm/dm/zclaw.svg?style=flat-square)](https://www.npmjs.com/package/zclaw)
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?logo=github&style=flat-square)](https://github.com/hashangit/zclaw)
-[![License](https://img.shields.io/npm/l/zclaw.svg?style=flat-square)](https://github.com/hashangit/zclaw/blob/main/LICENSE)
+[![NPM Version](https://img.shields.io/npm/v/zclaw-core.svg?style=flat-square)](https://www.npmjs.com/package/zclaw-core)
+[![NPM Downloads](https://img.shields.io/npm/dm/zclaw-core.svg?style=flat-square)](https://www.npmjs.com/package/zclaw-core)
+[![GitHub Release](https://img.shields.io/github/v/tag/hashangit/zclaw?style=flat-square&label=release)](https://github.com/hashangit/zclaw/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://github.com/hashangit/zclaw/blob/main/LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
 
 **The Engineering-First Headless Agent Framework: Stable, Scalable Automation for the Post-Vision Era.**
@@ -47,11 +47,23 @@ Unlike "screen-seeing" agents (such as OpenClaw) that rely on visual interpretat
 
 ## Installation
 
-### User Installation
-Install globally via pnpm:
+### npm
 ```bash
-pnpm add -g zclaw
+npm install -g zclaw-core
 ```
+
+### pnpm
+```bash
+pnpm add -g zclaw-core
+```
+
+### Homebrew (macOS & Linux)
+```bash
+brew tap hashangit/tap
+brew install zclaw
+```
+
+> **Note:** Requires [Node.js](https://nodejs.org/) 20 or later.
 
 ### Development Installation
 1.  Clone the repository:
