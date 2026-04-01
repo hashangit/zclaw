@@ -11,11 +11,7 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "prepublishOnly": "pnpm run build",
-    "build:bin:macos-arm64": "pkg dist/index.js --target node20-macos-arm64 --output bin/zclaw-macos-arm64 --config package.json",
-    "build:bin:macos-x64": "pkg dist/index.js --target node20-macos-x64 --output bin/zclaw-macos-x64 --config package.json",
-    "build:bin:linux-x64": "pkg dist/index.js --target node20-linux-x64 --output bin/zclaw-linux-x64 --config package.json",
-    "build:bin:linux-arm64": "pkg dist/index.js --target node20-linux-arm64 --output bin/zclaw-linux-arm64 --config package.json"
+    "prepublishOnly": "pnpm run build"
   },
   "files": [
     "dist",
@@ -69,7 +65,6 @@
     "@types/jsdom": "^27.0.0",
     "@types/node": "^25.2.1",
     "@types/nodemailer": "^7.0.9",
-    "@yao-pkg/pkg": "^6.1.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
