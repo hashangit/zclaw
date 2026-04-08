@@ -2,19 +2,40 @@
   "name": "zclaw-core",
   "version": "0.1.1",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/adapters/cli/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/adapters/sdk/index.js",
+      "types": "./dist/adapters/sdk/index.d.ts"
+    },
+    "./react": {
+      "import": "./dist/adapters/sdk/react.js",
+      "types": "./dist/adapters/sdk/react.d.ts"
+    },
+    "./server": {
+      "import": "./dist/adapters/server/index.js",
+      "types": "./dist/adapters/server/index.d.ts"
+    }
+  },
+  "types": "./dist/adapters/sdk/index.d.ts",
   "bin": {
-    "zclaw": "dist/index.js"
+    "zclaw": "dist/adapters/cli/index.js"
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
+    "start": "node dist/adapters/cli/index.js",
+    "dev": "tsx src/adapters/cli/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "prepublishOnly": "pnpm run build"
   },
   "files": [
-    "dist",
+    "dist/core",
+    "dist/adapters",
+    "dist/providers",
+    "dist/tools",
+    "dist/skills",
+    "dist/models-catalog.js",
+    "dist/sdk",
     "skills",
     "README.md",
     "package.json",
@@ -59,7 +80,11 @@
     "nodemailer": "^8.0.0",
     "openai": "^6.18.0",
     "ora": "^9.3.0",
-    "playwright": "^1.58.2"
+    "playwright": "^1.58.2",
+    "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/inquirer": "^9.0.9",

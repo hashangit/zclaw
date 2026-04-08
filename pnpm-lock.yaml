@@ -34,7 +34,7 @@ importers:
         version: 8.0.4
       openai:
         specifier: ^6.18.0
-        version: 6.33.0
+        version: 6.33.0(ws@8.20.0)
       ora:
         specifier: ^9.3.0
         version: 9.3.0
@@ -63,6 +63,10 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+    optionalDependencies:
+      ws:
+        specifier: ^8.18.0
+        version: 8.20.0
 
 packages:
 
@@ -816,6 +820,18 @@ packages:
     resolution: {integrity: sha512-1to4zXBxmXHV3IiSSEInrreIlu02vUOvrhxJJH5vcxYTBDAx51cqZiKdyTxlecdKNSjj8EcxGBxNf6Vg+945gw==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
 
+  ws@8.20.0:
+    resolution: {integrity: sha512-sAt8BhgNbzCtgGbt2OxmpuryO63ZoDk/sqaB/znQm94T4fCEsy/yV+7CdC1kJhOU9lboAEU7R3kquuycDoibVA==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   xml-name-validator@5.0.0:
     resolution: {integrity: sha512-EvGK8EJ3DhaHfbRlETOWAS5pO9MZITeauHKJyb8wyajUfQUenkIg2MvLDTZ4T/TgIcm3HU0TFBgWWboAZ30UHg==}
     engines: {node: '>=18'}
@@ -1336,7 +1352,9 @@ snapshots:
     dependencies:
       mimic-function: 5.0.1
 
-  openai@6.33.0: {}
+  openai@6.33.0(ws@8.20.0):
+    optionalDependencies:
+      ws: 8.20.0
 
   ora@9.3.0:
     dependencies:
@@ -1469,6 +1487,9 @@ snapshots:
       webidl-conversions: 8.0.1
     transitivePeerDependencies:
       - '@noble/hashes'
+
+  ws@8.20.0:
+    optional: true
 
   xml-name-validator@5.0.0: {}
 

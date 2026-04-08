@@ -4,9 +4,10 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import dotenv from 'dotenv';
 import { Agent } from './agent.js';
-import { ProviderType } from './providers/types.js';
-import { createProvider, ProviderConfig } from './providers/factory.js';
-import { MODEL_CATALOG, CUSTOM_MODEL_VALUE } from './models-catalog.js';
+import { ProviderType } from '../../providers/types.js';
+import { createProvider, ProviderConfig } from '../../providers/factory.js';
+import { MODEL_CATALOG, CUSTOM_MODEL_VALUE } from '../../models-catalog.js';
+import { resolveProviderConfigFromApp } from '../../core/provider-resolver.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -439,19 +440,6 @@ async function runSetup(options: any = {}) {
   }
 }
 
-function resolveProviderConfig(config: AppConfig, providerType: ProviderType): ProviderConfig | null {
-  const modelConfig = config.models?.[providerType];
-  if (!modelConfig) return null;
-
-  const apiKey = ('apiKey' in modelConfig) ? modelConfig.apiKey : config.apiKey;
-  if (!apiKey) return null;
-
-  const model = 'model' in modelConfig ? modelConfig.model : config.model || 'gpt-4o';
-  const baseUrl = 'baseUrl' in modelConfig ? modelConfig.baseUrl : config.baseUrl;
-
-  return { type: providerType, apiKey, model, baseUrl };
-}
-
 const ALL_PROVIDER_TYPES: ProviderType[] = ['openai-compatible', 'openai', 'anthropic', 'glm'];
 
 const ADD_PROVIDER_VALUE = '__add_provider__';
@@ -649,7 +637,7 @@ async function handleModelsCommand(agent: Agent, config: AppConfig, activeProvid
       await editProviderConfig(config, selected);
       // If editing the active provider, reload it
       if (selected === activeProvider) {
-        const providerConfig = resolveProviderConfig(config, selected);
+        const providerConfig = resolveProviderConfigFromApp(config, selected);
         if (providerConfig) {
           const newProvider = await createProvider(providerConfig);
           agent.switchProvider(newProvider, providerConfig.model);
@@ -669,7 +657,7 @@ async function handleModelsCommand(agent: Agent, config: AppConfig, activeProvid
           ) as ProviderType[];
           if (remaining.length > 0) {
             activeProvider = remaining[0];
-            const providerConfig = resolveProviderConfig(config, activeProvider);
+            const providerConfig = resolveProviderConfigFromApp(config, activeProvider);
             if (providerConfig) {
               const newProvider = await createProvider(providerConfig);
               agent.switchProvider(newProvider, providerConfig.model);
@@ -742,7 +730,7 @@ async function handleModelsCommand(agent: Agent, config: AppConfig, activeProvid
     }
 
     config.models[selected]!.model = model;
-    const providerConfig = resolveProviderConfig(config, selected);
+    const providerConfig = resolveProviderConfigFromApp(config, selected);
     if (providerConfig) {
       const newProvider = await createProvider(providerConfig);
       agent.switchProvider(newProvider, model);
@@ -813,7 +801,7 @@ async function runChat(queryParts: string[], options: any) {
 
   let activeProviderType: ProviderType = options.provider || process.env.ZCLAW_PROVIDER || fullConfig.provider || 'openai-compatible';
 
-  let providerConfig = resolveProviderConfig(fullConfig, activeProviderType);
+  let providerConfig = resolveProviderConfigFromApp(fullConfig, activeProviderType);
 
   if (!providerConfig) {
     console.log(chalk.yellow("No provider configuration found."));
@@ -832,7 +820,7 @@ async function runChat(queryParts: string[], options: any) {
       Object.assign(fullConfig, newConfig);
       // Re-resolve active provider after setup — user may have changed default
       const updatedProviderType: ProviderType = options.provider || process.env.ZCLAW_PROVIDER || fullConfig.provider || 'openai-compatible';
-      providerConfig = resolveProviderConfig(fullConfig, updatedProviderType);
+      providerConfig = resolveProviderConfigFromApp(fullConfig, updatedProviderType);
     } else {
       console.error(chalk.red("Provider configuration is required to proceed."));
       process.exit(1);
@@ -927,46 +915,22 @@ async function runChat(queryParts: string[], options: any) {
 
       // /<skill-name> — user-invoked skill activation with dynamic arguments
       if (userInput.startsWith('/') && userInput.length > 1) {
-        const { parseInvocation, substituteArgs } = await import('./skills/args.js');
-        const parsed = parseInvocation(userInput);
+        const { invokeSkill } = await import('../../core/skill-invoker.js');
+        const result = await invokeSkill({ input: userInput, registry: agent.getSkillRegistry()! });
 
-        if (parsed) {
-          const skillName = parsed.skillName;
-          const registry = agent.getSkillRegistry();
-          const skill = registry?.get(skillName);
+        if (result) {
+          console.log(chalk.cyan(`Loading skill: ${result.skill.name}`));
+          // Switch to skill's preferred model if needed
+          const switchedModel = result.providerSwitchNeeded ? await agent.switchToSkillModel(result.skill) : false;
 
-          if (skill) {
-            console.log(chalk.cyan(`Loading skill: ${skill.name}`));
-            const skillBody = await registry!.getBody(skillName);
-
-            // Substitute arguments into skill body
-            const resolvedBody = substituteArgs(skillBody || '', parsed.args);
-
-            // Resolve @path references in the query
-            let resolvedQuery = parsed.args.raw;
-            if (parsed.args.raw.includes('@')) {
-              try {
-                const { resolveReferences } = await import('./skills/resolver.js');
-                resolvedQuery = await resolveReferences(parsed.args.raw);
-              } catch { /* resolver not available, use raw */ }
-            }
-
-            const prompt = resolvedQuery
-              ? `[Skill: ${skill.name} activated]\n\n${resolvedBody}\n\nUser request: ${resolvedQuery}`
-              : `[Skill: ${skill.name} activated]\n\n${resolvedBody}\n\nSkill loaded. What would you like me to do?`;
-
-            // Switch to skill's preferred model if configured
-            const switchedModel = await agent.switchToSkillModel(skill);
-
-            rl.pause();
-            try {
-              await agent.chat(prompt);
-            } finally {
-              rl.resume();
-              if (switchedModel) agent.restoreProvider();
-            }
-            continue;
+          rl.pause();
+          try {
+            await agent.chat(result.prompt);
+          } finally {
+            rl.resume();
+            if (switchedModel) agent.restoreProvider();
           }
+          continue;
         }
         // If no skill matches, fall through to treat as normal input
       }
@@ -977,7 +941,7 @@ async function runChat(queryParts: string[], options: any) {
       let resolvedInput = userInput;
       if (userInput.includes('@') && !userInput.startsWith('/')) {
         try {
-          const { resolveReferences } = await import('./skills/resolver.js');
+          const { resolveReferences } = await import('../../skills/resolver.js');
           resolvedInput = await resolveReferences(userInput);
         } catch { /* resolver not available, use raw input */ }
       }
