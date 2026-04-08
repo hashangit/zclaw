@@ -3,6 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'ZClaw',
   description: 'Headless AI agent framework with multi-provider LLM support',
+  base: '/zclaw/',
   appearance: true,
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }]
@@ -18,7 +19,7 @@ export default defineConfig({
       { text: 'Guides', link: '/guides/build-your-own-ui' },
       {
         text: 'GitHub',
-        link: 'https://github.com/zclaw/zclaw'
+        link: 'https://github.com/hashangit/zclaw'
       }
     ],
 
@@ -96,7 +97,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/zclaw/zclaw' }
+      { icon: 'github', link: 'https://github.com/hashangit/zclaw' }
     ],
 
     footer: {

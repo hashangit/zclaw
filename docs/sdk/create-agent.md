@@ -291,4 +291,4 @@ const testStore = createMemoryStore();
 
 - [generateText()](/sdk/generate-text) -- Stateless one-shot execution
 - [streamText()](/sdk/stream-text) -- Stateless streaming execution
-- [Tools](/tools/overview) -- Built-in and custom tool reference
+- [Tools](/tools/reference) -- Built-in and custom tool reference
