@@ -360,7 +360,7 @@ const quick = await generateText("Simple question", { provider: "glm" });
 const complex = await generateText("Deep analysis", { provider: "anthropic" });
 
 // Or rely on environment variables (zero config)
-// ZCLAW_API_KEY, ZCLAW_PROVIDER, ZCLAW_MODEL
+// OPENAI_API_KEY, ANTHROPIC_API_KEY, etc., ZCLAW_PROVIDER, ZCLAW_MODEL
 const { text } = await generateText("Hello");   // reads from env
 ```
 

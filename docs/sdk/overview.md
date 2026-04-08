@@ -1,0 +1,182 @@
+---
+title: SDK Overview
+description: ZClaw SDK architecture, installation, and quick-start guide.
+---
+
+# SDK Overview
+
+ZClaw is a headless AI agent framework for building LLM-powered applications. The SDK provides a functional, composable API -- no class hierarchies, no boilerplate. Import a function, pass a prompt, get a result.
+
+## Architecture
+
+ZClaw is organized in three layers of increasing statefulness:
+
+```
+generateText()   -- One-shot. Stateless. No memory between calls.
+createAgent()    -- Stateful. Multi-turn with session persistence.
+Server           -- Remote. REST + WebSocket for distributed deployments.
+```
+
+Every layer delegates to the same core agent loop, so tool execution, hook lifecycle, abort handling, and usage tracking behave identically regardless of which entry point you use.
+
+### Functional API philosophy
+
+The SDK is built around plain functions and plain objects, not class instances:
+
+- **`generateText(prompt, options?)`** -- returns a `Promise<GenerateTextResult>`
+- **`streamText(prompt, options?)`** -- returns a `Promise<StreamTextResult>` with async iterables
+- **`createAgent(options?)`** -- returns a `Promise<SdkAgent>` with `.chat()`, `.chatStream()`, and lifecycle methods
+
+Configuration is passed as options objects. Return types are plain interfaces. There are no base classes to extend.
+
+## Installation
+
+::: code-group
+
+```bash [npm]
+npm install zclaw-core
+```
+
+```bash [pnpm]
+pnpm add zclaw-core
+```
+
+```bash [yarn]
+yarn add zclaw-core
+```
+
+:::
+
+## Import patterns
+
+::: code-group
+
+```typescript [ESM -- recommended]
+import { generateText, streamText, createAgent } from "zclaw-core";
+```
+
+```typescript [SDK types only]
+import type {
+  GenerateTextOptions,
+  GenerateTextResult,
+  StreamTextResult,
+  SdkAgent,
+} from "zclaw-core";
+```
+
+```typescript [Tools and factories]
+import { tool, CORE_TOOLS, COMM_TOOLS, ADVANCED_TOOLS, ALL_TOOLS } from "zclaw-core";
+```
+
+```typescript [React integration]
+import { createUseChat } from "zclaw-core/react";
+```
+
+```typescript [Server]
+import { createServer } from "zclaw-core/server";
+```
+
+:::
+
+## Quick examples
+
+### One-shot text generation
+
+```typescript
+import { generateText } from "zclaw-core";
+
+const result = await generateText("Explain recursion in one paragraph");
+console.log(result.text);
+console.log(result.usage.totalTokens);
+```
+
+### Streaming
+
+```typescript
+import { streamText } from "zclaw-core";
+
+const stream = await streamText("Write a haiku about programming", {
+  onText: (delta) => process.stdout.write(delta),
+});
+
+const finalText = await stream.fullText;
+```
+
+### Multi-turn agent
+
+```typescript
+import { createAgent } from "zclaw-core";
+
+const agent = await createAgent({
+  model: "gpt-5.4",
+  systemPrompt: "You are a concise coding assistant.",
+});
+
+const reply = await agent.chat("What is a closure in JavaScript?");
+console.log(reply.text);
+
+// Context is preserved -- follow-up questions work naturally
+const followUp = await agent.chat("Show me an example");
+console.log(followUp.text);
+```
+
+### Custom tools
+
+```typescript
+import { generateText, tool } from "zclaw-core";
+import { z } from "zod";
+
+const weatherTool = tool({
+  description: "Get the current weather for a city",
+  parameters: z.object({ city: z.string() }),
+  execute: async ({ city }) => `Weather in ${city}: 72F, sunny`,
+});
+
+const result = await generateText("What is the weather in Tokyo?", {
+  tools: [weatherTool],
+});
+```
+
+### HTTP SSE endpoint
+
+```typescript
+import { streamText } from "zclaw-core";
+
+app.get("/chat", async (req, res) => {
+  const stream = await streamText(req.query.prompt as string);
+  return stream.toResponse();
+});
+```
+
+## Provider support
+
+ZClaw supports multiple LLM providers out of the box:
+
+| Provider         | `provider` value      | Default model                  |
+| ---------------- | --------------------- | ------------------------------ |
+| OpenAI           | `"openai"`            | `gpt-5.4`                       |
+| Anthropic        | `"anthropic"`         | `claude-sonnet-4-6-20260320`     |
+| GLM              | `"glm"`               | `opus`                          |
+| OpenAI-compatible| `"openai-compatible"` | `gpt-5.4` (configurable `baseUrl`) |
+
+Configure providers via environment variables, `.env`, or the `zclaw setup` CLI wizard.
+
+## Built-in tools
+
+ZClaw ships with a set of built-in tools organized into groups:
+
+| Group      | Tools                                                       |
+| ---------- | ----------------------------------------------------------- |
+| **Core**   | `execute_shell_command`, `read_file`, `write_file`, `get_current_datetime` |
+| **Comm**   | `send_email`, `web_search`, `send_notification`             |
+| **Advanced**| `read_website`, `take_screenshot`, `generate_image`, `optimize_prompt`, `use_skill` |
+
+Pass tool names as strings, or use group names (`"core"`, `"comm"`, `"advanced"`, `"all"`) to include entire groups.
+
+## API reference pages
+
+| Page | Description |
+|------|-------------|
+| [generateText()](/sdk/generate-text) | One-shot agent execution with tools, hooks, and structured output |
+| [streamText()](/sdk/stream-text) | Streaming execution with async iterables and SSE helpers |
+| [createAgent()](/sdk/create-agent) | Stateful multi-turn agent with session persistence |

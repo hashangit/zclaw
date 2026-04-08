@@ -75,7 +75,7 @@ async function downloadImage(url: string, destPath: string): Promise<void> {
 
 const handler = async (args: any, config: any): Promise<string> => {
   const apiKey = config.imageApiKey || config.apiKey || process.env.OPENAI_API_KEY;
-  const baseURL = config.imageBaseUrl || config.baseUrl || process.env.OPENAI_BASE_URL;
+  const baseURL = config.imageBaseUrl || config.baseUrl || process.env.OPENAI_COMPAT_BASE_URL || process.env.OPENAI_BASE_URL;
 
   if (!apiKey) {
     return "Error: Image Service API Key is missing. Please configure it in .zclaw/setting.json (imageApiKey or apiKey).";

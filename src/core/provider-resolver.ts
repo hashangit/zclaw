@@ -54,10 +54,10 @@ let providerConfig: MultiProviderConfig | null = null;
 // ── Default models per provider ───────────────────────────────────────────
 
 const DEFAULT_MODELS: Record<ProviderType, string> = {
-  openai: "gpt-4o",
-  anthropic: "claude-sonnet-4-20250514",
-  glm: "glm-5.1",
-  "openai-compatible": "gpt-4o",
+  openai: "gpt-5.4",
+  anthropic: "claude-sonnet-4-6-20260320",
+  glm: "opus",
+  "openai-compatible": "gpt-5.4",
 };
 
 // ── Env var keys per provider ────────────────────────────────────────────
@@ -70,8 +70,8 @@ const PROVIDER_ENV_KEYS: Record<
   anthropic: { apiKey: "ANTHROPIC_API_KEY" },
   glm: { apiKey: "GLM_API_KEY" },
   "openai-compatible": {
-    apiKey: "ZCLAW_API_KEY",
-    baseUrl: "OPENAI_BASE_URL",
+    apiKey: "OPENAI_COMPAT_API_KEY",
+    baseUrl: "OPENAI_COMPAT_BASE_URL",
   },
 };
 
@@ -88,20 +88,36 @@ function resolveApiKey(type: ProviderType): string | undefined {
     const key = env(envKeys.apiKey);
     if (key) return key;
   }
-  // Generic fallback
-  return env("ZCLAW_API_KEY") ?? undefined;
+  // Backward compat: check deprecated env vars
+  if (type === "openai-compatible") {
+    const legacy = env("ZCLAW_API_KEY");
+    if (legacy) {
+      console.warn("[zclaw] ZCLAW_API_KEY is deprecated. Use OPENAI_COMPAT_API_KEY instead.");
+      return legacy;
+    }
+  }
+  return undefined;
 }
 
 function resolveBaseUrl(type: ProviderType): string | undefined {
   const envKeys = PROVIDER_ENV_KEYS[type];
   if (envKeys.baseUrl) {
-    return env(envKeys.baseUrl) ?? undefined;
+    const url = env(envKeys.baseUrl);
+    if (url) return url;
+  }
+  // Backward compat: check deprecated env var for openai-compatible
+  if (type === "openai-compatible") {
+    const legacy = env("OPENAI_BASE_URL");
+    if (legacy) {
+      console.warn("[zclaw] OPENAI_BASE_URL is deprecated. Use OPENAI_COMPAT_BASE_URL instead.");
+      return legacy;
+    }
   }
   return undefined;
 }
 
 function resolveDefaultType(): ProviderType {
-  const fromEnv = env("ZCLAW_PROVIDER");
+  const fromEnv = env("LLM_PROVIDER") ?? env("ZCLAW_PROVIDER");
   if (
     fromEnv &&
     (fromEnv === "openai" ||
@@ -115,7 +131,7 @@ function resolveDefaultType(): ProviderType {
 }
 
 function resolveDefaultModel(type: ProviderType): string {
-  return env("ZCLAW_MODEL") ?? DEFAULT_MODELS[type];
+  return env("LLM_MODEL") ?? env("ZCLAW_MODEL") ?? DEFAULT_MODELS[type];
 }
 
 function toInternalType(type: ProviderType): InternalProviderType {
@@ -223,7 +239,7 @@ export function getProviderConfig(
 
 /**
  * Resolves which provider type is the default.
- * Checks explicit config, then ZCLAW_PROVIDER env var, then falls back to "openai".
+ * Checks explicit config, then LLM_PROVIDER env var, then falls back to "openai".
  *
  * @returns The default provider type.
  */
@@ -364,31 +380,39 @@ export function resolveFromEnv(): MultiProviderConfig | null {
   if (process.env.OPENAI_API_KEY) {
     config.openai = {
       apiKey: process.env.OPENAI_API_KEY,
-      model: process.env.OPENAI_MODEL ?? "gpt-4o",
+      model: process.env.OPENAI_MODEL ?? "gpt-5.4",
     };
   }
   if (process.env.ANTHROPIC_API_KEY) {
     config.anthropic = {
       apiKey: process.env.ANTHROPIC_API_KEY,
-      model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514",
+      model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6-20260320",
     };
   }
   if (process.env.GLM_API_KEY) {
     config.glm = {
       apiKey: process.env.GLM_API_KEY,
-      model: process.env.GLM_MODEL ?? "glm-5.1",
+      model: process.env.GLM_MODEL ?? "opus",
     };
   }
-  if (process.env.ZCLAW_API_KEY && process.env.OPENAI_BASE_URL) {
+  const compatApiKey = process.env.OPENAI_COMPAT_API_KEY || process.env.ZCLAW_API_KEY;
+  const compatBaseUrl = process.env.OPENAI_COMPAT_BASE_URL || process.env.OPENAI_BASE_URL;
+  if (compatApiKey && compatBaseUrl) {
+    if (process.env.ZCLAW_API_KEY && !process.env.OPENAI_COMPAT_API_KEY) {
+      console.warn("[zclaw] ZCLAW_API_KEY is deprecated. Use OPENAI_COMPAT_API_KEY instead.");
+    }
+    if (process.env.OPENAI_BASE_URL && !process.env.OPENAI_COMPAT_BASE_URL) {
+      console.warn("[zclaw] OPENAI_BASE_URL is deprecated. Use OPENAI_COMPAT_BASE_URL instead.");
+    }
     config["openai-compatible"] = {
-      apiKey: process.env.ZCLAW_API_KEY,
-      baseUrl: process.env.OPENAI_BASE_URL,
-      model: process.env.ZCLAW_MODEL ?? "gpt-4o",
+      apiKey: compatApiKey,
+      baseUrl: compatBaseUrl,
+      model: process.env.OPENAI_COMPAT_MODEL ?? process.env.LLM_MODEL ?? process.env.ZCLAW_MODEL ?? "gpt-5.4",
     };
   }
 
   if (Object.keys(config).length > 0) {
-    const defaultProvider = (process.env.ZCLAW_PROVIDER as ProviderType) ??
+    const defaultProvider = (process.env.LLM_PROVIDER ?? process.env.ZCLAW_PROVIDER) as ProviderType) ??
       (config.openai ? "openai" : Object.keys(config)[0]) as ProviderType;
 
     return {

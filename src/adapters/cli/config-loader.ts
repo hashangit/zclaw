@@ -142,7 +142,7 @@ export function migrateLegacyFormat(
     config.models = {
       'openai-compatible': {
         apiKey: process.env.OPENAI_API_KEY || config.apiKey || '',
-        baseUrl: process.env.OPENAI_BASE_URL || config.baseUrl || 'https://api.openai.com/v1',
+        baseUrl: process.env.OPENAI_COMPAT_BASE_URL || process.env.OPENAI_BASE_URL || config.baseUrl || 'https://api.openai.com/v1',
         model: options?.model || process.env.OPENAI_MODEL || config.model || 'gpt-4o',
       },
     };

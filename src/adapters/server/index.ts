@@ -79,10 +79,11 @@ function initializeProvidersFromEnv(): void {
       model: process.env.GLM_MODEL ?? "glm-5.1",
     };
   }
-  if (process.env.ZCLAW_API_KEY && process.env.OPENAI_BASE_URL) {
+  if ((process.env.OPENAI_COMPAT_API_KEY || process.env.ZCLAW_API_KEY) &&
+      (process.env.OPENAI_COMPAT_BASE_URL || process.env.OPENAI_BASE_URL)) {
     config["openai-compatible"] = {
-      apiKey: process.env.ZCLAW_API_KEY,
-      baseUrl: process.env.OPENAI_BASE_URL,
+      apiKey: process.env.OPENAI_COMPAT_API_KEY || process.env.ZCLAW_API_KEY!,
+      baseUrl: process.env.OPENAI_COMPAT_BASE_URL || process.env.OPENAI_BASE_URL!,
       model: process.env.ZCLAW_MODEL ?? "gpt-4o",
     };
   }
