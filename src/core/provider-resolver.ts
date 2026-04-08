@@ -11,7 +11,7 @@
  * Phase 2: Rewire existing modules to import from here
  */
 
-import { createProvider, type ProviderConfig } from "../providers/factory.js";
+import { createProvider, GLM_MODEL_MAP, type ProviderConfig } from "../providers/factory.js";
 import type { LLMProvider, ProviderType as InternalProviderType } from "../providers/types.js";
 import type { MultiProviderConfig, ProviderType } from "./types.js";
 
@@ -276,6 +276,28 @@ export async function getProvider(
     provider: llmProvider,
     model: config.model,
   };
+}
+
+/**
+ * Resolve a GLM model alias or model name to the actual model identifier.
+ *
+ * Looks up the model in the GLM_MODEL_MAP (e.g. "haiku" -> "glm-4.5-air",
+ * "sonnet" -> "glm-4.7", "opus" -> "glm-5.1"). If the model is not found in
+ * the map, it is returned unchanged.
+ *
+ * @param model - Model name or alias to resolve.
+ * @returns The resolved model identifier.
+ *
+ * @example
+ * ```ts
+ * import { resolveGLMModel } from '@zclaw/core';
+ *
+ * resolveGLMModel('sonnet'); // "glm-4.7"
+ * resolveGLMModel('glm-5.1'); // "glm-5.1" (passthrough)
+ * ```
+ */
+export function resolveGLMModel(model: string): string {
+  return GLM_MODEL_MAP[model] ?? model;
 }
 
 // ── CLI-specific functions (from src/index.ts) ─────────────────────────────

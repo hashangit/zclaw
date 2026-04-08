@@ -15,6 +15,15 @@ export {
 export { createHookExecutor, type HookExecutor } from './hooks.js';
 export { createSessionStore, createMemoryStore } from './session-store.js';
 
+// Export error classes (canonical definitions live in ./errors.ts)
+export {
+  ZclawError,
+  ProviderError,
+  ToolError,
+  MaxStepsError,
+  AbortedError,
+} from './errors.js';
+
 // Export all types from types.ts
 export type {
   // Provider
@@ -49,9 +58,11 @@ export type {
   SessionData,
   // Skills
   SkillMetadata,
-  // Errors
-  ZclawError,
 } from './types.js';
+
+// ZclawError is also re-exported as a value from types.ts, but the canonical
+// class export comes from ./errors.js above. The `export type` block omits
+// ZclawError intentionally to avoid a duplicate value export.
 
 // Export provider resolver functions
 export {
@@ -68,6 +79,7 @@ export {
   addProvider,
   updateProviderConfig,
   removeProvider,
+  resolveGLMModel,
 } from './provider-resolver.js';
 
 export type {
@@ -83,4 +95,18 @@ export {
   toZclawError,
   messageToProviderMessage,
   providerToolCallToToolCall,
+  providerResponseToMessages,
 } from './message-convert.js';
+
+// Export tool executor
+export {
+  CORE_TOOLS,
+  COMM_TOOLS,
+  ADVANCED_TOOLS,
+  ALL_TOOLS,
+  tool,
+  resolveTools,
+  getToolGroup,
+  registerTool,
+  executeTool,
+} from './tool-executor.js';

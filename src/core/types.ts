@@ -5,6 +5,8 @@
  * Every SDK module imports from here.
  */
 
+import type { ZclawError as ZclawErrorType } from "./errors.js";
+
 // ── Provider ──────────────────────────────────────────────────────────
 
 export type ProviderType = "openai" | "anthropic" | "glm" | "openai-compatible";
@@ -96,7 +98,7 @@ export interface Hooks {
     result: { name: string; output: string; duration: number },
   ) => void | Promise<void>;
   onStep?: (step: StepResult) => void | Promise<void>;
-  onError?: (error: ZclawError) => void | Promise<void>;
+  onError?: (error: ZclawErrorType) => void | Promise<void>;
   onFinish?: (result: GenerateTextResult) => void | Promise<void>;
 }
 
@@ -139,7 +141,7 @@ export interface StreamTextOptions extends GenerateTextOptions {
     result: { callId: string; output: string; success: boolean },
   ) => void;
   onStep?: (step: StepResult) => void;
-  onError?: (error: ZclawError) => void;
+  onError?: (error: ZclawErrorType) => void;
 }
 
 export interface StreamTextResult {
@@ -213,11 +215,9 @@ export interface SkillMetadata {
 }
 
 // ── Errors ────────────────────────────────────────────────────────────
+// Error classes live in ./errors.ts. We re-export them here so that
+// existing consumers that import { ZclawError } from "./types.js"
+// continue to compile without changes.
 
-export interface ZclawError extends Error {
-  code: string; // "PROVIDER_ERROR" | "TOOL_FAILED" | "MAX_STEPS" | "ABORTED"
-  retryable: boolean;
-  provider?: string;
-  tool?: string;
-}
+export { ZclawError, ProviderError, ToolError, MaxStepsError, AbortedError } from "./errors.js";
 

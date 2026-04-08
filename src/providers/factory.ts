@@ -8,7 +8,7 @@ export interface ProviderConfig {
   timeout?: number;
 }
 
-const GLM_MODEL_MAP: Record<string, string> = {
+export const GLM_MODEL_MAP: Record<string, string> = {
   haiku: 'glm-4.5-air',
   sonnet: 'glm-4.7',
   opus: 'glm-5.1',

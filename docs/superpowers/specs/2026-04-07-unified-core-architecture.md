@@ -525,3 +525,69 @@ const stream = await streamText(msg.message, {
 5. ~~**Per-skill model switching?**~~ **RESOLVED:** `ProviderFactory` pattern. `runAgentLoop()` accepts a factory that adapters use to implement `switchToSkillModel`/`restoreProvider` semantics without mutable state. See `core/agent-loop.ts`.
 6. ~~**System prompt construction?**~~ **RESOLVED:** `systemPrompt?: string` in `AgentLoopOptions`. CLI adapter's `buildSystemPrompt()` generates it. Core is unaware of content.
 7. ~~**Setup wizard placement?**~~ **RESOLVED:** `adapters/cli/setup.ts` (~320 lines). Depends on `config-loader.ts` for persistence.
+
+---
+
+## Implementation Status (audited 2026-04-08)
+
+### Core Files (8/10)
+
+| File | Status | Notes |
+|---|:---:|---|
+| `core/types.ts` | ✅ DONE | All canonical types exported. Error types (ZclawError, ProviderError, etc.) live here instead of separate `errors.ts`. |
+| `core/agent-loop.ts` | ✅ DONE | Full runAgentLoop with ProviderFactory, hooks, signal. Imports: types, providers, message-convert, tools, hooks. |
+| `core/provider-resolver.ts` | ✅ DONE | All resolution + mutation APIs. Missing `resolveGLMModel` export (delegation to factory may still be inline). |
+| `core/session-store.ts` | ✅ DONE | FileSessionStore, MemorySessionStore, factories. |
+| `core/tool-executor.ts` | ❌ MISSING | Tool registry, resolveTools, tool() factory, tool group constants. Logic likely still in `adapters/sdk/tools.ts` (286 lines). |
+| `core/skill-invoker.ts` | ✅ DONE | invokeSkill + SkillInvocationResult. Imports from skills/*, types. |
+| `core/hooks.ts` | ✅ DONE | createHookExecutor + HookExecutor. |
+| `core/message-convert.ts` | ✅ DONE | messageToProviderMessage, providerToolCallToToolCall, generateId, now, estimateTokens, toZclawError. Missing `providerResponseToMessages`. |
+| `core/errors.ts` | ❌ MISSING | Spec called for ZclawError class hierarchy. Error types defined inline in `core/types.ts` instead. |
+| `core/index.ts` | ✅ DONE | Barrel exports all core modules. |
+
+### Adapter Files (12/14)
+
+| File | Status | Actual Lines | Spec Lines | Notes |
+|---|:---:|---:|---:|---|
+| `adapters/cli/index.ts` | ✅ EXISTS | ~980 | ~250 | Much larger than spec. Contains config loading, setup wizard, readline loop — responsibilities that should be in config-loader.ts/setup.ts. |
+| `adapters/cli/agent.ts` | ✅ EXISTS | ~209 | ~100 | Reasonable; wraps core agent-loop with chalk/ora output. |
+| `adapters/cli/config-loader.ts` | ❌ MISSING | — | ~180 | Config loading logic still inline in cli/index.ts. |
+| `adapters/cli/setup.ts` | ❌ MISSING | — | ~320 | Setup wizard logic still inline in cli/index.ts. |
+| `adapters/sdk/index.ts` | ✅ EXISTS | ~365 | ~120 | Larger than spec; contains generateText, streamText, re-exports. |
+| `adapters/sdk/agent.ts` | ✅ EXISTS | ~470 | ~180 | Larger than spec; contains session management + agent state. |
+| `adapters/sdk/tools.ts` | ✅ EXISTS | ~286 | ~40 | Contains tool logic that spec says belongs in core/tool-executor.ts. |
+| `adapters/sdk/http.ts` | ✅ EXISTS | ~143 | ~60 | SSE + Response helpers. Includes SSEOptions (correct per spec). |
+| `adapters/sdk/react.ts` | ✅ EXISTS | ~549 | ~200 | useChat hook. |
+| `adapters/server/index.ts` | ✅ EXISTS | ~363 | ~100 | Imports from sdk/ (correct per spec). |
+| `adapters/server/rest.ts` | ✅ EXISTS | ~292 | ~180 | REST routes. |
+| `adapters/server/websocket.ts` | ✅ EXISTS | ~724 | ~200 | Full WS protocol implementation. |
+| `adapters/server/auth.ts` | ✅ EXISTS | ~221 | ~220 | API key auth. |
+| `adapters/server/session-store.ts` | ✅ EXISTS | ~309 | ~180 | Server session management. |
+
+### Old File Cleanup (17/17)
+
+All 12 files marked DELETE have been deleted. All 5 files marked MOVE have been moved. `src/sdk/` and `src/server/` directories no longer exist. ✅
+
+### Package.json & Wiring ✅
+
+- Exports map matches spec exactly (`.`, `./react`, `./server`, bin).
+- Core does NOT import from adapters (no upward dependencies).
+- Server imports from `adapters/sdk/` (not directly from core).
+- No circular dependencies between core modules.
+- `tsconfig.json` includes `src/**/*` — covers all new directories.
+
+### Wiring Gaps
+
+1. **`core/tool-executor.ts` missing → `adapters/sdk/tools.ts` holds the logic.** This means tools are SDK-coupled. The server adapter may need to import from SDK for tool resolution, or tool logic needs to be extracted to core.
+2. **`core/errors.ts` missing → error classes in `core/types.ts`.** Works functionally but deviates from spec. Error hierarchy lacks proper class implementations (e.g., `retryable`, `provider` fields).
+3. **`adapters/cli/config-loader.ts` + `setup.ts` missing → all logic in `cli/index.ts` (980 lines).** This monolith makes the CLI adapter harder to maintain. Config loading and setup wizard should be extracted.
+4. **`provider-resolver.ts` missing `resolveGLMModel` export.** GLM model mapping may still be inline or in factory.
+5. **`message-convert.ts` missing `providerResponseToMessages`.** This helper may be duplicated in adapters instead of centralized.
+
+### Overall Assessment
+
+**~80% implemented.** The critical architecture (core loop, provider resolution, session store, adapter separation, old code cleanup, package.json) is complete and correctly wired. Remaining gaps are:
+- 2 missing core files (tool-executor, errors)
+- 2 missing CLI adapter splits (config-loader, setup)
+- 5 missing/relocated exports across existing files
+- Adapter files are thicker than spec targets (sdk/tools.ts and cli/index.ts especially)

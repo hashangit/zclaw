@@ -1,7 +1,8 @@
 /** ZClaw Core — Message conversion helpers */
 
-import type { Message, ToolCall, ZclawError } from "./types.js";
-import type { ProviderMessage, ProviderToolCall } from "../providers/types.js";
+import type { Message, ToolCall } from "./types.js";
+import { ZclawError, ProviderError, ToolError } from "./errors.js";
+import type { ProviderMessage, ProviderResponse, ProviderToolCall } from "../providers/types.js";
 
 /**
  * Generate a unique identifier using crypto.randomUUID().
@@ -26,13 +27,19 @@ export function estimateTokens(text: string): number {
 
 /**
  * Create a ZclawError from a plain Error or unknown value.
+ * Uses the proper class hierarchy based on the error code.
  */
 export function toZclawError(err: unknown, code: string): ZclawError {
-  const error = err instanceof Error ? err : new Error(String(err));
-  const zclawErr = error as ZclawError;
-  zclawErr.code = code;
-  zclawErr.retryable = code === "PROVIDER_ERROR";
-  return zclawErr;
+  const message = err instanceof Error ? err.message : String(err);
+
+  switch (code) {
+    case "PROVIDER_ERROR":
+      return new ProviderError(message);
+    case "TOOL_FAILED":
+      return new ToolError(message);
+    default:
+      return new ZclawError(message, code, code === "PROVIDER_ERROR");
+  }
 }
 
 /**
@@ -68,4 +75,32 @@ export function providerToolCallToToolCall(tc: ProviderToolCall): ToolCall {
     name: tc.name,
     arguments: args,
   };
+}
+
+/**
+ * Convert a ProviderResponse into an array of SDK Message objects.
+ *
+ * A single provider response may contain both text content and tool calls.
+ * This function normalises it into one or more Message objects:
+ *  - An assistant message with text content (and optional toolCalls)
+ *  - If only tool calls with no text, an assistant message with empty content
+ *
+ * @param response - The raw ProviderResponse from the LLM provider.
+ * @returns Array of Message objects representing the response.
+ */
+export function providerResponseToMessages(response: ProviderResponse): Message[] {
+  const messages: Message[] = [];
+
+  // Build assistant message
+  const toolCalls = response.tool_calls?.map(providerToolCallToToolCall) ?? [];
+  const assistantMsg: Message = {
+    id: generateId(),
+    role: "assistant",
+    content: response.content ?? "",
+    timestamp: now(),
+    ...(toolCalls.length > 0 ? { toolCalls } : {}),
+  };
+  messages.push(assistantMsg);
+
+  return messages;
 }
