@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://github.com/hashangit/zclaw/blob/main/LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
 
-**The Engineering-First Headless Agent Framework: Stable, Scalable Automation for the Post-Vision Era.**
+**The Engineering-First Headless Agent Framework: CLI, SDK, and Server. Stable, Scalable Automation for the Post-Vision Era.**
 
 ---
 
@@ -25,6 +25,8 @@ Unlike "screen-seeing" agents (such as OpenClaw) that rely on visual interpretat
 - 📈 **Massive Scalability**: Low resource consumption allows orchestrating thousands of instances (e.g., in K8s) for true automation swarms.
 - 🔌 **Swarm Ready**: Stateless design allows for easy orchestration via K8s, Docker Swarm, or simple shell loops.
 - 🧩 **Extensible Integrations**: Built-in support for Web Search (Tavily), Email (SMTP), and Notification Webhooks (Feishu, DingTalk, WeCom).
+- 📦 **SDK & Server**: TypeScript SDK for programmatic use, standalone HTTP/WebSocket server for remote access.
+- 🛠 **Skills System**: Loadable skill packs with file references, custom tool registration, and extensible workflows.
 
 ## Features
 
@@ -37,10 +39,15 @@ Unlike "screen-seeing" agents (such as OpenClaw) that rely on visual interpretat
 - 🌐 **Web Search**: Integrated with Tavily for real-time information retrieval.
 - 🕒 **Time Accuracy**: Built-in tool to get precise system date and time for correct temporal context.
 - 📧 **Communication**: Send emails and push notifications to chat groups automatically.
+- 📦 **TypeScript SDK**: Programmatic access via `createAgent`, `createUseChat` (React hook), `streamText`, `generateText`.
+- 🖥 **Server Mode**: Standalone HTTP/WebSocket server with API key auth and session management.
+- 🛠 **Skills System**: Loadable skill packs from directories with `@path` file references and custom tool creation.
+- 🐚 **Shell Approval**: Interactive prompts or non-interactive modes via `ZCLAW_SHELL_APPROVE` env var.
 
 ## Tech Stack
 - **Runtime**: Node.js
 - **Language**: TypeScript
+- **Architecture**: Modular multi-adapter (core, CLI, SDK, server)
 - **Framework**: Commander.js
 - **UI**: Inquirer (interactivity), Chalk (styling), Ora (spinners)
 - **AI**: Multi-Provider (OpenAI, Anthropic Claude, GLM, OpenAI-Compatible)
@@ -59,11 +66,31 @@ pnpm add -g zclaw-core
 
 ### Homebrew (macOS & Linux)
 ```bash
-brew tap hashangit/tap
+brew tap hashangit/zclaw
 brew install zclaw
 ```
 
 > **Note:** Requires [Node.js](https://nodejs.org/) 20 or later.
+
+### Server Binary
+The `zclaw-server` binary is included for running the standalone HTTP/WebSocket server:
+```bash
+zclaw-server --port 7337 --generate-api-key
+```
+
+### SDK Usage
+Import the SDK in your TypeScript/JavaScript project:
+```bash
+npm install zclaw-core
+```
+```ts
+// Main exports
+import { createAgent, streamText, generateText } from 'zclaw-core';
+// React hook
+import { useAgent } from 'zclaw-core/react';
+// Server utilities
+import { createServer } from 'zclaw-core/server';
+```
 
 ### Development Installation
 1.  Clone the repository:
@@ -137,6 +164,8 @@ zclaw
 - `-p, --provider <provider>`: Specify the LLM provider (`openai-compatible`, `openai`, `anthropic`, `glm`).
 - `-n, --no-interactive`: Exit after processing the initial query (Headless mode).
 - `-y, --yes`: Auto-confirm all tool executions (e.g., shell commands).
+- `--docker`: Run in Docker-optimized non-interactive mode (auto-detected in containers).
+- `--generate-api-key`: Generate an API key for server mode (use with `zclaw-server`).
 
 ### Interactive Commands
 - `/models`: Switch between configured providers during a conversation.
@@ -154,7 +183,13 @@ ZClaw uses a hierarchical configuration system.
 
 ### Supported Configuration Keys (JSON)
 
-**Multi-Provider Configuration (New):**
+**Environment Variables:**
+- `ZCLAW_SHELL_APPROVE`: Shell command approval mode (`auto`, `deny`, or unset for interactive)
+- `ZCLAW_SKILLS_PATH`: Directory containing custom skill packs
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GLM_API_KEY`: Provider API keys
+- `OPENAI_COMPAT_API_KEY`, `OPENAI_COMPAT_BASE_URL`, `OPENAI_COMPAT_MODEL`: OpenAI-compatible provider settings
+
+**Multi-Provider Configuration:**
 - `provider`: Active provider type (`openai-compatible`, `openai`, `anthropic`, `glm`)
 - `models`: Object containing per-provider configurations:
   ```json
@@ -227,7 +262,232 @@ Configure webhooks to receive alerts or reports in your team chat apps.
 Built-in utility to provide the agent with the current system time, ensuring accurate handling of relative time requests.
 - **Usage**: "What's the date today?" or "Remind me to check the logs next Monday."
 
+## SDK & Programmatic Usage
+
+ZClaw provides a TypeScript SDK for building agent-powered applications.
+
+### Basic Agent
+```ts
+import { createAgent } from 'zclaw-core';
+
+const agent = await createAgent({
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-5-20250929',
+});
+
+const result = await agent.chat('List all running Docker containers');
+console.log(result.text);
+```
+
+### Streaming
+```ts
+import { streamText } from 'zclaw-core';
+
+const stream = await streamText('Analyze the logs for errors', {
+  provider: 'openai',
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Structured Output
+```ts
+import { generateText } from 'zclaw-core';
+
+const result = await generateText('Extract the top 3 issues from these logs', {
+  provider: 'anthropic',
+});
+console.log(result.text);
+```
+
+### React Hook
+```tsx
+import { createUseChat } from 'zclaw-core/react';
+
+const useChat = await createUseChat();
+
+function AgentPanel() {
+  const { messages, input, setInput, handleSubmit, isLoading } = useChat({
+    api: '/api/chat',
+  });
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input value={input} onChange={(e) => setInput(e.target.value)} />
+      <button type="submit" disabled={isLoading}>
+        {isLoading ? 'Thinking...' : 'Send'}
+      </button>
+    </form>
+  );
+}
+```
+
+### Custom Tools
+```ts
+import { createAgent, tool } from 'zclaw-core';
+
+const agent = await createAgent({
+  provider: 'openai',
+  tools: [
+    tool({
+      name: 'check_disk',
+      description: 'Check disk usage',
+      parameters: {},
+      execute: async () => {
+        const usage = await getDiskUsage();
+        return JSON.stringify(usage);
+      },
+    }),
+  ],
+});
+```
+
+### Session Persistence
+```ts
+const agent = await createAgent({
+  provider: 'anthropic',
+  persist: 'my-session',          // Resume a previous session
+});
+```
+
+## Server Mode
+
+Run ZClaw as a standalone HTTP/WebSocket server for remote agent access.
+
+### Starting the Server
+```bash
+# Start with default settings
+zclaw-server
+
+# Generate an API key
+zclaw-server --generate-api-key
+
+# Custom port
+zclaw-server --port 8080
+```
+
+### REST API
+```bash
+# Send a prompt
+curl -X POST http://localhost:7337/api/chat \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Check disk usage", "provider": "openai"}'
+
+# List sessions
+curl http://localhost:7337/api/sessions \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### WebSocket Streaming
+```ts
+const ws = new WebSocket('ws://localhost:7337/ws?token=YOUR_API_KEY');
+
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    type: 'chat',
+    message: 'Analyze the error logs',
+    provider: 'anthropic',
+  }));
+};
+
+ws.onmessage = (event) => {
+  const chunk = JSON.parse(event.data);
+  process.stdout.write(chunk.text);
+};
+```
+
+## Skills System
+
+Skills are loadable packs that extend the agent with domain-specific tools and prompts.
+
+### Using Skills
+```bash
+# Built-in skills are loaded automatically
+zclaw "Deploy the app to production"    # Uses docker-ops, k8s-deploy skills
+zclaw "Analyze the nginx logs"          # Uses log-analyzer skill
+```
+
+### Built-in Skills
+- **docker-ops**: Docker container management and deployment
+- **k8s-deploy**: Kubernetes deployment and orchestration
+- **log-analyzer**: Log parsing, filtering, and anomaly detection
+
+### Custom Skills
+Create a skill directory with a manifest and tool definitions:
+```
+my-skills/
+  custom-deploy/
+    skill.json          # Skill manifest
+    instructions.md     # System prompt extension
+    tools/              # Tool definitions
+      deploy.ts
+```
+
+Configure the skills path:
+```bash
+export ZCLAW_SKILLS_PATH=/path/to/my-skills
+```
+
+### @path File References
+Skills can reference files using `@path` syntax in their instructions:
+```markdown
+Read the deployment config at @path:./k8s/deployment.yaml and validate it.
+```
+
 ## Docker Support
+
+ZClaw includes a production-ready [`Dockerfile`](./Dockerfile) (Node 20 Alpine) and [`docker-compose.yml`](./docker-compose.yml) for containerized deployment.
+
+### Quick Start with Docker
+
+```bash
+# Clone and build
+git clone https://github.com/hashangit/zclaw.git
+cd zclaw
+docker build -t zclaw-server .
+
+# Run the server
+docker run -d -p 7337:7337 \
+  -e OPENAI_API_KEY=sk-... \
+  zclaw-server
+
+# Or use Docker Compose
+docker compose up -d
+```
+
+### Docker-Optimized CLI Mode
+Use `--docker` for non-interactive execution inside containers:
+```bash
+docker run --rm \
+  -e OPENAI_API_KEY=sk-... \
+  -e ZCLAW_SHELL_APPROVE=auto \
+  zclaw-server zclaw "Check disk usage" --docker
+```
+
+ZClaw auto-detects Docker and non-interactive environments. When running in a container, it adjusts behavior accordingly (no interactive prompts, streamlined output).
+
+### Shell Approval in Containers
+Set `ZCLAW_SHELL_APPROVE` to control how shell commands are approved without interactive prompts:
+- `auto`: Automatically approve all commands (use in trusted/sandboxed environments)
+- `deny`: Deny all shell command execution
+- _(unset)_: Interactive prompt (default, requires a TTY)
+
+```yaml
+# docker-compose.yml example
+services:
+  zclaw:
+    build: .
+    ports:
+      - "7337:7337"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ZCLAW_SHELL_APPROVE=auto
+      - ZCLAW_SKILLS_PATH=/app/skills
+```
 
 ### Non-Latin Font Issues in Screenshots
 When running ZClaw inside a Docker container (especially Alpine or Debian Slim), screenshots of websites with non-Latin text (e.g., CJK characters) may display text as square boxes ("tofu") due to missing fonts. Emojis (e.g., 🔥) may also appear as squares.

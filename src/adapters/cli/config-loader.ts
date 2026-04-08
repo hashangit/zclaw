@@ -114,8 +114,10 @@ export function loadMergedConfig(): AppConfig {
 /**
  * Apply environment variable overrides to the merged config.
  * Env vars take priority over JSON config for tool settings.
+ * Also injects provider API keys from env vars into the models map.
  */
 export function applyEnvOverrides(config: AppConfig): AppConfig {
+  // Tool settings
   if (process.env.SMTP_HOST) config.smtpHost = process.env.SMTP_HOST;
   if (process.env.SMTP_PORT) config.smtpPort = process.env.SMTP_PORT;
   if (process.env.SMTP_USER) config.smtpUser = process.env.SMTP_USER;
@@ -127,6 +129,37 @@ export function applyEnvOverrides(config: AppConfig): AppConfig {
   if (process.env.DINGTALK_KEYWORD) config.dingtalkKeyword = process.env.DINGTALK_KEYWORD;
   if (process.env.WECOM_WEBHOOK) config.wecomWebhook = process.env.WECOM_WEBHOOK;
   if (process.env.WECOM_KEYWORD) config.wecomKeyword = process.env.WECOM_KEYWORD;
+
+  // Provider API keys — inject into models map from env vars
+  if (!config.models) config.models = {};
+
+  if (process.env.OPENAI_API_KEY) {
+    config.models['openai-compatible'] = {
+      apiKey: process.env.OPENAI_API_KEY,
+      baseUrl: process.env.OPENAI_COMPAT_BASE_URL || process.env.OPENAI_BASE_URL || config.models['openai-compatible']?.baseUrl || 'https://api.openai.com/v1',
+      model: process.env.OPENAI_MODEL || config.models['openai-compatible']?.model || 'gpt-4o',
+    };
+    // Also populate 'openai' if same key works
+    if (!config.models.openai?.apiKey) {
+      config.models.openai = {
+        apiKey: process.env.OPENAI_API_KEY,
+        model: process.env.OPENAI_MODEL || config.models.openai?.model || 'gpt-4o',
+      };
+    }
+  }
+  if (process.env.ANTHROPIC_API_KEY) {
+    config.models.anthropic = {
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      model: process.env.ANTHROPIC_MODEL || config.models.anthropic?.model || 'claude-sonnet-4-5-20250929',
+    };
+  }
+  if (process.env.GLM_API_KEY) {
+    config.models.glm = {
+      apiKey: process.env.GLM_API_KEY,
+      model: process.env.GLM_MODEL || config.models.glm?.model || 'sonnet',
+    };
+  }
+
   return config;
 }
 
@@ -153,6 +186,7 @@ export function migrateLegacyFormat(
 
 /**
  * Resolve the active provider type from CLI flags, env vars, and config.
+ * Checks LLM_PROVIDER env var as a standard alias for ZCLAW_PROVIDER.
  */
 export function resolveActiveProviderType(
   config: AppConfig,
@@ -160,6 +194,7 @@ export function resolveActiveProviderType(
 ): ProviderType {
   return (
     (options?.provider as ProviderType) ||
+    (process.env.LLM_PROVIDER as ProviderType) ||
     (process.env.ZCLAW_PROVIDER as ProviderType) ||
     config.provider ||
     'openai-compatible'

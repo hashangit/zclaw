@@ -189,7 +189,7 @@ ZClaw is an engineering-first headless AI agent framework designed for scalable 
 | **PACKAGE INFORMATION** |
 | 155 | Version | 1.0.40 | Current release version | Stable Release | Production-ready software |
 | 156 | License | MIT License | Open source MIT license | Free to Use | Can use commercially, modify, distribute |
-| 157 | NPM Package | `zclaw` | Published on NPM registry | Easy Installation | `npm install -g zclaw` |
+| 157 | NPM Package | `zclaw-core` | Published on NPM registry | Easy Installation | `npm install -g zclaw-core-core` |
 | 158 | GitHub Repo | hashangit/zclaw | Source code on GitHub | Open Development | Can contribute, report issues, fork |
 | 159 | Keywords | ai, cli, agent, automation, openai, docker, headless, devops, llm, typescript, orchestration, infrastructure, terminal | Package keywords | Discoverable | Easy to find via search |
 
@@ -286,7 +286,7 @@ ZClaw is an engineering-first headless AI agent framework designed for scalable 
 
 ```bash
 # Install globally
-npm install -g zclaw
+npm install -g zclaw-core
 
 # Run interactive mode
 zclaw
@@ -320,7 +320,7 @@ zclaw setup --project
 - **README:** `/Users/hashanw/Developer/zclaw/README.md`
 - **Contributing Guide:** `/Users/hashanw/Developer/zclaw/CONTRIBUTING.md`
 - **GitHub:** https://github.com/hashangit/zclaw
-- **NPM:** https://www.npmjs.com/package/zclaw
+- **NPM:** https://www.npmjs.com/package/zclaw-core
 
 ---
 

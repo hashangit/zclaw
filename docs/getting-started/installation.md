@@ -87,12 +87,14 @@ You should see the version number printed.
 
 ## Use with Docker
 
-ZClaw includes a pre-built Docker image for running the server or CLI without Node.js installation.
+ZClaw includes a Dockerfile in the repository. Build the image and run the server or CLI without a local Node.js installation.
 
-### Pull the Image
+### Build the Image
 
 ```bash
-docker pull ghcr.io/zclaw/zclaw:latest
+git clone https://github.com/hashangit/zclaw.git
+cd zclaw
+docker build -t zclaw-server .
 ```
 
 ### Run the Server
@@ -100,17 +102,23 @@ docker pull ghcr.io/zclaw/zclaw:latest
 ```bash
 docker run -p 7337:7337 \
   -e OPENAI_API_KEY=your-key \
-  ghcr.io/zclaw/zclaw:latest
+  zclaw-server
 ```
 
 The server will start on `http://localhost:7337`.
+
+### Generate an API Key
+
+```bash
+docker exec -it <container-name> zclaw server --generate-api-key
+```
 
 ### Run the CLI
 
 ```bash
 docker run -it -e OPENAI_API_KEY=your-key \
-  ghcr.io/zclaw/zclaw:latest \
-  chat
+  zclaw-server \
+  zclaw chat
 ```
 
 ## Deploy to Cloud Run
@@ -118,8 +126,13 @@ docker run -it -e OPENAI_API_KEY=your-key \
 Deploy ZClaw to Google Cloud Run in one command:
 
 ```bash
+# First, push the image to a registry (e.g., Artifact Registry)
+docker tag zclaw-server us-central1-docker.pkg.dev/YOUR_PROJECT/repo/zclaw:latest
+docker push us-central1-docker.pkg.dev/YOUR_PROJECT/repo/zclaw:latest
+
+# Deploy to Cloud Run
 gcloud run deploy zclaw \
-  --image ghcr.io/zclaw/zclaw:latest \
+  --image us-central1-docker.pkg.dev/YOUR_PROJECT/repo/zclaw:latest \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \

@@ -47,12 +47,12 @@ The server delegates all LLM interaction to the SDK's `generateText` and `stream
 docker run -d -p 7337:7337 \
   -e ANTHROPIC_API_KEY=sk-... \
   -v ~/.zclaw:/root/.zclaw \
-  zclaw/server
+  zclaw-server
 ```
 
 ```bash [Cloud Run]
 gcloud run deploy zclaw-agent \
-  --image zclaw/server \
+  --image zclaw-server \
   --port 7337 \
   --set-env-vars "ANTHROPIC_API_KEY=sk-..."
 ```
@@ -85,7 +85,7 @@ await startServer({ port: 7337 });
 2. **Generate an API key**
 
    ```bash
-   zclaw server keygen
+   zclaw server --generate-api-key
    ```
 
    This prints a key like `sk_zclaw_a1b2c3...` and stores it in `~/.zclaw/server-keys.json`.
@@ -125,9 +125,10 @@ await startServer({ port: 7337 });
 | `LLM_PROVIDER` | Default provider (`openai`, `anthropic`, `glm`, `openai-compatible`) | Auto-detected |
 | `OPENAI_MODEL` | Default OpenAI model | `gpt-5.4` |
 | `ANTHROPIC_MODEL` | Default Anthropic model | `claude-sonnet-4-6-20260320` |
-| `GLM_MODEL` | Default GLM model | `opus` |
+| `GLM_MODEL` | Default GLM model | `glm-5.1` |
 | `ZCLAW_SESSION_DIR` | Directory for session files | `./.zclaw/sessions` |
 | `ZCLAW_SESSION_TTL` | Session TTL in seconds | `86400` (24 hours) |
+| `ZCLAW_SKILLS_PATH` | Colon-separated paths to skill directories | -- |
 
 ## Next steps
 

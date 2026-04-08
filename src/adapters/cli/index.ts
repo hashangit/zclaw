@@ -23,6 +23,7 @@ import {
   getConfigPaths,
 } from './config-loader.js';
 import { runSetup, handleModelsCommand } from './setup.js';
+import { isNonInteractive, hasRequiredProviderEnv } from './docker-utils.js';
 
 // Handle Ctrl+C gracefully
 function handleExit() {
@@ -60,6 +61,7 @@ program
   .option('-m, --model <model>', 'Model to use')
   .option('-p, --provider <provider>', 'Provider to use (openai-compatible|openai|anthropic|glm)')
   .option('-n, --no-interactive', 'Exit after processing the initial query (Headless mode)')
+  .option('--docker', 'Docker mode: implies --no-interactive, disables all prompts, uses env vars and config only')
   .option('-y, --yes', 'Auto-confirm all tool executions (e.g., shell commands)');
 
 program
@@ -67,6 +69,15 @@ program
   .description('Run the interactive setup wizard to configure API keys')
   .option('-p, --project', 'Save configuration to project-level (.zclaw/setting.json)')
   .action(async (options) => {
+    // Setup wizard cannot run in non-interactive mode
+    if (isNonInteractive()) {
+      console.log(chalk.yellow('Setup wizard requires an interactive terminal.'));
+      console.log(chalk.dim('Set API keys via environment variables instead:'));
+      console.log(chalk.dim('  OPENAI_API_KEY, ANTHROPIC_API_KEY, GLM_API_KEY'));
+      console.log(chalk.dim('  LLM_PROVIDER (openai-compatible|openai|anthropic|glm)'));
+      console.log(chalk.dim('Or mount a config file at ~/.zclaw/setting.json'));
+      process.exit(1);
+    }
     await runSetup(options);
   });
 
@@ -77,6 +88,13 @@ program
     const options = program.opts();
     await runChat(queryParts, options);
   });
+
+// Apply --docker flag effects early from raw argv (before Commander parses)
+// This ensures isNonInteractive() works correctly during the parse phase
+if (process.argv.includes('--docker')) {
+  process.env.ZCLAW_DOCKER = 'true';
+  process.env.ZCLAW_NO_INTERACTIVE = 'true';
+}
 
 program.parse(process.argv);
 
@@ -112,24 +130,40 @@ async function runChat(queryParts: string[], options: any) {
 
   if (!providerConfig) {
     console.log(chalk.yellow("No provider configuration found."));
-    const { doSetup } = await inquirer.prompt([
-      {
-        type: 'confirm',
-        name: 'doSetup',
-        message: 'Would you like to run the setup wizard now?',
-        default: true
-      }
-    ]);
 
-    if (doSetup) {
-      await runSetup();
-      const newConfig = loadJsonConfig(GLOBAL_CONFIG_FILE);
-      Object.assign(fullConfig, newConfig);
-      const updatedProviderType = resolveActiveProviderType(fullConfig, { provider: options.provider });
-      providerConfig = resolveProviderConfigFromApp(fullConfig, updatedProviderType);
+    if (isNonInteractive()) {
+      // Non-interactive: cannot run setup wizard, rely on env vars only
+      if (hasRequiredProviderEnv(fullConfig)) {
+        // Re-resolve after env var check
+        fullConfig = migrateLegacyFormat(fullConfig, { model: options.model });
+        activeProviderType = resolveActiveProviderType(fullConfig, { provider: options.provider });
+        providerConfig = resolveProviderConfigFromApp(fullConfig, activeProviderType);
+      }
+      if (!providerConfig) {
+        console.error(chalk.red("No provider configured. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or GLM_API_KEY env vars, or provide a config file."));
+        process.exit(1);
+      }
     } else {
-      console.error(chalk.red("Provider configuration is required to proceed."));
-      process.exit(1);
+      // Interactive: ask user
+      const { doSetup } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'doSetup',
+          message: 'Would you like to run the setup wizard now?',
+          default: true
+        }
+      ]);
+
+      if (doSetup) {
+        await runSetup();
+        const newConfig = loadJsonConfig(GLOBAL_CONFIG_FILE);
+        Object.assign(fullConfig, newConfig);
+        const updatedProviderType = resolveActiveProviderType(fullConfig, { provider: options.provider });
+        providerConfig = resolveProviderConfigFromApp(fullConfig, updatedProviderType);
+      } else {
+        console.error(chalk.red("Provider configuration is required to proceed."));
+        process.exit(1);
+      }
     }
   }
 
@@ -180,7 +214,7 @@ async function runChat(queryParts: string[], options: any) {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    terminal: true
+    terminal: process.stdin.isTTY === true
   });
 
   try {
@@ -193,11 +227,29 @@ async function runChat(queryParts: string[], options: any) {
       }
 
       if (userInput.toLowerCase() === '/models') {
-        rl.pause();
-        try {
-          activeProviderType = await handleModelsCommand(agent, fullConfig, activeProviderType);
-        } finally {
-          rl.resume();
+        if (isNonInteractive()) {
+          // Non-interactive: print available models instead of prompting
+          const configured = Object.keys(fullConfig.models || {}).filter(
+            k => (fullConfig.models as any)?.[k]?.apiKey
+          );
+          if (configured.length === 0) {
+            console.log(chalk.yellow('No providers configured. Set API key env vars to add providers.'));
+          } else {
+            console.log(chalk.bold.cyan('Configured Providers:'));
+            for (const p of configured) {
+              const model = (fullConfig.models as any)?.[p]?.model || 'unknown';
+              const marker = p === activeProviderType ? chalk.green(' (active)') : '';
+              console.log(`  ${p} (${model})${marker}`);
+            }
+            console.log(chalk.dim('\nUse --provider <name> flag or LLM_PROVIDER env var to switch.'));
+          }
+        } else {
+          rl.pause();
+          try {
+            activeProviderType = await handleModelsCommand(agent, fullConfig, activeProviderType);
+          } finally {
+            rl.resume();
+          }
         }
         continue;
       }

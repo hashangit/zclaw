@@ -1,6 +1,6 @@
 {
   "name": "zclaw-core",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "main": "dist/adapters/cli/index.js",
   "exports": {
@@ -19,12 +19,15 @@
   },
   "types": "./dist/adapters/sdk/index.d.ts",
   "bin": {
-    "zclaw": "dist/adapters/cli/index.js"
+    "zclaw": "dist/adapters/cli/index.js",
+    "zclaw-server": "dist/adapters/server/standalone.js"
   },
   "scripts": {
     "build": "tsc",
     "start": "node dist/adapters/cli/index.js",
+    "server": "node dist/adapters/server/standalone.js",
     "dev": "tsx src/adapters/cli/index.ts",
+    "dev:server": "tsx src/adapters/server/standalone.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "prepublishOnly": "pnpm run build"
   },
@@ -35,9 +38,10 @@
     "dist/tools",
     "dist/skills",
     "dist/models-catalog.js",
-    "dist/sdk",
+    "dist/agent.js",
     "skills",
     "README.md",
+    "CHANGELOG.md",
     "package.json",
     "LICENSE"
   ],
@@ -68,7 +72,7 @@
     "url": "https://github.com/hashangit/zclaw/issues"
   },
   "homepage": "https://github.com/hashangit/zclaw#readme",
-  "description": "A lightweight AI agent CLI tool that brings the power of LLMs to your terminal.",
+  "description": "A headless AI agent framework with CLI, SDK, and server adapters — skills, multi-provider LLM support, and Docker-native deployment.",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
     "@mozilla/readability": "^0.6.0",

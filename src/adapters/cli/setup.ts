@@ -26,6 +26,7 @@ import {
   saveConfig,
   writeConfigToPath,
 } from './config-loader.js';
+import { isNonInteractive, hasRequiredProviderEnv } from './docker-utils.js';
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -40,6 +41,16 @@ type ProviderAction = 'switch' | 'edit' | 'remove' | 'back';
  * @param options.project - If true, save to project-level config instead of global.
  */
 export async function runSetup(options: any = {}): Promise<void> {
+  // Guard: setup wizard requires interactive TTY
+  if (isNonInteractive()) {
+    console.log(chalk.yellow('Setup wizard requires an interactive terminal.'));
+    console.log(chalk.dim('Set API keys via environment variables instead:'));
+    console.log(chalk.dim('  OPENAI_API_KEY, ANTHROPIC_API_KEY, GLM_API_KEY'));
+    console.log(chalk.dim('  LLM_PROVIDER (openai-compatible|openai|anthropic|glm)'));
+    console.log(chalk.dim('Or mount a config file at ~/.zclaw/setting.json'));
+    process.exit(1);
+  }
+
   const isProject = options.project;
   const { global: GLOBAL_CONFIG_FILE, local: LOCAL_CONFIG_FILE, globalDir: GLOBAL_CONFIG_DIR } = getConfigPaths();
   const targetFile = isProject ? LOCAL_CONFIG_FILE : GLOBAL_CONFIG_FILE;
@@ -478,6 +489,13 @@ export async function handleModelsCommand(
   config: AppConfig,
   activeProvider: ProviderType,
 ): Promise<ProviderType> {
+  // Guard: /models interactive switching requires a TTY
+  if (isNonInteractive()) {
+    console.log(chalk.yellow('Interactive model switching is not available in non-interactive mode.'));
+    console.log(chalk.dim('Use --provider <name> or --model <model> flags, or set LLM_PROVIDER env var.'));
+    return activeProvider;
+  }
+
   if (!config.models) config.models = {};
 
   try {

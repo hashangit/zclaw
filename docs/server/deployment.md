@@ -15,7 +15,7 @@ ZClaw Server is a stateless Node.js process that can be deployed as a Docker con
 docker run -d -p 7337:7337 \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -v ~/.zclaw:/root/.zclaw \
-  zclaw/server
+  zclaw-server
 ```
 
 ### With multiple providers
@@ -27,7 +27,7 @@ docker run -d -p 7337:7337 \
   -e GLM_API_KEY=... \
   -e LLM_PROVIDER=anthropic \
   -v ~/.zclaw:/root/.zclaw \
-  zclaw/server
+  zclaw-server
 ```
 
 ### With custom session directory
@@ -37,7 +37,7 @@ docker run -d -p 7337:7337 \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -e ZCLAW_SESSION_DIR=/data/sessions \
   -v session-data:/data/sessions \
-  zclaw/server
+  zclaw-server
 ```
 
 ### Docker Compose
@@ -45,7 +45,8 @@ docker run -d -p 7337:7337 \
 ```yaml
 services:
   zclaw:
-    image: zclaw/server
+    image: zclaw-server
+    build: .
     ports:
       - "7337:7337"
     environment:
@@ -67,7 +68,7 @@ services:
 
 ```bash
 gcloud run deploy zclaw-agent \
-  --image zclaw/server \
+  --image zclaw-server \
   --port 7337 \
   --min-instances 1 \
   --max-instances 10 \
@@ -89,7 +90,7 @@ gcloud run deploy zclaw-agent \
 
 ```bash
 gcloud run deploy zclaw-agent \
-  --image zclaw/server \
+  --image zclaw-server \
   --port 7337 \
   --min-instances 1 \
   --max-instances 10 \
@@ -144,11 +145,12 @@ pm2 startup
 | `ANTHROPIC_API_KEY` | Anthropic API key | For Anthropic provider |
 | `ANTHROPIC_MODEL` | Default Anthropic model (default: `claude-sonnet-4-6-20260320`) | No |
 | `GLM_API_KEY` | GLM API key | For GLM provider |
-| `GLM_MODEL` | Default GLM model (default: `opus`) | No |
+| `GLM_MODEL` | Default GLM model (default: `glm-5.1`) | No |
 | `OPENAI_COMPAT_API_KEY` | API key for OpenAI-compatible provider | For compatible provider |
 | `OPENAI_COMPAT_BASE_URL` | Base URL for OpenAI-compatible provider | For compatible provider |
 | `LLM_MODEL` | Default model for OpenAI-compatible provider (default: `gpt-5.4`) | No |
 | `LLM_PROVIDER` | Default provider (auto-detected if not set) | No |
+| `ZCLAW_SKILLS_PATH` | Colon-separated paths to skill directories | No |
 
 ::: tip Provider auto-detection
 If `LLM_PROVIDER` is not set, the server uses the first configured provider. If `OPENAI_API_KEY` is set, OpenAI becomes the default. Otherwise, the first provider with a configured API key is used.
