@@ -1,6 +1,6 @@
 {
   "name": "zclaw-core",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "main": "dist/adapters/cli/index.js",
   "exports": {
@@ -71,7 +71,7 @@
   "bugs": {
     "url": "https://github.com/hashangit/zclaw/issues"
   },
-  "homepage": "https://github.com/hashangit/zclaw#readme",
+  "homepage": "https://hashangit.github.io/zclaw/",
   "description": "A headless AI agent framework with CLI, SDK, and server adapters — skills, multi-provider LLM support, and Docker-native deployment.",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
