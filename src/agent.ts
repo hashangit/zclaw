@@ -4,12 +4,17 @@ import * as os from 'os';
 import * as path from 'path';
 import { getToolDefinitions, executeToolHandler } from './tools/index.js';
 import { LLMProvider, ProviderMessage } from './providers/types.js';
+import { initializeSkillRegistry, getSkillRegistry } from './skills/index.js';
+import type { SkillRegistry } from './skills/types.js';
 
 export class Agent {
   private provider: LLMProvider;
   private messages: ProviderMessage[];
   private model: string;
   private config: any;
+  private skillRegistry: SkillRegistry | null = null;
+  private originalProvider: LLMProvider | null = null;
+  private originalModel: string | null = null;
 
   constructor(provider: LLMProvider, model: string = 'gpt-4-turbo-preview', config: any = {}) {
     this.provider = provider;
@@ -52,8 +57,45 @@ GUIDELINES:
     ];
   }
 
+  async initializeSkills(): Promise<void> {
+    try {
+      this.skillRegistry = await initializeSkillRegistry(process.cwd());
+      const metadata = this.skillRegistry.getMetadata();
+
+      if (metadata.length > 0) {
+        const skillList = metadata
+          .map(s => `- ${s.name}: ${s.description}`)
+          .join('\n');
+
+        this.messages[0].content += `\n\nAVAILABLE SKILLS:\n${skillList}\n\nYou can activate a skill by calling the 'use_skill' tool when a user request matches a skill's description. This gives you specialized knowledge and procedures.`;
+
+        console.log(chalk.green(`Loaded ${metadata.length} skill(s):`));
+        for (const s of metadata) {
+          console.log(chalk.dim(`  - ${s.name}`));
+        }
+      }
+    } catch (error: any) {
+      console.warn(chalk.yellow(`Warning: Skills initialization failed: ${error.message}`));
+    }
+  }
+
+  getSkillRegistry(): SkillRegistry | null {
+    return this.skillRegistry;
+  }
+
   async chat(userInput: string): Promise<void> {
-    this.messages.push({ role: "user", content: userInput });
+    // Resolve @path file references before sending to LLM
+    let resolvedInput = userInput;
+    if (userInput.includes('@')) {
+      try {
+        const { resolveReferences } = await import('./skills/resolver.js');
+        resolvedInput = await resolveReferences(userInput);
+      } catch {
+        // Resolver not available, use raw input
+      }
+    }
+
+    this.messages.push({ role: "user", content: resolvedInput });
 
     let active = true;
     while (active) {
@@ -95,6 +137,61 @@ GUIDELINES:
         console.error(chalk.red(error.message));
         active = false;
       }
+    }
+  }
+
+  /**
+   * Temporarily switch to a skill's preferred model if configured.
+   * Returns true if a switch was made, false otherwise.
+   */
+  async switchToSkillModel(skill: any): Promise<boolean> {
+    if (!skill.frontmatter?.model) return false;
+
+    const modelConfig = skill.frontmatter.model;
+    const providerType = modelConfig.provider;
+
+    if (!this.config?.models?.[providerType]?.apiKey) {
+      console.log(chalk.dim(`Skill '${skill.name}' prefers ${providerType}/${modelConfig.model} but provider not configured. Using default.`));
+      return false;
+    }
+
+    try {
+      const { createProvider } = await import('./providers/factory.js');
+
+      const providerModelConfig = this.config.models[providerType];
+      const providerConfig = {
+        type: providerType,
+        apiKey: providerModelConfig.apiKey,
+        model: modelConfig.model,
+        baseUrl: providerModelConfig.baseUrl,
+      };
+
+      const newProvider = await createProvider(providerConfig);
+
+      // Save original state
+      this.originalProvider = this.provider;
+      this.originalModel = this.model;
+
+      // Switch
+      this.provider = newProvider;
+      this.model = modelConfig.model;
+
+      console.log(chalk.dim(`Skill '${skill.name}' using ${providerType}/${modelConfig.model}`));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Restore the original provider after skill model switching.
+   */
+  restoreProvider(): void {
+    if (this.originalProvider) {
+      this.provider = this.originalProvider;
+      this.model = this.originalModel || this.model;
+      this.originalProvider = null;
+      this.originalModel = null;
     }
   }
 

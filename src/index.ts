@@ -418,6 +418,22 @@ async function runSetup(options: any = {}) {
     fs.writeFileSync(targetFile, JSON.stringify(newConfig, null, 2), { mode: 0o600 });
     console.log(chalk.green(`\n✅ Configuration saved to ${targetFile}`));
     console.log(chalk.cyan("You can now run 'zclaw' to start using the agent."));
+
+    // Create ~/zclaw_documents workspace
+    const docsDir = path.join(os.homedir(), 'zclaw_documents');
+    const subdirs = ['notes', 'templates', 'output', 'knowledge'];
+    if (!fs.existsSync(docsDir)) {
+      fs.mkdirSync(docsDir, { recursive: true });
+      for (const sub of subdirs) {
+        fs.mkdirSync(path.join(docsDir, sub), { recursive: true });
+      }
+      fs.writeFileSync(
+        path.join(docsDir, 'README.md'),
+        `# zclaw_documents\n\nThis is your ZClaw agent workspace. Files here are accessible across all projects.\n\n- \`notes/\` — Agent-created notes and session logs\n- \`templates/\` — Reusable templates you or the agent can reference\n- \`output/\` — Generated artifacts (reports, summaries)\n- \`knowledge/\` — Reference documents for the agent to use\n\nReference files in conversation with \`@zclaw_documents/path/to/file\`\n`,
+        'utf-8'
+      );
+      console.log(chalk.green(`Created agent workspace at ${docsDir}`));
+    }
   } catch (error: any) {
     console.error(chalk.red(`Failed to write config: ${error.message}`));
   }
@@ -836,9 +852,22 @@ async function runChat(queryParts: string[], options: any) {
   const provider = await createProvider(providerConfig);
   const agent = new Agent(provider, providerConfig.model, fullConfig);
 
+  // Initialize skills system
+  await agent.initializeSkills();
+  const skillRegistry = agent.getSkillRegistry();
+
+  // Ensure ~/zclaw_documents exists
+  const docsDir = path.join(os.homedir(), 'zclaw_documents');
+  if (!fs.existsSync(docsDir)) {
+    fs.mkdirSync(docsDir, { recursive: true });
+    for (const sub of ['notes', 'templates', 'output', 'knowledge']) {
+      fs.mkdirSync(path.join(docsDir, sub), { recursive: true });
+    }
+  }
+
   if (options.interactive) {
     console.log(chalk.green(`Agent initialized with ${activeProviderType} (${providerConfig.model})`));
-    console.log(chalk.gray("Type 'exit' or 'quit' to leave. Type '/models' to switch provider."));
+    console.log(chalk.gray("Type 'exit' or 'quit' to leave. Type '/models' to switch provider. Type '/skills' to list skills."));
   }
 
   // Handle initial query if present
@@ -880,11 +909,82 @@ async function runChat(queryParts: string[], options: any) {
         continue;
       }
 
+      // /skills — list available skills
+      if (userInput.toLowerCase() === '/skills') {
+        const registry = agent.getSkillRegistry();
+        if (!registry || registry.getAll().length === 0) {
+          console.log(chalk.yellow('No skills loaded.'));
+          console.log(chalk.dim('Add skills to .zclaw/skills/ or set ZCLAW_SKILLS_PATH env var.'));
+        } else {
+          console.log(chalk.bold.cyan('Loaded Skills:'));
+          for (const s of registry.getAll()) {
+            console.log(chalk.green(`  ${s.name}`) + chalk.dim(` — ${s.description.split('\n')[0]}`));
+          }
+          console.log(chalk.dim(`\nUse /<skill-name> <query> to invoke a skill directly.`));
+        }
+        continue;
+      }
+
+      // /<skill-name> — user-invoked skill activation with dynamic arguments
+      if (userInput.startsWith('/') && userInput.length > 1) {
+        const { parseInvocation, substituteArgs } = await import('./skills/args.js');
+        const parsed = parseInvocation(userInput);
+
+        if (parsed) {
+          const skillName = parsed.skillName;
+          const registry = agent.getSkillRegistry();
+          const skill = registry?.get(skillName);
+
+          if (skill) {
+            console.log(chalk.cyan(`Loading skill: ${skill.name}`));
+            const skillBody = await registry!.getBody(skillName);
+
+            // Substitute arguments into skill body
+            const resolvedBody = substituteArgs(skillBody || '', parsed.args);
+
+            // Resolve @path references in the query
+            let resolvedQuery = parsed.args.raw;
+            if (parsed.args.raw.includes('@')) {
+              try {
+                const { resolveReferences } = await import('./skills/resolver.js');
+                resolvedQuery = await resolveReferences(parsed.args.raw);
+              } catch { /* resolver not available, use raw */ }
+            }
+
+            const prompt = resolvedQuery
+              ? `[Skill: ${skill.name} activated]\n\n${resolvedBody}\n\nUser request: ${resolvedQuery}`
+              : `[Skill: ${skill.name} activated]\n\n${resolvedBody}\n\nSkill loaded. What would you like me to do?`;
+
+            // Switch to skill's preferred model if configured
+            const switchedModel = await agent.switchToSkillModel(skill);
+
+            rl.pause();
+            try {
+              await agent.chat(prompt);
+            } finally {
+              rl.resume();
+              if (switchedModel) agent.restoreProvider();
+            }
+            continue;
+          }
+        }
+        // If no skill matches, fall through to treat as normal input
+      }
+
       if (userInput.trim() === '') continue;
+
+      // Resolve @path file references in user input
+      let resolvedInput = userInput;
+      if (userInput.includes('@') && !userInput.startsWith('/')) {
+        try {
+          const { resolveReferences } = await import('./skills/resolver.js');
+          resolvedInput = await resolveReferences(userInput);
+        } catch { /* resolver not available, use raw input */ }
+      }
 
       rl.pause();
       try {
-        await agent.chat(userInput);
+        await agent.chat(resolvedInput);
       } finally {
         rl.resume();
       }
