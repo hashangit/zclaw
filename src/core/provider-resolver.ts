@@ -412,8 +412,8 @@ export function resolveFromEnv(): MultiProviderConfig | null {
   }
 
   if (Object.keys(config).length > 0) {
-    const defaultProvider = (process.env.LLM_PROVIDER ?? process.env.ZCLAW_PROVIDER) as ProviderType) ??
-      (config.openai ? "openai" : Object.keys(config)[0]) as ProviderType;
+    const defaultProvider = ((process.env.LLM_PROVIDER ?? process.env.ZCLAW_PROVIDER) as ProviderType) ??
+      ((config.openai ? "openai" : Object.keys(config)[0]) as ProviderType);
 
     return {
       ...config,
