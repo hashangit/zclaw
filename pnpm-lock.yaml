@@ -30,8 +30,8 @@ importers:
         specifier: ^28.0.0
         version: 28.1.0
       nodemailer:
-        specifier: ^8.0.0
-        version: 8.0.4
+        specifier: ^8.0.5
+        version: 8.0.5
       openai:
         specifier: ^6.18.0
         version: 6.33.0(ws@8.20.0)
@@ -939,8 +939,8 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nodemailer@8.0.4:
-    resolution: {integrity: sha512-k+jf6N8PfQJ0Fe8ZhJlgqU5qJU44Lpvp2yvidH3vp1lPnVQMgi4yEEMPXg5eJS1gFIJTVq1NHBk7Ia9ARdSBdQ==}
+  nodemailer@8.0.5:
+    resolution: {integrity: sha512-0PF8Yb1yZuQfQbq+5/pZJrtF6WQcjTd5/S4JOHs9PGFxuTqoB/icwuB44pOdURHJbRKX1PPoJZtY7R4VUoCC8w==}
     engines: {node: '>=6.0.0'}
 
   obug@2.1.1:
@@ -1968,7 +1968,7 @@ snapshots:
 
   nanoid@3.3.11: {}
 
-  nodemailer@8.0.4: {}
+  nodemailer@8.0.5: {}
 
   obug@2.1.1: {}
 
