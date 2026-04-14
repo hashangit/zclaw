@@ -50,6 +50,7 @@ src/
 │   ├── session-store.ts     # PersistenceBackend factory + registry, file & memory backends
 │   ├── stream-manager.ts   # Shared streaming queue, async iterables, SSE
 │   ├── errors.ts            # Error class hierarchy
+│   ├── permission.ts        # Permission matrix (levels × risk categories)
 │   ├── middleware.ts         # Pipeline types + compose()
 │   ├── middleware/           # Built-in middleware
 │   │   ├── logging.ts       # Request/response logging
@@ -197,6 +198,25 @@ Tools organized in three tiers:
 | **Advanced** | `read_website`, `take_screenshot`, `generate_image`, `optimize_prompt`, `use_skill` |
 
 Resolution accepts: group names (`"all"`, `"core"`), built-in tool names, or `UserToolDefinition` objects (via `tool()` factory). Deduplicates by name.
+
+### Permission Pre-Filter (`permission.ts`)
+
+Risk-based permission matrix controlling which tools auto-execute vs. require human approval. Three levels (`strict`, `moderate`, `permissive`) cross-referenced with four risk categories (`safe`, `edit`, `communications`, `destructive`).
+
+```typescript
+type PermissionLevel = "strict" | "moderate" | "permissive";
+type ToolRiskCategory = "safe" | "edit" | "communications" | "destructive";
+```
+
+Key functions:
+
+| Function | Purpose |
+|----------|---------|
+| `needsApproval(toolName, level, registry?)` | Returns `true` if the tool requires approval at the given level |
+| `resolvePermissionLevel(flags)` | Resolves effective level from CLI flags, env var, and config |
+| `getToolRiskCategory(toolName, registry?)` | Looks up a tool's risk category, defaults to `"destructive"` |
+
+Applied in `runAgentLoop` as a pre-filter before tool execution. CLI uses `--strict`/`--moderate`/`--yolo`/`--headless` flags; SDK accepts `permissionLevel` option; Server enforces a `maxPermissionLevel` ceiling per connection.
 
 ### Session Store (`session-store.ts`)
 

@@ -1,6 +1,6 @@
 /** ZClaw Core — THE Agent Loop (single implementation) */
 
-import type { Message, StepResult, ToolCall, Usage, ZclawError } from "./types.js";
+import type { Message, StepResult, ToolCall, Usage, ZclawError, ApproveToolFn, PermissionLevel } from "./types.js";
 import type { LLMProvider, ProviderMessage, ProviderToolCall } from "../providers/types.js";
 import type { ToolDefinition } from "../tools/interface.js";
 import { generateId, now, estimateTokens, toZclawError, messageToProviderMessage, providerToolCallToToolCall } from "./message-convert.js";
@@ -8,6 +8,8 @@ import { executeTool } from "./tool-executor.js";
 import type { HookExecutor } from "./hooks.js";
 import type { Middleware, PipelineContext } from "./middleware.js";
 import { compose } from "./middleware.js";
+import { checkToolPermission, getToolRiskCategory } from "./permission.js";
+import { getAllToolModules } from "./tool-executor.js";
 
 // ProviderFactory for per-skill model switching
 export interface ProviderFactory {
@@ -30,6 +32,9 @@ export interface AgentLoopOptions {
   onStep?: (step: StepResult) => void;
   providerFactory?: ProviderFactory;
   middleware?: Middleware[];
+  approveTool?: ApproveToolFn;
+  permissionLevel?: PermissionLevel;
+  autoConfirm?: boolean;
 }
 
 export interface AgentLoopError {
@@ -175,6 +180,11 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
     providerFactory,
   } = options;
 
+  // Destructure approveTool outside the loop for closure access
+  const approveTool = options.approveTool;
+  const permissionLevel = options.permissionLevel;
+  const autoConfirm = options.autoConfirm;
+
   // Prepend system prompt if provided and messages[0] is not already a system message
   if (systemPrompt && messages.length > 0 && messages[0].role !== "system") {
     messages.unshift({
@@ -202,6 +212,9 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
   // Track current provider (may change per step if providerFactory is used)
   let currentProvider = provider;
   let currentModel = model;
+
+  // Track whether the loop exhausted maxSteps
+  let hitMaxSteps = false;
 
   for (let step = 0; step < maxSteps; step++) {
     // Check abort
@@ -320,21 +333,45 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
 
         const start = now();
         let output: string;
-        try {
-          output = await executeTool(tc.name, parsedArgs, config);
-        } catch (err) {
-          output = `Error: ${err instanceof Error ? err.message : String(err)}`;
 
-          // Track tool failures but continue loop
-          if (output.startsWith("Error:")) {
-            const toolErr: AgentLoopError = {
-              message: output,
-              code: "TOOL_FAILED",
-              retryable: true,
-              tool: tc.name,
-            };
-            // Don't set loopError here - we want to continue the loop
-            // But we could log it if needed
+        // Permission pre-filter + adapter-level tool approval
+        const effectiveLevel: PermissionLevel = permissionLevel ?? "moderate";
+
+        if (autoConfirm) {
+          // --headless mode: bypass permission matrix, auto-approve everything
+          try {
+            output = await executeTool(tc.name, parsedArgs, config);
+          } catch (err) {
+            output = `Error: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        } else {
+          const riskCategory = getToolRiskCategory(tc.name, getAllToolModules());
+          const decision = checkToolPermission(effectiveLevel, riskCategory);
+
+          if (decision === "auto") {
+            try {
+              output = await executeTool(tc.name, parsedArgs, config);
+            } catch (err) {
+              output = `Error: ${err instanceof Error ? err.message : String(err)}`;
+            }
+          } else if (approveTool) {
+            let approved: boolean;
+            try {
+              approved = await approveTool({ name: tc.name, args: parsedArgs });
+            } catch {
+              approved = false;
+            }
+            if (!approved) {
+              output = "User denied tool execution.";
+            } else {
+              try {
+                output = await executeTool(tc.name, parsedArgs, config);
+              } catch (err) {
+                output = `Error: ${err instanceof Error ? err.message : String(err)}`;
+              }
+            }
+          } else {
+            output = "Tool execution denied.";
           }
         }
         const duration = now() - start;
@@ -375,6 +412,10 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
       }
 
       // Continue the loop to get the next response
+      // Mark if this was the last allowed iteration
+      if (step + 1 >= maxSteps) {
+        hitMaxSteps = true;
+      }
       continue;
     }
 
@@ -383,8 +424,8 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
     break;
   }
 
-  // Check if we exited because of maxSteps
-  if (finishReason === "stop" && steps.length >= maxSteps) {
+  // The loop ran all iterations with tool calls on the last one
+  if (hitMaxSteps) {
     finishReason = "max_steps";
   }
 

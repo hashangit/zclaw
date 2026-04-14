@@ -1,3 +1,5 @@
+import type { ToolRiskCategory } from "../core/types.js";
+
 export interface ToolDefinition {
   type: "function";
   function: {
@@ -14,6 +16,7 @@ export interface ToolDefinition {
 export interface ToolModule {
   name: string; // Display name for setup (e.g., "Email Service")
   configKeys?: string[]; // Keys needed in setting.json (e.g., ["smtpHost", "smtpUser"])
+  risk?: ToolRiskCategory;
   definition: ToolDefinition; // OpenAI Tool Definition
   handler: (args: any, config?: any) => Promise<string>; // Implementation
 }

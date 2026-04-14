@@ -10,13 +10,14 @@ import { runAgentLoop } from '../../core/agent-loop.js';
 import { generateId, now } from '../../core/message-convert.js';
 import { createHookExecutor } from '../../core/hooks.js';
 import { buildSkillCatalog } from '../../core/skill-catalog.js';
-import type { Message, StepResult, Usage, ToolCall } from '../../core/types.js';
+import type { Message, StepResult, Usage, ToolCall, ApproveToolFn, PermissionLevel } from '../../core/types.js';
 
 export class Agent {
   private provider: LLMProvider;
   private messages: Message[];
   private model: string;
   private config: any;
+  private autoConfirm: boolean;
   private skillRegistry: SkillRegistry | null = null;
   private skillCatalog: string = '';
   private abortController: AbortController | null = null;
@@ -25,6 +26,7 @@ export class Agent {
     this.provider = provider;
     this.model = model;
     this.config = config;
+    this.autoConfirm = !!config?.autoConfirm;
 
     this.messages = [{
       id: generateId(),
@@ -56,7 +58,7 @@ export class Agent {
     return this.skillRegistry;
   }
 
-  async chat(userInput: string, signal?: AbortSignal): Promise<void> {
+  async chat(userInput: string, signal?: AbortSignal, approveTool?: ApproveToolFn, permissionLevel?: PermissionLevel): Promise<void> {
     // Resolve @path references
     let resolvedInput = userInput;
     if (userInput.includes('@')) {
@@ -70,6 +72,18 @@ export class Agent {
 
     const spinner = ora('Thinking...').start();
 
+    // Wrap approveTool to manage spinner state
+    const wrappedApproveTool = approveTool
+      ? async (call: Parameters<ApproveToolFn>[0]) => {
+          spinner.stop();
+          try {
+            return await approveTool(call);
+          } finally {
+            spinner.start();
+          }
+        }
+      : undefined;
+
     try {
       const result = await runAgentLoop({
         provider: this.provider,
@@ -77,10 +91,13 @@ export class Agent {
         messages: this.messages,
         toolDefs: getAllToolDefinitions(),
         skillCatalog: this.skillCatalog || undefined,
-        maxSteps: 10,
+        maxSteps: 30,
         hooks: createHookExecutor(),
         config: this.config,
         signal,
+        approveTool: wrappedApproveTool,
+        permissionLevel,
+        autoConfirm: this.autoConfirm,
         onStep: (step) => {
           if (step.type === "text" && step.content) {
             spinner.stop();
@@ -98,6 +115,8 @@ export class Agent {
 
       if (result.finishReason === "aborted") {
         console.log(chalk.yellow("\n(Interrupted)"));
+      } else if (result.finishReason === "max_steps") {
+        console.log(chalk.yellow("\n(Max steps reached — the agent needed more iterations to complete. Try increasing maxSteps or asking a more specific question.)"));
       } else if (result.error) {
         console.error(chalk.red(`Error: ${result.error.message}`));
       }

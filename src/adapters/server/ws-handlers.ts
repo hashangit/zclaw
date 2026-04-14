@@ -13,6 +13,7 @@ import type {
   ClientMessage,
   ServerMessage,
   ChatMessage,
+  ToolApprovalResponse,
   AbortMessage,
   ResumeMessage,
   ReconnectMessage,
@@ -20,10 +21,19 @@ import type {
   WebSocketHandlerContext,
   ConnectionState,
 } from "./ws-types.js";
+import type { PermissionLevel } from "../../core/types.js";
 
 // ── Active connections registry ──────────────────────────────────────
 
 const activeConnections = new Map<WebSocket, ConnectionState>();
+
+// ── Pending tool approvals ───────────────────────────────────────────
+
+const pendingApprovals = new Map<string, {
+  resolve: (approved: boolean) => void;
+  timer: ReturnType<typeof setTimeout>;
+  ws: WebSocket;
+}>();
 
 /**
  * Get the number of currently active WebSocket connections.
@@ -70,6 +80,7 @@ export function handleConnection(
     currentAbortController: null,
     activeProvider: null,
     activeModel: null,
+    maxPermissionLevel: ctx.maxPermissionLevel,
   };
 
   activeConnections.set(ws, state);
@@ -96,6 +107,9 @@ export function handleConnection(
         break;
       case "abort":
         handleAbort(ws, msg, state);
+        break;
+      case "tool_approval_response":
+        handleToolApprovalResponse(ws, msg);
         break;
       case "resume":
         handleResume(ws, msg, state, ctx);
@@ -182,6 +196,18 @@ function handleChat(
   const provider = msg.options?.provider ?? state.activeProvider ?? undefined;
   const model = msg.options?.model ?? state.activeModel ?? undefined;
 
+  // Resolve permission level with server ceiling
+  let effectivePermissionLevel: PermissionLevel | undefined = msg.options?.permissionLevel ?? state.permissionLevel;
+  if (effectivePermissionLevel && state.maxPermissionLevel) {
+    const levels: PermissionLevel[] = ["strict", "moderate", "permissive"];
+    const maxIdx = levels.indexOf(state.maxPermissionLevel);
+    const reqIdx = levels.indexOf(effectivePermissionLevel);
+    // QA-009: Unknown levels (-1) are capped to the server ceiling
+    if (reqIdx === -1 || reqIdx > maxIdx) {
+      effectivePermissionLevel = state.maxPermissionLevel;
+    }
+  }
+
   // Stream text
   try {
     ctx.streamText({
@@ -192,6 +218,7 @@ function handleChat(
       maxSteps: msg.options?.maxSteps ?? 10,
       skills: msg.options?.skills,
       sessionId: state.sessionId ?? undefined,
+      permissionLevel: effectivePermissionLevel,
       signal: abortController.signal,
       onText: (delta) => {
         safeSend(ws, {
@@ -287,6 +314,52 @@ function handleAbort(
       message: "Request aborted by client",
     });
   }
+}
+
+// ── Tool approval handler ────────────────────────────────────────────
+
+const APPROVAL_TIMEOUT_MS = 60_000; // 60 seconds
+
+/**
+ * Create an `approveTool` callback for the server adapter.
+ * Sends a `tool_approval_request` to the client and waits for a
+ * `tool_approval_response`. Falls back to auto-deny on timeout.
+ */
+export function createServerApproveTool(ws: WebSocket): import("../../core/types.js").ApproveToolFn {
+  return async (call) => {
+    const callId = crypto.randomUUID();
+
+    safeSend(ws, {
+      type: "tool_approval_request",
+      callId,
+      name: call.name,
+      args: call.args,
+    });
+
+    return new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => {
+        pendingApprovals.delete(callId);
+        resolve(false); // Timeout → deny
+      }, APPROVAL_TIMEOUT_MS);
+
+      pendingApprovals.set(callId, { resolve, timer, ws });
+    });
+  };
+}
+
+function handleToolApprovalResponse(
+  ws: WebSocket,
+  msg: ToolApprovalResponse,
+): void {
+  const pending = pendingApprovals.get(msg.callId);
+  if (!pending) return;
+
+  // QA-001: Only the originating connection may resolve the approval
+  if (pending.ws !== ws) return;
+
+  clearTimeout(pending.timer);
+  pendingApprovals.delete(msg.callId);
+  pending.resolve(msg.approved);
 }
 
 // ── Resume handler ───────────────────────────────────────────────────

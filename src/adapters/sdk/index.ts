@@ -73,6 +73,8 @@ export type {
   PersistenceConfig,
   SkillMetadata,
   ZclawError,
+  PermissionLevel,
+  ToolRiskCategory,
 } from "../../core/types.js";
 
 export {
@@ -143,6 +145,8 @@ export async function generateText(
     config: opts.config,
     metadata: opts.metadata,
     middleware: opts.middleware,
+    approveTool: opts.approveTool,
+    permissionLevel: opts.permissionLevel,
   });
 
   // Get the final text
@@ -231,6 +235,8 @@ export async function streamText(
         config: opts.config,
         metadata: opts.metadata,
         middleware: opts.middleware,
+        approveTool: opts.approveTool,
+        permissionLevel: opts.permissionLevel,
         onStep: (step) => {
           if (opts.onStep) opts.onStep(step);
           if (step.type === "text" && step.content) {

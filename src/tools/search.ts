@@ -2,6 +2,7 @@ import { ToolModule } from './interface.js';
 
 export const SearchTool: ToolModule = {
   name: "Web Search (Tavily)",
+  risk: "safe",
   configKeys: ["tavilyApiKey"],
   definition: {
     type: "function",

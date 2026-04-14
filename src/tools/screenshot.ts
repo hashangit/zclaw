@@ -78,6 +78,7 @@ const installFonts = (missing: { cjk: boolean, emoji: boolean }) => {
 
 export const ScreenshotTool: ToolModule = {
   name: "Screenshot Tool",
+  risk: "safe",
   configKeys: [],
   definition: {
     type: "function",

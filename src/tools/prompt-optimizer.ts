@@ -3,6 +3,7 @@ import { ToolModule } from './interface.js';
 
 export const PromptOptimizerTool: ToolModule = {
   name: "Prompt Optimizer",
+  risk: "safe",
   definition: {
     type: "function",
     function: {

@@ -12,6 +12,7 @@ import { limitSkillBody } from '../skills/types.js';
 
 const UseSkillTool: ToolModule = {
   name: "Skill Invocation",
+  risk: "safe",
   definition: {
     type: "function",
     function: {

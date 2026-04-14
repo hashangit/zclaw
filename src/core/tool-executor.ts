@@ -24,6 +24,13 @@ export function getAllToolDefinitions(): ToolDefinition[] {
   return registry.map((t) => t.definition);
 }
 
+/**
+ * Return all registered tool modules (built-in + custom).
+ */
+export function getAllToolModules(): ToolModule[] {
+  return registry;
+}
+
 // ── Tool groups ──────────────────────────────────────────────────────
 
 export const CORE_TOOLS = [

@@ -11,6 +11,7 @@ import type {
   ProviderType,
   Message,
   Usage,
+  PermissionLevel,
 } from "../../core/types.js";
 
 // ── WS library type shims ────────────────────────────────────────────
@@ -60,8 +61,15 @@ export interface ChatMessage {
     tools?: string[];
     maxSteps?: number;
     skills?: string[];
+    permissionLevel?: PermissionLevel;
   };
   sessionId?: string;
+}
+
+export interface ToolApprovalResponse {
+  type: "tool_approval_response";
+  callId: string;
+  approved: boolean;
 }
 
 export interface AbortMessage {
@@ -102,6 +110,7 @@ export interface PingMessage {
 
 export type ClientMessage =
   | ChatMessage
+  | ToolApprovalResponse
   | AbortMessage
   | ResumeMessage
   | ReconnectMessage
@@ -127,6 +136,13 @@ export interface TextDeltaMessage {
 
 export interface ToolCallMessage {
   type: "tool_call";
+  callId: string;
+  name: string;
+  args: object;
+}
+
+export interface ToolApprovalRequestMessage {
+  type: "tool_approval_request";
   callId: string;
   name: string;
   args: object;
@@ -214,6 +230,7 @@ export type ServerMessage =
   | AckMessage
   | TextDeltaMessage
   | ToolCallMessage
+  | ToolApprovalRequestMessage
   | ToolProgressMessage
   | ToolResultMessage
   | ProgressMessage
@@ -239,6 +256,7 @@ export interface WebSocketHandlerContext {
     maxSteps?: number;
     skills?: string[];
     sessionId?: string;
+    permissionLevel?: PermissionLevel;
     onText: (delta: string) => void;
     onToolCall: (info: { name: string; args: Record<string, unknown>; callId: string }) => void;
     onToolResult: (info: { callId: string; output: string; success: boolean }) => void;
@@ -249,6 +267,7 @@ export interface WebSocketHandlerContext {
   }) => void;
   listModels: () => Record<ProviderType, string[]>;
   listSkills: () => { name: string; description: string; tags: string[] }[];
+  maxPermissionLevel?: PermissionLevel;
 }
 
 // ── Connection state ─────────────────────────────────────────────────
@@ -258,4 +277,6 @@ export interface ConnectionState {
   currentAbortController: AbortController | null;
   activeProvider: ProviderType | null;
   activeModel: string | null;
+  permissionLevel?: PermissionLevel;
+  maxPermissionLevel?: PermissionLevel;
 }

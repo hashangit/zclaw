@@ -5,6 +5,7 @@ import { ToolModule } from './interface.js';
 
 export const BrowserTool: ToolModule = {
   name: "Web Browser",
+  risk: "safe",
   configKeys: [],
   definition: {
     type: "function",

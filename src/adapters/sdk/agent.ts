@@ -181,6 +181,8 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
       config: opts.config,
       metadata: opts.metadata,
       middleware: opts.middleware,
+      approveTool: opts.approveTool,
+      permissionLevel: opts.permissionLevel,
     });
 
     // Update cumulative usage from result
@@ -246,6 +248,8 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
           config: opts.config,
           metadata: opts.metadata,
           middleware: opts.middleware,
+          approveTool: opts.approveTool,
+          permissionLevel: opts.permissionLevel,
           onStep: (step) => {
             if (streamOptions?.onStep) streamOptions.onStep(step);
             if (step.type === "text" && step.content) {

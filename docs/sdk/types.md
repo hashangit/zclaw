@@ -19,6 +19,30 @@ import type { Message, GenerateTextResult, SdkAgent } from "zclaw-core";
 type ProviderType = "openai" | "anthropic" | "glm" | "openai-compatible";
 ```
 
+### PermissionLevel
+
+Controls which tools auto-execute vs. require human approval:
+
+```typescript
+type PermissionLevel = "strict" | "moderate" | "permissive";
+```
+
+| Level | Auto-executes |
+|-------|---------------|
+| `strict` | Nothing — all tools require approval |
+| `moderate` | Safe tools only |
+| `permissive` | Safe + edit + communications tools |
+
+### ToolRiskCategory
+
+Risk classification for built-in and custom tools:
+
+```typescript
+type ToolRiskCategory = "safe" | "edit" | "communications" | "destructive";
+```
+
+Custom tools default to `"destructive"` when no `risk` field is provided.
+
 ### Message
 
 ```typescript
@@ -123,6 +147,8 @@ interface GenerateTextOptions {
   metadata?: Record<string, unknown>;
   /** Extra config passed to tool handlers. */
   config?: Record<string, unknown>;
+  /** Permission level controlling tool auto-execution. Default: "moderate". */
+  permissionLevel?: PermissionLevel;
 }
 ```
 
@@ -219,8 +245,8 @@ interface AgentCreateOptions {
   skills?: string[];
   /** Maximum agent loop iterations. Default: 10. */
   maxSteps?: number;
-  /** Tool execution mode. Default: "auto". */
-  permissionMode?: "auto" | "confirm";
+  /** Permission level controlling tool auto-execution. Default: "moderate". */
+  permissionLevel?: PermissionLevel;
   /** Session persistence: path, backend instance, or config object. */
   persist?: string | PersistenceBackend | PersistenceConfig;
   /** Lifecycle callbacks. */
@@ -357,6 +383,8 @@ interface ToolDefinition {
 interface ToolModule {
   /** Tool name. */
   name: string;
+  /** Risk category for permission checks. Default: "destructive". */
+  risk?: ToolRiskCategory;
   /** Config keys this tool reads from the agent config. */
   configKeys?: string[];
   /** Tool definition for the LLM. */

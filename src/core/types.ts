@@ -20,6 +20,11 @@ export interface MultiProviderConfig {
   default: ProviderType;
 }
 
+// ── Permissions ────────────────────────────────────────────────────────
+
+export type ToolRiskCategory = "safe" | "edit" | "communications" | "destructive";
+export type PermissionLevel = "strict" | "moderate" | "permissive";
+
 // ── Messages ──────────────────────────────────────────────────────────
 
 export interface Message {
@@ -89,6 +94,25 @@ export interface ToolResult {
   metadata?: Record<string, unknown>;
 }
 
+// ── Tool Approval ─────────────────────────────────────────────────────
+
+export interface ApproveToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+/**
+ * Adapter-provided callback invoked before every tool execution.
+ * Return `true` to approve, `false` to deny (the tool is skipped
+ * and "User denied tool execution" is returned as the tool output).
+ *
+ * Each adapter implements its own UX:
+ *  - CLI: inquirer prompt (with ESC interrupt suspended)
+ *  - SDK: user-supplied callback or auto-approve
+ *  - Server: WebSocket round-trip to client
+ */
+export type ApproveToolFn = (call: ApproveToolCall) => Promise<boolean>;
+
 // ── Hooks ─────────────────────────────────────────────────────────────
 
 export interface Hooks {
@@ -120,6 +144,8 @@ export interface GenerateTextOptions {
   config?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   middleware?: Middleware[];
+  approveTool?: ApproveToolFn;
+  permissionLevel?: PermissionLevel;
 }
 
 export interface GenerateTextResult {
@@ -167,12 +193,13 @@ export interface AgentCreateOptions {
   tools?: string[] | UserToolDefinition[];
   skills?: string[];
   maxSteps?: number;
-  permissionMode?: "auto" | "confirm";
+  permissionLevel?: PermissionLevel;
   persist?: string | PersistenceBackend | PersistenceConfig | SessionStore;
   hooks?: Hooks;
   config?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   middleware?: Middleware[];
+  approveTool?: ApproveToolFn;
 }
 
 export interface SdkAgent {

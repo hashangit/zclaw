@@ -277,6 +277,65 @@ Environment variables for customizing skill discovery and behavior:
 Skills are discovered in priority order (last wins): built-in bundled skills, `~/.zclaw/skills/`, `.zclaw/skills/`, then `ZCLAW_SKILLS_PATH` directories. See the [Skills documentation](/sdk/skills) for the full SKILL.md format and features.
 :::
 
+## Permission Levels
+
+Control which tools auto-execute vs. require human approval using a risk-based permission matrix.
+
+### Levels
+
+| Level | Behavior |
+|-------|----------|
+| `strict` | All tools require approval |
+| `moderate` | Safe tools auto-execute; edit, communications, and destructive tools require approval |
+| `permissive` | Safe, edit, and communications tools auto-execute; destructive tools require approval |
+
+### Tool Risk Categories
+
+| Category | Examples | Auto in `moderate` |
+|----------|----------|---------------------|
+| `safe` | `read_file`, `get_current_datetime`, `web_search`, `read_website` | Yes |
+| `edit` | `write_file`, `optimize_prompt`, `use_skill` | No |
+| `communications` | `send_email`, `send_notification` | No |
+| `destructive` | `execute_shell_command`, `take_screenshot`, `generate_image` | No |
+
+Custom tools default to `destructive` (deny-by-default). Custom tools can specify a `risk` field when registered via `tool()`.
+
+### CLI Flags
+
+```bash
+zclaw --strict       # All tools require approval
+zclaw --moderate     # Safe tools auto-execute (default)
+zclaw --yolo         # Only destructive tools require approval
+zclaw --headless     # No approval prompts; denied tools fail silently
+```
+
+### Environment Variable
+
+| Variable | Values | Default |
+|----------|--------|---------|
+| `ZCLAW_PERMISSION` | `strict`, `moderate`, `permissive` | `moderate` |
+
+### SDK Usage
+
+```typescript
+import { generateText } from 'zclaw'
+
+await generateText('List my files', {
+  permissionLevel: 'strict' // All tools require approval callback
+})
+```
+
+### Server Configuration
+
+The server supports a `maxPermissionLevel` ceiling per connection. Clients can request a per-message level, but it is capped at the server-configured maximum:
+
+```typescript
+// Server startup
+const server = createServer({
+  maxPermissionLevel: 'moderate' // Clients cannot exceed moderate
+})
+```
+
 ## Next Steps
 
 - Explore [all available providers](/sdk/providers)

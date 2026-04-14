@@ -47,7 +47,11 @@ program
   .option('-p, --provider <provider>', 'Provider to use (openai-compatible|openai|anthropic|glm)')
   .option('-n, --no-interactive', 'Exit after processing the initial query (Headless mode)')
   .option('--docker', 'Docker mode: implies --no-interactive, disables all prompts, uses env vars and config only')
-  .option('-y, --yes', 'Auto-confirm all tool executions (e.g., shell commands)');
+  .option('-y, --yes', 'Auto-confirm all tool executions (e.g., shell commands)')
+  .option('--headless', 'Bypass permission matrix: auto-approve all tools (for CI/Docker/scripts)')
+  .option('--strict', 'Permission level: auto-approve safe tools only')
+  .option('--moderate', 'Permission level: auto-approve safe + edit + communications (default)')
+  .option('--yolo', 'Permission level: auto-approve all tools');
 
 program
   .command('setup')

@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Permission Levels System**: 3-tier permission matrix (strict/moderate/permissive) with 4 tool risk categories (safe/edit/communications/destructive) controlling which tools auto-execute vs. require human approval.
+- CLI flags: `--headless`, `--strict`, `--moderate`, `--yolo` for controlling tool approval behavior.
+- SDK: `permissionLevel` option on `GenerateTextOptions`, `StreamTextOptions`, and `AgentCreateOptions`.
+- Server: per-message permission level with `maxPermissionLevel` ceiling per connection.
+- `ZCLAW_PERMISSION` environment variable and settings file support for default permission level.
+- `src/core/permission.ts` — Permission matrix with 3 pure functions (`needsApproval`, `resolvePermissionLevel`, `getToolRiskCategory`).
+- 12 built-in tools categorized by risk; custom tools default to "destructive" (deny-by-default).
+- 25 new tests (22 in `permission.test.ts`, 3 in `tool-executor.test.ts`).
+
+### Changed
+
+- All 12 built-in tools now carry a `risk` field (`safe`, `edit`, `communications`, or `destructive`).
+- `--headless` flag replaces the binary `ZCLAW_SHELL_APPROVE` approval mechanism.
+- Unknown and custom tools default to `destructive` risk category, requiring approval in all modes except `permissive`.
+- `ToolModule` interface now includes optional `risk` field.
+- `permissionMode` option removed from `AgentCreateOptions` (replaced by `permissionLevel`).
+
+### Security
+
+- **Critical**: WebSocket tool approvals are now bound to the originating connection, preventing cross-connection approval bypass.
+- **High**: `autoConfirm` state is captured immutably at agent construction time, preventing runtime mutation attacks.
+- **High**: Tool denial messages use generic text ("Tool execution denied.") to prevent information leakage.
+- **Medium**: Unknown permission level values are validated in server ceiling comparison, preventing ceiling bypass via invalid levels.
+- **Medium**: Custom tool registry is included in risk lookups alongside built-in tools.
+- **Low**: Conflicting `--headless` and permission level flags produce a warning.
+- **Low**: Legacy `ZCLAW_SHELL_APPROVE` env var is ignored when new permission flags are active.
+
 ## [v0.2.1] - 2026-04-09
 
 ### Fixed

@@ -9,6 +9,7 @@ import {
   ADVANCED_TOOLS,
   ALL_TOOLS,
 } from "../tool-executor.js";
+import { builtInTools } from "../../tools/index.js";
 
 // We test against the real built-in registry.
 // registerTool is global so we must be careful not to pollute across tests.
@@ -175,5 +176,33 @@ describe("tool groups", () => {
   it("ALL_TOOLS is union of all groups", () => {
     const expected = [...CORE_TOOLS, ...COMM_TOOLS, ...ADVANCED_TOOLS];
     expect(ALL_TOOLS).toEqual(expected);
+  });
+});
+
+describe("tool risk metadata", () => {
+  it("built-in tools have optional risk field on ToolModule", () => {
+    for (const mod of builtInTools) {
+      // risk is optional — when present it must be a valid category
+      if (mod.risk !== undefined) {
+        expect(["safe", "edit", "communications", "destructive"]).toContain(mod.risk);
+      }
+    }
+  });
+
+  it("ToolDefinition does not include risk in wire format", () => {
+    const defs = getAllToolDefinitions();
+    for (const def of defs) {
+      expect((def as any).risk).toBeUndefined();
+    }
+  });
+
+  it("custom tool without risk defaults to undefined", () => {
+    const customMod = tool({
+      name: "custom_no_risk",
+      description: "test",
+      parameters: { type: "object", properties: {} },
+      execute: async () => "ok",
+    });
+    expect(customMod.risk).toBeUndefined();
   });
 });

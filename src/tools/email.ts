@@ -3,6 +3,7 @@ import { ToolModule } from './interface.js';
 
 export const EmailTool: ToolModule = {
   name: "Email Service",
+  risk: "communications",
   configKeys: ["smtpHost", "smtpPort", "smtpUser", "smtpPass", "smtpFrom"],
   definition: {
     type: "function",

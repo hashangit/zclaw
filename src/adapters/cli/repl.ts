@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as readline from 'node:readline/promises';
+import inquirer from 'inquirer';
 
 import { Agent } from './agent.js';
 import { ProviderType } from '../../providers/types.js';
@@ -32,19 +33,36 @@ import { exitHandler } from './commands/exit.js';
 import { compactHandler } from './commands/compact.js';
 import { skillsHandler } from './commands/skills.js';
 import { modelsHandler } from './commands/models.js';
+import type { ApproveToolFn, PermissionLevel } from '../../core/types.js';
+import { resolvePermissionLevel } from '../../core/permission.js';
 
 // ── Interrupt handling ───────────────────────────────────────────────
 
-export function setupInterrupt(agent: Agent): { signal: AbortSignal; teardown: () => void } {
+export interface InterruptHandle {
+  signal: AbortSignal;
+  /** Temporarily disable ESC detection (e.g. during approval prompts) */
+  suspend: () => void;
+  /** Re-enable ESC detection after suspend */
+  resume: () => void;
+  /** Permanently clean up the interrupt handler */
+  teardown: () => void;
+}
+
+export function setupInterrupt(agent: Agent): InterruptHandle {
   const signal = agent.createAbortSignal();
   const stdin = process.stdin;
 
   if (!stdin.isTTY) {
-    return { signal, teardown: () => agent.clearAbortController() };
+    return {
+      signal,
+      suspend: () => {},
+      resume: () => {},
+      teardown: () => agent.clearAbortController(),
+    };
   }
 
   const ESC = '\x1b';
-  let wasRaw = false;
+  let wasRaw = stdin.isRaw;
 
   const onData = (data: Buffer) => {
     if (data[0] === ESC.charCodeAt(0)) {
@@ -52,28 +70,112 @@ export function setupInterrupt(agent: Agent): { signal: AbortSignal; teardown: (
     }
   };
 
-  wasRaw = stdin.isRaw;
+  // Start ESC detection
   stdin.setRawMode(true);
   stdin.resume();
   stdin.on('data', onData);
 
-  const teardown = () => {
-    stdin.removeListener('data', onData);
-    if (!wasRaw) {
-      stdin.setRawMode(false);
-    }
-    agent.clearAbortController();
+  return {
+    signal,
+    suspend: () => {
+      stdin.removeListener('data', onData);
+      if (stdin.isRaw) stdin.setRawMode(false);
+    },
+    resume: () => {
+      stdin.setRawMode(true);
+      stdin.resume();
+      stdin.on('data', onData);
+    },
+    teardown: () => {
+      stdin.removeListener('data', onData);
+      if (!wasRaw && stdin.isRaw) {
+        stdin.setRawMode(false);
+      }
+      agent.clearAbortController();
+    },
   };
-
-  return { signal, teardown };
 }
 
-export async function chatWithInterrupt(agent: Agent, input: string): Promise<void> {
-  const { signal, teardown } = setupInterrupt(agent);
+// ── Shell approval mode ──────────────────────────────────────────────
+
+function getShellApprovalMode(config: any, newPermissionSystemActive?: boolean): 'auto' | 'prompt' | 'deny' {
+  if (config?.autoConfirm) return 'auto';
+
+  // When the new permission system is active, ignore the legacy ZCLAW_SHELL_APPROVE env var
+  // so it cannot bypass the permission matrix.
+  if (!newPermissionSystemActive) {
+    const envMode = process.env.ZCLAW_SHELL_APPROVE;
+    if (envMode === 'auto' || envMode === 'true' || envMode === '1') return 'auto';
+    if (envMode === 'deny' || envMode === 'false' || envMode === '0') return 'deny';
+  }
+
+  if (process.stdin.isTTY) return 'prompt';
+
+  return 'deny';
+}
+
+/** Build the adapter-level approveTool callback for the CLI. */
+export function createCliApproveTool(
+  config: any,
+  handle: InterruptHandle,
+  permissionLevel?: PermissionLevel,
+): ApproveToolFn {
+  // New permission system is active when an explicit permission level was resolved
+  const newPermissionSystemActive = permissionLevel !== undefined;
+
+  return async (call) => {
+    // Display what the tool wants to do
+    if (call.name === 'execute_shell_command') {
+      const cmd = typeof call.args.command === 'string' ? call.args.command : JSON.stringify(call.args.command);
+      const rationale = typeof call.args.rationale === 'string' ? call.args.rationale : '';
+      console.log(chalk.yellow(`\nAI wants to execute: `) + chalk.bold(cmd));
+      if (rationale) console.log(chalk.dim(`Reason: ${rationale}`));
+    } else {
+      console.log(chalk.yellow(`\nAI wants to use tool: `) + chalk.bold(call.name));
+    }
+
+    const mode = getShellApprovalMode(config, newPermissionSystemActive);
+
+    if (mode === 'deny') {
+      console.log(chalk.red('Command denied (non-interactive mode).'));
+      console.log(chalk.dim('Set ZCLAW_SHELL_APPROVE=auto to auto-approve, or use --yes flag.'));
+      return false;
+    }
+
+    if (mode === 'prompt') {
+      // Suspend ESC handler so inquirer can use stdin normally
+      handle.suspend();
+      try {
+        const { confirm } = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'confirm',
+            message: 'Do you want to run this command?',
+            default: false,
+          },
+        ]);
+        return confirm;
+      } catch {
+        // Prompt cancelled (Ctrl+C or inquirer error)
+        return false;
+      } finally {
+        handle.resume();
+      }
+    }
+
+    // Auto-approved
+    console.log(chalk.gray(`(Auto-approved: ${config?.autoConfirm ? '--yes flag' : 'ZCLAW_SHELL_APPROVE=auto'})`));
+    return true;
+  };
+}
+
+export async function chatWithInterrupt(agent: Agent, input: string, config?: any, permissionLevel?: PermissionLevel): Promise<void> {
+  const handle = setupInterrupt(agent);
+  const approveTool = config ? createCliApproveTool(config, handle, permissionLevel) : undefined;
   try {
-    await agent.chat(input, signal);
+    await agent.chat(input, handle.signal, approveTool, permissionLevel);
   } finally {
-    teardown();
+    handle.teardown();
   }
 }
 
@@ -133,7 +235,29 @@ export async function runChat(queryParts: string[], options: any) {
   let fullConfig = { ...globalConfig, ...localConfig };
 
   // 2. Inject runtime flags
-  fullConfig.autoConfirm = options.yes;
+  fullConfig.autoConfirm = options.yes || options.headless || options.docker || false;
+
+  // 2b. Resolve permission level from CLI flags, env var, and config
+  let permissionLevel: PermissionLevel | undefined;
+  const headless = options.headless || options.yes || options.docker;
+
+  if (!headless) {
+    const flagLevel = options.yolo ? "permissive"
+      : options.strict ? "strict"
+      : options.moderate ? "moderate"
+      : undefined;
+    permissionLevel = resolvePermissionLevel(
+      flagLevel,
+      process.env.ZCLAW_PERMISSION,
+      fullConfig.permissionLevel,
+    );
+  }
+
+  // Warn about conflicting flags
+  if (headless && (options.strict || options.moderate || options.yolo)) {
+    const flag = options.strict ? '--strict' : options.moderate ? '--moderate' : '--yolo';
+    console.warn(`Warning: --headless overrides ${flag}. All tools will be auto-approved.`);
+  }
 
   // 3. Apply env var overrides for tool settings
   fullConfig = applyEnvOverrides(fullConfig);
@@ -220,7 +344,7 @@ export async function runChat(queryParts: string[], options: any) {
     if (options.interactive) {
         console.log(chalk.blue("\nProcessing initial request: ") + chalk.bold(initialQuery));
     }
-    await chatWithInterrupt(agent, initialQuery);
+    await chatWithInterrupt(agent, initialQuery, fullConfig, permissionLevel);
 
     // Headless mode exit
     if (!options.interactive) {
@@ -284,7 +408,7 @@ export async function runChat(queryParts: string[], options: any) {
             }
 
             try {
-              await chatWithInterrupt(agent, skillResult.prompt);
+              await chatWithInterrupt(agent, skillResult.prompt, fullConfig, permissionLevel);
             } finally {
               if (switched) {
                 switcher.restore();
@@ -313,7 +437,7 @@ export async function runChat(queryParts: string[], options: any) {
 
       rl.pause();
       try {
-        await chatWithInterrupt(agent, resolvedInput);
+        await chatWithInterrupt(agent, resolvedInput, fullConfig, permissionLevel);
       } finally {
         rl.resume();
       }

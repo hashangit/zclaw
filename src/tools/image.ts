@@ -273,6 +273,7 @@ const handler = async (args: any, config: any): Promise<string> => {
 
 export const ImageTool: ToolModule = {
   name: "Image Generation",
+  risk: "edit",
   definition: toolDefinition as any,
   handler: handler
 };

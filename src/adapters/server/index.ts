@@ -11,7 +11,7 @@ import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
 
-import type { ProviderType, GenerateTextResult, Usage, Message } from "../../core/types.js";
+import type { ProviderType, GenerateTextResult, Usage, Message, PermissionLevel } from "../../core/types.js";
 import { runAgentLoop } from "../../core/agent-loop.js";
 import { createHookExecutor } from "../../core/hooks.js";
 import { resolveTools, getAllToolDefinitions } from "../../core/tool-executor.js";
@@ -33,6 +33,10 @@ export interface ServerOptions {
   cors?: boolean;
   /** Session TTL in seconds (default: 86400 = 24 hours) */
   sessionTTL?: number;
+  /** Default permission level for REST endpoints (default: "moderate") */
+  permissionLevel?: PermissionLevel;
+  /** Maximum permission level clients can request (caps WebSocket messages) */
+  maxPermissionLevel?: PermissionLevel;
 }
 
 interface ReadPackageJson {
@@ -73,14 +77,17 @@ function initializeProvidersFromEnv(): void {
 /**
  * Server-side generateText using core agent loop directly.
  */
-async function serverGenerateText(options: {
-  message: string;
-  model?: string;
-  provider?: ProviderType;
-  tools?: string[];
-  maxSteps?: number;
-  skills?: string[];
-}): Promise<GenerateTextResult> {
+async function serverGenerateText(
+  options: {
+    message: string;
+    model?: string;
+    provider?: ProviderType;
+    tools?: string[];
+    maxSteps?: number;
+    skills?: string[];
+  },
+  permissionLevel: PermissionLevel,
+): Promise<GenerateTextResult> {
   // Resolve provider
   const { provider: llmProvider, model } = await getProvider(options.provider);
 
@@ -107,6 +114,7 @@ async function serverGenerateText(options: {
     toolDefs,
     maxSteps: options.maxSteps ?? 5,
     hooks,
+    permissionLevel,
   });
 
   // Extract final text from last assistant message
@@ -211,6 +219,8 @@ export async function createServer(options?: ServerOptions): Promise<http.Server
   // Initialize providers from environment
   initializeProvidersFromEnv();
 
+  const serverPermissionLevel = options?.permissionLevel ?? "moderate";
+
   // Resolve session directory
   const sessionDir = process.env.ZCLAW_SESSION_DIR ??
     path.join(process.cwd(), ".zclaw", "sessions");
@@ -229,7 +239,7 @@ export async function createServer(options?: ServerOptions): Promise<http.Server
     version,
     startTime,
     sessionManager,
-    generateText: serverGenerateText,
+    generateText: (opts) => serverGenerateText(opts, serverPermissionLevel),
     listModels,
     listSkills,
   };
@@ -259,7 +269,7 @@ export async function createServer(options?: ServerOptions): Promise<http.Server
   const wsCtx: WebSocketHandlerContext = {
     sessionManager,
     streamText: (opts) => {
-      serverStreamText(opts).catch((err) => {
+      serverStreamText(opts, serverPermissionLevel).catch((err) => {
         opts.onError({
           code: "STREAM_ERROR",
           message: err instanceof Error ? err.message : "Stream failed",
@@ -273,6 +283,7 @@ export async function createServer(options?: ServerOptions): Promise<http.Server
     },
     listModels,
     listSkills,
+    maxPermissionLevel: options?.maxPermissionLevel,
   };
 
   // Set up WebSocket (async, but we wait for it)
@@ -300,22 +311,26 @@ export async function createServer(options?: ServerOptions): Promise<http.Server
 /**
  * Server-side streamText using core agent loop directly.
  */
-async function serverStreamText(opts: {
-  message: string;
-  model?: string;
-  provider?: ProviderType;
-  tools?: string[];
-  maxSteps?: number;
-  skills?: string[];
-  sessionId?: string;
-  onText: (delta: string) => void;
-  onToolCall: (info: { name: string; args: Record<string, unknown>; callId: string }) => void;
-  onToolResult: (info: { callId: string; output: string; success: boolean }) => void;
-  onStep: (step: { type: string; content?: string; timestamp: number }) => void;
-  onError: (error: { code: string; message: string; provider?: string; tool?: string }) => void;
-  onDone: (result: { text: string; usage: Usage; finishReason: string }) => void;
-  signal?: AbortSignal;
-}): Promise<void> {
+async function serverStreamText(
+  opts: {
+    message: string;
+    model?: string;
+    provider?: ProviderType;
+    tools?: string[];
+    maxSteps?: number;
+    skills?: string[];
+    sessionId?: string;
+    permissionLevel?: PermissionLevel;
+    onText: (delta: string) => void;
+    onToolCall: (info: { name: string; args: Record<string, unknown>; callId: string }) => void;
+    onToolResult: (info: { callId: string; output: string; success: boolean }) => void;
+    onStep: (step: { type: string; content?: string; timestamp: number }) => void;
+    onError: (error: { code: string; message: string; provider?: string; tool?: string }) => void;
+    onDone: (result: { text: string; usage: Usage; finishReason: string }) => void;
+    signal?: AbortSignal;
+  },
+  serverPermissionLevel: PermissionLevel,
+): Promise<void> {
   try {
     // Resolve provider
     const { provider: llmProvider, model } = await getProvider(opts.provider);
@@ -346,6 +361,7 @@ async function serverStreamText(opts: {
       toolDefs,
       maxSteps: opts.maxSteps ?? 5,
       hooks,
+      permissionLevel: opts.permissionLevel ?? serverPermissionLevel,
       signal: opts.signal,
       onStep: (step) => {
         if (step.type === "text" && step.content) {

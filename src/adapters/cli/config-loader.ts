@@ -46,6 +46,7 @@ export interface AppConfig {
   smtpFrom?: string;
   tavilyApiKey?: string;
   autoConfirm?: boolean;
+  permissionLevel?: "strict" | "moderate" | "permissive";
   feishuWebhook?: string;
   feishuKeyword?: string;
   dingtalkWebhook?: string;
@@ -129,6 +130,14 @@ export function applyEnvOverrides(config: AppConfig): AppConfig {
   if (process.env.DINGTALK_KEYWORD) config.dingtalkKeyword = process.env.DINGTALK_KEYWORD;
   if (process.env.WECOM_WEBHOOK) config.wecomWebhook = process.env.WECOM_WEBHOOK;
   if (process.env.WECOM_KEYWORD) config.wecomKeyword = process.env.WECOM_KEYWORD;
+
+  // Permission level
+  if (process.env.ZCLAW_PERMISSION) {
+    const val = process.env.ZCLAW_PERMISSION;
+    if (val === "strict" || val === "moderate" || val === "permissive") {
+      config.permissionLevel = val;
+    }
+  }
 
   // Provider API keys — inject into models map from env vars
   if (!config.models) config.models = {};

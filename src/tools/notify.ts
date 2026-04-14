@@ -2,6 +2,7 @@ import { ToolModule } from './interface.js';
 
 export const NotifyTool: ToolModule = {
   name: "Group Bot Notification",
+  risk: "communications",
   configKeys: [
     "feishuWebhook", "feishuKeyword", 
     "dingtalkWebhook", "dingtalkKeyword", 

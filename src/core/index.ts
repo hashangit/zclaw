@@ -69,6 +69,9 @@ export type {
   PersistenceConfig,
   // Skills
   SkillMetadata,
+  // Permissions
+  PermissionLevel,
+  ToolRiskCategory,
 } from './types.js';
 
 // ZclawError is also re-exported as a value from types.ts, but the canonical
@@ -122,6 +125,13 @@ export {
   executeTool,
   getAllToolDefinitions,
 } from './tool-executor.js';
+
+// Export permission system
+export {
+  checkToolPermission,
+  getToolRiskCategory,
+  resolvePermissionLevel,
+} from './permission.js';
 
 // Export middleware pipeline
 export {
