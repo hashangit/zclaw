@@ -12,6 +12,9 @@ import type {
   AgentResponse,
   CumulativeUsage,
   Message,
+  PersistenceBackend,
+  PersistenceConfig,
+  SessionData,
   SessionStore,
   SdkAgent,
   StreamTextOptions,
@@ -23,9 +26,9 @@ import type {
 } from "../../core/types.js";
 import { getProvider } from "../../core/provider-resolver.js";
 import { createHookExecutor } from "../../core/hooks.js";
-import { resolveTools } from "./tools.js";
-import { getToolDefinitions } from "../../tools/index.js";
-import { createSessionStore } from "../../core/session-store.js";
+import { StreamManager } from "../../core/stream-manager.js";
+import { resolveTools, getAllToolDefinitions } from "./tools.js";
+import { createPersistenceBackend } from "../../core/session-store.js";
 import { runAgentLoop } from "../../core/agent-loop.js";
 import type { AgentLoopOptions } from "../../core/agent-loop.js";
 import {
@@ -33,10 +36,36 @@ import {
   now,
   toZclawError,
 } from "../../core/message-convert.js";
+import type { Middleware } from "../../core/middleware.js";
 
 // ── Session persistence helpers ──────────────────────────────────────────
-// Session store is now imported from ./session.js (createSessionStore)
 
+/**
+ * Adapt a legacy `SessionStore` (save/load takes messages) to the
+ * `PersistenceBackend` interface (save/load takes full SessionData).
+ * If the object already has the `PersistenceBackend` signature, it passes through.
+ */
+function wrapAsPersistenceBackend(store: SessionStore | PersistenceBackend): PersistenceBackend {
+  // If it already matches PersistenceBackend (save takes SessionData), cast directly
+  if ("save" in store) {
+    // Heuristic: if save.length >= 2, assume it's either shape.
+    // We wrap both to ensure SessionData is passed correctly.
+    const s = store as SessionStore;
+    return {
+      save: async (id, data) => {
+        await s.save(id, data.messages);
+      },
+      load: async (id) => {
+        const messages = await s.load(id);
+        if (!messages) return null;
+        return { id, messages, createdAt: Date.now(), updatedAt: Date.now() };
+      },
+      delete: s.delete.bind(s),
+      list: s.list.bind(s),
+    };
+  }
+  return store as PersistenceBackend;
+}
 
 // ── createAgent ──────────────────────────────────────────────────────────
 
@@ -61,7 +90,7 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
   let systemPrompt = opts.systemPrompt ?? "You are a helpful assistant.";
 
   // Tools
-  let toolDefs = opts.tools ? resolveTools(opts.tools) : getToolDefinitions();
+  let toolDefs = opts.tools ? resolveTools(opts.tools) : getAllToolDefinitions();
 
   // Hooks
   const hookExecutor = createHookExecutor(opts.hooks);
@@ -80,18 +109,25 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
   };
 
   // Session store
-  let sessionStore: SessionStore | null = null;
+  let backend: PersistenceBackend | null = null;
   if (opts.persist) {
     if (typeof opts.persist === "string") {
-      sessionStore = createSessionStore(opts.persist);
-    } else {
-      sessionStore = opts.persist;
+      // Legacy: string path → file backend
+      backend = createPersistenceBackend({ type: "file", path: opts.persist });
+    } else if ("type" in opts.persist && typeof opts.persist.type === "string") {
+      // PersistenceConfig object
+      backend = createPersistenceBackend(opts.persist as PersistenceConfig);
+    } else if ("save" in opts.persist && "load" in opts.persist) {
+      // Already a PersistenceBackend or legacy SessionStore — use directly
+      backend = wrapAsPersistenceBackend(opts.persist as SessionStore | PersistenceBackend);
     }
 
     // Try loading existing session
-    const existing = await sessionStore.load(sessionId);
-    if (existing) {
-      messages.push(...existing);
+    if (backend) {
+      const existing = await backend.load(sessionId);
+      if (existing) {
+        messages.push(...existing.messages);
+      }
     }
   }
 
@@ -107,8 +143,13 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
 
   // ── Helper: persist messages ────────────────────────────────────────────
   async function persistMessages(): Promise<void> {
-    if (sessionStore) {
-      await sessionStore.save(sessionId, messages);
+    if (backend) {
+      await backend.save(sessionId, {
+        id: sessionId,
+        messages,
+        createdAt: messages[0]?.timestamp ?? Date.now(),
+        updatedAt: Date.now(),
+      });
     }
   }
 
@@ -138,6 +179,8 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
       hooks: hookExecutor,
       signal: abortController.signal,
       config: opts.config,
+      metadata: opts.metadata,
+      middleware: opts.middleware,
     });
 
     // Update cumulative usage from result
@@ -185,43 +228,11 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
 
     const maxSteps = streamOptions?.maxSteps ?? opts.maxSteps ?? 10;
 
-    // Collect text and steps for the async iterables
-    let textResolve: (text: string) => void;
-    let usageResolve: (usage: Usage) => void;
-    let finishResolve: (reason: string) => void;
-
-    const fullTextPromise = new Promise<string>((r) => { textResolve = r; });
-    const usagePromise = new Promise<Usage>((r) => { usageResolve = r; });
-    const finishReasonPromise = new Promise<string>((r) => { finishResolve = r; });
-
-    // Steps queue for async iteration
-    const stepQueue: StepResult[] = [];
-    let stepQueueResolve: (() => void) | null = null;
-    let stepsDone = false;
-
-    function enqueueStep(step: StepResult): void {
-      stepQueue.push(step);
-      if (stepQueueResolve) {
-        stepQueueResolve();
-        stepQueueResolve = null;
-      }
-    }
-
-    // Text queue for async iteration
-    const textQueue: string[] = [];
-    let textQueueResolve: (() => void) | null = null;
-    let textDone = false;
-
-    function enqueueText(delta: string): void {
-      textQueue.push(delta);
-      if (textQueueResolve) {
-        textQueueResolve();
-        textQueueResolve = null;
-      }
-    }
+    // Stream manager handles queues, async iterables, and SSE
+    const stream = new StreamManager();
 
     // Run the loop in the background
-    const loopPromise = (async () => {
+    (async () => {
       try {
         const result = await runAgentLoop({
           provider: llmProvider,
@@ -233,18 +244,20 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
           hooks: streamHookExecutor,
           signal: streamAbort.signal,
           config: opts.config,
+          metadata: opts.metadata,
+          middleware: opts.middleware,
           onStep: (step) => {
             if (streamOptions?.onStep) streamOptions.onStep(step);
             if (step.type === "text" && step.content) {
               if (streamOptions?.onText) streamOptions.onText(step.content);
-              enqueueText(step.content);
+              stream.enqueueText(step.content);
             }
             if (step.type === "tool_call" && step.toolCall) {
               if (streamOptions?.onToolCall) {
                 streamOptions.onToolCall({
                   name: step.toolCall.name,
                   args: step.toolCall.args,
-                  callId: step.toolCall.name, // approximate
+                  callId: step.toolCall.name,
                 });
               }
               if (streamOptions?.onToolResult) {
@@ -255,7 +268,7 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
                 });
               }
             }
-            enqueueStep(step);
+            stream.enqueueStep(step);
           },
         });
 
@@ -270,118 +283,30 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
           .map((s) => s.content ?? "")
           .join("");
 
-        textResolve!(finalText);
-        usageResolve!(result.usage);
-        finishResolve!(result.finishReason);
+        stream.resolveText(finalText);
+        stream.resolveUsage(result.usage);
+        stream.resolveFinish(result.finishReason);
       } catch (err) {
         const zclawErr = toZclawError(err, "PROVIDER_ERROR");
         if (streamOptions?.onError) streamOptions.onError(zclawErr);
-        textResolve!("");
-        usageResolve!({ promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0 });
-        finishResolve!("error");
+        stream.resolveText("");
+        stream.resolveUsage({ promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0 });
+        stream.resolveFinish("error");
       } finally {
-        textDone = true;
-        stepsDone = true;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const tr = textQueueResolve as any;
-        if (tr) tr();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sr = stepQueueResolve as any;
-        if (sr) sr();
+        stream.complete();
         await persistMessages();
       }
     })();
 
-    // Async iterable for text
-    const textStream: AsyncIterable<string> = {
-      [Symbol.asyncIterator]() {
-        return {
-          async next() {
-            while (textQueue.length === 0 && !textDone) {
-              await new Promise<void>((r) => { textQueueResolve = r; });
-            }
-            if (textQueue.length > 0) {
-              return { value: textQueue.shift()!, done: false };
-            }
-            return { value: undefined, done: true };
-          },
-        };
-      },
-    };
-
-    // Async iterable for steps
-    const stepsStream: AsyncIterable<StepResult> = {
-      [Symbol.asyncIterator]() {
-        return {
-          async next() {
-            while (stepQueue.length === 0 && !stepsDone) {
-              await new Promise<void>((r) => { stepQueueResolve = r; });
-            }
-            if (stepQueue.length > 0) {
-              return { value: stepQueue.shift()!, done: false };
-            }
-            return { value: undefined, done: true };
-          },
-        };
-      },
-    };
-
-    // SSE helper
-    function toSSEStream(): ReadableStream {
-      const encoder = new TextEncoder();
-      let sseDone = false;
-
-      return new ReadableStream({
-        async pull(controller) {
-          const textIter = textStream[Symbol.asyncIterator]();
-          const stepIter = stepsStream[Symbol.asyncIterator]();
-
-          // Yield text events
-          while (!sseDone) {
-            const { value, done } = await Promise.race([
-              textIter.next(),
-              stepIter.next().then((s) => ({ value: (s as any)?.value?.content ?? "", done: (s as any)?.done ?? false })),
-            ]);
-
-            if (done) {
-              sseDone = true;
-              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-              controller.close();
-              return;
-            }
-
-            if (value) {
-              const event = JSON.stringify({ type: "text", content: value });
-              controller.enqueue(encoder.encode(`data: ${event}\n\n`));
-            }
-          }
-        },
-        cancel() {
-          sseDone = true;
-        },
-      });
-    }
-
-    // Response helper for HTTP servers
-    function toResponse(): Response {
-      return new Response(toSSEStream(), {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-      });
-    }
-
     return {
-      textStream,
-      steps: stepsStream,
-      fullText: fullTextPromise,
-      usage: usagePromise,
-      finishReason: finishReasonPromise,
+      textStream: stream.textStream,
+      steps: stream.stepsStream,
+      fullText: stream.fullText,
+      usage: stream.usage,
+      finishReason: stream.finishReason,
       abort: () => streamAbort.abort(),
-      toResponse,
-      toSSEStream,
+      toResponse: () => stream.toResponse(),
+      toSSEStream: () => stream.toSSEStream(),
     };
   }
 

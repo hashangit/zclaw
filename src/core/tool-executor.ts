@@ -5,13 +5,24 @@
  * Transport-agnostic: no chalk, no HTTP, no CLI concerns.
  */
 
-import { toolRegistry } from "../tools/index.js";
+import { builtInTools } from "../tools/index.js";
 import { ToolModule, ToolDefinition } from "../tools/interface.js";
 import {
   UserToolDefinition,
   ToolContext,
   ToolResult,
 } from "./types.js";
+
+// ── Internal registry ───────────────────────────────────────────────
+
+const registry: ToolModule[] = [...builtInTools];
+
+/**
+ * Return the tool definitions for all registered tools (built-in + custom).
+ */
+export function getAllToolDefinitions(): ToolDefinition[] {
+  return registry.map((t) => t.definition);
+}
 
 // ── Tool groups ──────────────────────────────────────────────────────
 
@@ -173,7 +184,7 @@ export function tool(definition: UserToolDefinition): ToolModule {
  * @param module  A `ToolModule` to add to the registry
  */
 export function registerTool(module: ToolModule): void {
-  toolRegistry.push(module);
+  registry.push(module);
 }
 
 // ── executeTool ───────────────────────────────────────────────────────
@@ -192,12 +203,12 @@ export async function executeTool(
   args: Record<string, unknown>,
   config?: Record<string, unknown>,
 ): Promise<string> {
-  const found = toolRegistry.find(
+  const found = registry.find(
     (t) => t.definition.function.name === name,
   );
   if (!found) {
     throw new Error(
-      `Unknown tool "${name}". Available: ${toolRegistry
+      `Unknown tool "${name}". Available: ${registry
         .map((t) => t.definition.function.name)
         .join(", ")}`,
     );
@@ -241,7 +252,7 @@ export function getToolGroup(
   const defs: ToolDefinition[] = [];
 
   for (const name of names) {
-    const found = toolRegistry.find(
+    const found = registry.find(
       (t) => t.definition.function.name === name,
     );
     if (found) {
@@ -263,7 +274,7 @@ type ToolInput = string | UserToolDefinition;
  * Accepted input shapes:
  *  - `"all"`                     — expands to all built-in tools
  *  - `"core"` / `"comm"` / `"advanced"` — expands to the named group
- *  - A built-in tool name string — looked up from `toolRegistry`
+ *  - A built-in tool name string — looked up from the internal registry
  *  - A `UserToolDefinition` object   — converted via `tool()` factory
  *
  * @param tools  Array of tool references (defaults to all built-in tools)
@@ -293,12 +304,12 @@ export function resolveTools(tools?: ToolInput[]): ToolDefinition[] {
       }
 
       // Individual built-in tool lookup
-      const found = toolRegistry.find(
+      const found = registry.find(
         (t) => t.definition.function.name === input,
       );
       if (!found) {
         throw new Error(
-          `Unknown tool "${input}". Available: ${toolRegistry
+          `Unknown tool "${input}". Available: ${registry
             .map((t) => t.definition.function.name)
             .join(", ")}`,
         );

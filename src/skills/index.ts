@@ -1,10 +1,11 @@
-export type { Skill, SkillFrontmatter, SkillMetadata, SkillRegistry, SkillModelConfig } from './types.js';
-export { parseSkillFile } from './parser.js';
+export type { Skill, SkillFrontmatter, SkillMetadata, SkillRegistry, SkillModelConfig, TruncationResult } from './types.js';
+export { parseSkillFile, parseFrontmatter } from './parser.js';
 export { discoverSkills, getSkillPaths } from './loader.js';
 export { DefaultSkillRegistry } from './registry.js';
 export { parseInvocation, substituteArgs } from './args.js';
 export type { ParsedArgs } from './args.js';
 export { resolveReferences } from './resolver.js';
+export { limitSkillBody, getSkillBodyLimits } from './types.js';
 
 import { discoverSkills } from './loader.js';
 import { DefaultSkillRegistry } from './registry.js';

@@ -1,3 +1,174 @@
+# Guidelines
+
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+# Architecture
+
+Full architectural reference: `ARCHITECTURE.md` in the project root.
+
+## Layers
+
+```
+Adapters (CLI, SDK, Server) → Core (agent-loop) → Infrastructure (Providers, Tools, Skills)
+```
+
+All three adapters delegate to a single `runAgentLoop` in `src/core/agent-loop.ts`.
+
+## Key Files
+
+| Concern | File | Notes |
+|---------|------|-------|
+| Agent loop | `src/core/agent-loop.ts` | Single execution engine for all adapters |
+| Core types | `src/core/types.ts` | Messages, tools, hooks, agents, sessions |
+| Provider interface | `src/providers/types.ts` | `LLMProvider.chat()` — re-exports `ProviderType` from core |
+| Provider factory | `src/providers/factory.ts` | Dynamic import per provider type |
+| Provider resolver | `src/core/provider-resolver.ts` | Re-export hub for `provider-env.ts` + `provider-config.ts` |
+| Tool executor | `src/core/tool-executor.ts` | Registry, `tool()` factory, `resolveTools()`, groups |
+| Tool registry | `src/tools/index.ts` | Built-in tool modules + `executeToolHandler()` |
+| Skill system | `src/skills/` | Registry, loader, parser, args, `@path` resolver |
+| Skill catalog | `src/core/skill-catalog.ts` | `buildSkillCatalog()` for system prompt injection |
+| Hooks | `src/core/hooks.ts` | Safe executor — errors never crash the loop |
+| Middleware | `src/core/middleware.ts` | `PipelineContext`, `Middleware` type, `compose()` chain |
+| Built-in middleware | `src/core/middleware/` | `logging`, `rate-limit`, `auth` |
+| Errors | `src/core/errors.ts` | `ZclawError` hierarchy with `code` + `retryable` |
+| Stream manager | `src/core/stream-manager.ts` | Shared streaming queue, async iterables, SSE for SDK and agent |
+| Session store | `src/core/session-store.ts` | `PersistenceBackend` factory + registry, file & memory backends |
+| SDK entry | `src/adapters/sdk/index.ts` | `generateText`, `streamText`, `createAgent` |
+| CLI entry | `src/adapters/cli/index.ts` | Commander setup, delegates to `repl.ts` |
+| CLI REPL | `src/adapters/cli/repl.ts` | Interrupt handling, `runChat()`, command registry builder |
+| Server entry | `src/adapters/server/index.ts` | HTTP + WebSocket, delegates to core directly |
+
+## Providers
+
+4 providers behind `LLMProvider` interface:
+
+| Type | Class | Shared with |
+|------|-------|-------------|
+| `openai` | `OpenAIProvider` | — |
+| `openai-compatible` | `OpenAIProvider` | Same class, custom `baseUrl` |
+| `anthropic` | `AnthropicProvider` | — |
+| `glm` | `AnthropicProvider` | Same class, `api.z.ai/api/anthropic` base URL |
+
+GLM model aliases: `haiku` → `glm-4.5-air`, `sonnet` → `glm-4.7`, `opus` → `glm-5.1`.
+
+Provider resolution chain: explicit config → env vars → legacy env vars → defaults.
+
+## Tools
+
+12 built-in tools in 3 tiers:
+
+- **Core**: `execute_shell_command`, `read_file`, `write_file`, `get_current_datetime`
+- **Comm**: `send_email`, `web_search`, `send_notification`
+- **Advanced**: `read_website`, `take_screenshot`, `generate_image`, `optimize_prompt`, `use_skill`
+
+Custom tools: `tool({ description, parameters, execute })` → `ToolModule` registered via `registerTool()`.
+
+## Skills
+
+File-based plugin system. YAML frontmatter + body. Skills can specify allowed tools, preferred provider/model, and template args. Discovery from multiple sources with priority (last wins): built-in → `~/.zclaw/skills/` → `.zclaw/skills/` → `ZCLAW_SKILLS_PATH`.
+
+## Adapters
+
+### CLI (`src/adapters/cli/`)
+
+Interactive REPL. Commander.js args → `loadMergedConfig()` → setup wizard → `Agent` class → REPL loop. Slash commands via registry (`/help`, `/clear`, `/exit`, `/compact`). ESC key triggers `AbortSignal`.
+
+### SDK (`src/adapters/sdk/`)
+
+Programmatic library. Exports `generateText()`, `streamText()`, `createAgent()`. React hook via `zclaw/react`. Session persistence via `persist` option.
+
+### Server (`src/adapters/server/`)
+
+HTTP + WebSocket standalone server. REST endpoints for generate/stream/agent. API key auth with scopes. Sessions with TTL and concurrency limits.
+
+## Configuration
+
+Multi-layer merge (highest wins): env vars → local `.zclaw/setting.json` → global `~/.zclaw/setting.json` → defaults.
+
+Env vars per provider: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GLM_API_KEY`, `OPENAI_COMPAT_API_KEY` + `OPENAI_COMPAT_BASE_URL`. General: `LLM_PROVIDER`, `LLM_MODEL`. Legacy vars work with deprecation warnings.
+
+## Conventions
+
+- **No bundler** — plain `tsc` to ES2022 NodeNext. Dev via `tsx`.
+- **Package exports** — `zclaw` (SDK), `zclaw/react`, `zclaw/server`. Binaries: `zclaw` (CLI), `zclaw-server`.
+- **Vitest test suite (partial)** — 78 tests across 7 files covering P0/P1 areas; CI gates publish on test pass
+- **Errors carry metadata** — `code` (machine-readable) + `retryable` flag on all `ZclawError` subclasses.
+- **Hook errors are non-fatal** — never crash the agent loop.
+- **Dynamic provider imports** — unused provider SDKs stay out of memory.
+
+## Known Gaps
+
+- Tool registry exists in both `src/tools/index.ts` and `src/core/tool-executor.ts` — FIXED: single source in `src/core/tool-executor.ts`, `tools/index.ts` is pure module collection
+- `ProviderType` defined in both `src/providers/types.ts` and `src/core/types.ts` — FIXED: single definition in `src/core/types.ts`, re-exported from `src/providers/types.ts`
+- Streaming queue logic duplicated between SDK and Server — FIXED: `StreamManager` in `src/core/stream-manager.ts` is the single implementation
+- Skill loading logic partially in CLI adapter instead of fully in `skill-invoker.ts` — FIXED: `createSkillProviderSwitcher()` in `src/core/skill-invoker.ts` replaces `switchToSkillModel()`/`restoreProvider()` from CLI `Agent` class; all adapters can now use skill provider switching
+- Skill bodies eagerly parsed at startup — FIXED: `parseFrontmatter()` discards body on discovery, `getBody()` loads lazily from disk with LRU cache (5 entries)
+- Server imports from SDK rather than directly from core — FIXED: server imports directly from core modules
+- `any` types in tool definition paths — FIXED: `toolDefs: ToolDefinition[]`, `tools: ToolDefinition[]`
+- No middleware pipeline for cross-cutting concerns — FIXED: `(ctx, next) => Promise<void>` middleware chain with `compose()`. Built-in logging, rate-limit, auth middleware in `src/core/middleware/`
+- Skill catalog only in CLI system prompt — FIXED: `buildSkillCatalog()` in `src/core/skill-catalog.ts`, `skillCatalog` option on `AgentLoopOptions` for injection at agent-loop level
+- No skill body size limits — FIXED: three-layer defense — load-time warning in `parser.ts`, injection-time truncation via `limitSkillBody()` in `skill-invoker.ts` and `tools/index.ts`, cumulative cap (2MB) in `resolver.ts`
+- Large files with mixed responsibilities — FIXED: `websocket.ts` → `ws-types.ts` + `ws-handlers.ts` + re-export hub; `provider-resolver.ts` → `provider-env.ts` + `provider-config.ts` + re-export hub; `cli/index.ts` → `repl.ts` + `commands/skills.ts` + `commands/models.ts` + Commander setup
+- Session persistence hardcoded in SDK agent — FIXED: `PersistenceBackend` interface with factory/registry in `src/core/session-store.ts`; custom backends via `registerBackend()`; server delegates raw storage to backend while keeping TTL/concurrency logic
+
 <!-- dgc-policy-v11 -->
 # Dual-Graph Context Policy
 

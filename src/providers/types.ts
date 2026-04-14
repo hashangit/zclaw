@@ -1,4 +1,6 @@
-export type ProviderType = 'openai-compatible' | 'openai' | 'anthropic' | 'glm';
+export type { ProviderType } from "../core/types.js";
+
+import type { ToolDefinition } from '../tools/interface.js';
 
 export interface ProviderMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -18,6 +20,10 @@ export interface ProviderResponse {
   tool_calls?: ProviderToolCall[];
 }
 
+export interface ChatOptions {
+  signal?: AbortSignal;
+}
+
 export interface LLMProvider {
-  chat(messages: ProviderMessage[], tools: any[]): Promise<ProviderResponse>;
+  chat(messages: ProviderMessage[], tools: ToolDefinition[], options?: ChatOptions): Promise<ProviderResponse>;
 }

@@ -261,10 +261,27 @@ const options: GenerateTextOptions = {
 }
 ```
 
+## Skill Configuration
+
+Environment variables for customizing skill discovery and behavior:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ZCLAW_SKILLS_PATH` | *(none)* | Colon-separated list of additional skill directories |
+| `ZCLAW_NO_BUNDLED_SKILLS` | `false` | Set to `true` to disable built-in bundled skills |
+| `ZCLAW_SKILL_BODY_MAX_CHARS` | `32000` | Maximum skill body size in characters before truncation (~8k tokens) |
+| `ZCLAW_SKILL_BODY_WARN_CHARS` | `8000` | Warning threshold for skill body size in characters (~2k tokens) |
+| `ZCLAW_SKILLS_DEBUG` | *(none)* | Set to `true` to enable debug logging for skill discovery |
+
+::: tip
+Skills are discovered in priority order (last wins): built-in bundled skills, `~/.zclaw/skills/`, `.zclaw/skills/`, then `ZCLAW_SKILLS_PATH` directories. See the [Skills documentation](/sdk/skills) for the full SKILL.md format and features.
+:::
+
 ## Next Steps
 
 - Explore [all available providers](/sdk/providers)
 - Learn about [custom tools](/sdk/custom-tools)
+- Learn about [skills](/sdk/skills)
 - Check [production best practices](/guides/production-checklist)
 
 ::: info Configuration Priority

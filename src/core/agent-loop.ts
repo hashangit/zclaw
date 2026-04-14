@@ -2,9 +2,12 @@
 
 import type { Message, StepResult, ToolCall, Usage, ZclawError } from "./types.js";
 import type { LLMProvider, ProviderMessage, ProviderToolCall } from "../providers/types.js";
+import type { ToolDefinition } from "../tools/interface.js";
 import { generateId, now, estimateTokens, toZclawError, messageToProviderMessage, providerToolCallToToolCall } from "./message-convert.js";
-import { executeToolHandler } from "../tools/index.js";
+import { executeTool } from "./tool-executor.js";
 import type { HookExecutor } from "./hooks.js";
+import type { Middleware, PipelineContext } from "./middleware.js";
+import { compose } from "./middleware.js";
 
 // ProviderFactory for per-skill model switching
 export interface ProviderFactory {
@@ -16,14 +19,17 @@ export interface AgentLoopOptions {
   provider: LLMProvider;
   model: string;
   messages: Message[];
-  toolDefs: any[];
+  toolDefs: ToolDefinition[];
   systemPrompt?: string;          // Prepended as system message if provided
+  skillCatalog?: string;          // Appended to existing system message
   maxSteps: number;
   hooks: HookExecutor;
   signal?: AbortSignal;
   config?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   onStep?: (step: StepResult) => void;
   providerFactory?: ProviderFactory;
+  middleware?: Middleware[];
 }
 
 export interface AgentLoopError {
@@ -56,6 +62,7 @@ export interface AgentLoopResult {
  * - Hook execution
  * - Usage estimation
  * - Structured error reporting
+ * - Middleware pipeline (when provided)
  *
  * @param options - Agent loop configuration
  * @returns AgentLoopResult with messages, steps, tool calls, usage, and finish reason
@@ -67,6 +74,99 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     messages,
     toolDefs,
     systemPrompt,
+    skillCatalog,
+    maxSteps,
+    hooks,
+    signal,
+    config = {},
+    metadata = {},
+    onStep,
+    providerFactory,
+    middleware,
+  } = options;
+
+  // ── No middleware: run loop directly (backward compatible) ────────────
+  if (!middleware || middleware.length === 0) {
+    return executeLoop(options);
+  }
+
+  // ── With middleware: wrap loop in pipeline ────────────────────────────
+  const ctx: PipelineContext = {
+    requestId: generateId(),
+    messages,
+    provider,
+    model,
+    toolDefs,
+    metadata,
+    signal,
+    startedAt: Date.now(),
+  };
+
+  try {
+    await compose(middleware)(ctx, async () => {
+      const result = await executeLoop(options);
+      ctx.result = {
+        messages: result.messages,
+        steps: result.steps,
+        toolCalls: result.toolCalls,
+        usage: result.usage,
+        finishReason: result.finishReason,
+      };
+    });
+
+    // ctx.result is populated by the final handler
+    if (ctx.result) {
+      return {
+        messages: ctx.result.messages,
+        steps: ctx.result.steps,
+        toolCalls: ctx.result.toolCalls,
+        usage: ctx.result.usage,
+        finishReason: ctx.result.finishReason as AgentLoopResult["finishReason"],
+      };
+    }
+
+    // Middleware completed without populating result (shouldn't happen)
+    return {
+      messages,
+      steps: [],
+      toolCalls: [],
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0 },
+      finishReason: "error",
+      error: {
+        message: "Middleware completed without producing a result",
+        code: "MIDDLEWARE_ERROR",
+        retryable: false,
+      },
+    };
+  } catch (err) {
+    // Middleware threw (e.g., auth rejection, rate limit)
+    return {
+      messages,
+      steps: [],
+      toolCalls: [],
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0 },
+      finishReason: "error",
+      error: {
+        message: err instanceof Error ? err.message : String(err),
+        code: (err as any)?.code ?? "MIDDLEWARE_ERROR",
+        retryable: false,
+      },
+    };
+  }
+}
+
+/**
+ * Execute the core agent loop (no middleware wrapping).
+ * Extracted from runAgentLoop for clarity.
+ */
+async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> {
+  const {
+    provider,
+    model,
+    messages,
+    toolDefs,
+    systemPrompt,
+    skillCatalog,
     maxSteps,
     hooks,
     signal,
@@ -83,6 +183,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       content: systemPrompt,
       timestamp: now(),
     });
+  }
+
+  // Append skill catalog to existing system message
+  if (skillCatalog && messages.length > 0 && messages[0].role === 'system') {
+    messages[0] = { ...messages[0], content: messages[0].content + '\n\n' + skillCatalog };
   }
 
   const steps: StepResult[] = [];
@@ -136,7 +241,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     // Call provider
     let response;
     try {
-      response = await currentProvider.chat(providerMessages, toolDefs);
+      response = await currentProvider.chat(providerMessages, toolDefs, { signal });
     } catch (err) {
       finishReason = "error";
       const zclawErr = toZclawError(err, "PROVIDER_ERROR");
@@ -216,7 +321,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         const start = now();
         let output: string;
         try {
-          output = await executeToolHandler(tc.name, parsedArgs, config);
+          output = await executeTool(tc.name, parsedArgs, config);
         } catch (err) {
           output = `Error: ${err instanceof Error ? err.message : String(err)}`;
 
@@ -290,7 +395,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     promptTokens,
     completionTokens,
     totalTokens: promptTokens + completionTokens,
-    cost: 0, // TODO: Implement cost calculation based on provider/model
+    cost: 0,    // TODO: Implement cost calculation based on provider/model
   };
 
   return {

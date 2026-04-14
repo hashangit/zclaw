@@ -185,7 +185,7 @@ ZClaw uses a hierarchical configuration system.
 
 **Environment Variables:**
 - `ZCLAW_SHELL_APPROVE`: Shell command approval mode (`auto`, `deny`, or unset for interactive)
-- `ZCLAW_SKILLS_PATH`: Directory containing custom skill packs
+- `ZCLAW_SKILLS_PATH`: Colon-separated list of additional skill directories
 - `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GLM_API_KEY`: Provider API keys
 - `OPENAI_COMPAT_API_KEY`, `OPENAI_COMPAT_BASE_URL`, `OPENAI_COMPAT_MODEL`: OpenAI-compatible provider settings
 
@@ -401,40 +401,44 @@ ws.onmessage = (event) => {
 
 ## Skills System
 
-Skills are loadable packs that extend the agent with domain-specific tools and prompts.
+Skills are single `SKILL.md` files with YAML frontmatter that extend the agent with domain-specific prompts and tool restrictions. See [docs/sdk/skills.md](docs/sdk/skills.md) for full documentation.
 
-### Using Skills
+### Skill Format
+```yaml
+---
+name: docker-ops
+description: Docker operations assistant
+tags: [docker, devops]
+allowedTools: [execute_shell_command, read_file]
+args: [environment, service]
+model:
+  provider: anthropic
+  model: claude-sonnet-4-20250514
+---
+
+Skill instructions and templates here.
+Use {{environment}} and {{service}} for argument substitution.
+Reference files with @k8s/deployment.yaml.
+```
+
+### Key Features
+- **Argument substitution**: `{{argName}}`, `$1`/`$2`/`$ALL` for positional args
+- **File references**: `@path/to/file.yaml` injects file contents into the prompt
+- **Tool restrictions**: `allowedTools` limits which tools the skill can use
+- **Model selection**: `model` overrides provider/model per skill
+- **Lazy loading**: skill body is only read when invoked, keeping startup fast
+- **Body limits**: bodies over 8k chars warn, over 32k chars truncate (~8k tokens)
+
+### Discovery Locations
+Skills are discovered in priority order (last wins):
+1. Built-in bundled skills
+2. `~/.zclaw/skills/`
+3. `.zclaw/skills/` (project-level)
+4. `ZCLAW_SKILLS_PATH` directories
+
 ```bash
-# Built-in skills are loaded automatically
-zclaw "Deploy the app to production"    # Uses docker-ops, k8s-deploy skills
-zclaw "Analyze the nginx logs"          # Uses log-analyzer skill
-```
-
-### Built-in Skills
-- **docker-ops**: Docker container management and deployment
-- **k8s-deploy**: Kubernetes deployment and orchestration
-- **log-analyzer**: Log parsing, filtering, and anomaly detection
-
-### Custom Skills
-Create a skill directory with a manifest and tool definitions:
-```
-my-skills/
-  custom-deploy/
-    skill.json          # Skill manifest
-    instructions.md     # System prompt extension
-    tools/              # Tool definitions
-      deploy.ts
-```
-
-Configure the skills path:
-```bash
-export ZCLAW_SKILLS_PATH=/path/to/my-skills
-```
-
-### @path File References
-Skills can reference files using `@path` syntax in their instructions:
-```markdown
-Read the deployment config at @path:./k8s/deployment.yaml and validate it.
+# Add custom skill directories
+export ZCLAW_SKILLS_PATH=/path/to/skills:/another/path
 ```
 
 ## Docker Support

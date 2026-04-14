@@ -1,3 +1,4 @@
+import { readFile } from 'fs/promises';
 import { Skill, SkillMetadata, SkillRegistry } from './types.js';
 
 export class DefaultSkillRegistry implements SkillRegistry {
@@ -34,15 +35,20 @@ export class DefaultSkillRegistry implements SkillRegistry {
 
     // Check cache first
     const cached = this.bodyCache.get(name);
-    if (cached) return cached;
+    if (cached !== undefined) return cached;
 
-    // Use pre-loaded body from parse
-    if (skill.bodyCache) {
-      this.setCache(name, skill.bodyCache);
-      return skill.bodyCache;
+    // Load body lazily from disk
+    try {
+      const content = await readFile(skill.filePath, 'utf-8');
+      const body = extractBody(content);
+      if (body === undefined) return undefined;
+
+      this.setCache(name, body);
+      return body;
+    } catch {
+      // File deleted, moved, or unreadable
+      return undefined;
     }
-
-    return undefined;
   }
 
   private setCache(name: string, body: string): void {
@@ -59,4 +65,21 @@ export class DefaultSkillRegistry implements SkillRegistry {
   getNames(): string[] {
     return Array.from(this.skills.keys());
   }
+}
+
+/**
+ * Extract the body text after the closing --- delimiter of YAML frontmatter.
+ */
+function extractBody(content: string): string | undefined {
+  const trimmed = content.trimStart();
+  if (!trimmed.startsWith('---')) {
+    return content;
+  }
+
+  const endIdx = trimmed.indexOf('---', 3);
+  if (endIdx === -1) {
+    return undefined;
+  }
+
+  return trimmed.slice(endIdx + 3).trimStart() || undefined;
 }

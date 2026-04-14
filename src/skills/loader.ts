@@ -2,7 +2,7 @@ import { readdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { parseSkillFile } from './parser.js';
+import { parseFrontmatter } from './parser.js';
 import { Skill } from './types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -47,7 +47,7 @@ export async function discoverSkills(cwd: string): Promise<Skill[]> {
         if (!existsSync(skillFile)) continue;
 
         try {
-          const skill = await parseSkillFile(skillFile);
+          const skill = await parseFrontmatter(skillFile);
           skill.basePath = join(searchPath, entry.name);
           skill.source = searchPath;
 

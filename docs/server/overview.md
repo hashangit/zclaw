@@ -5,7 +5,7 @@ description: ZClaw Server architecture, startup options, and quick-start guide.
 
 # Server Overview
 
-ZClaw can be deployed as a standalone container exposing an HTTP REST API and a WebSocket endpoint on port **7337**. The server wraps the SDK with authentication, session management, and real-time streaming -- ready for production workloads behind a load balancer or directly on bare metal.
+ZClaw can be deployed as a standalone container exposing an HTTP REST API and a WebSocket endpoint on port **7337**. The server delegates directly to the core agent loop (`runAgentLoop`) with authentication, session management, and real-time streaming -- ready for production workloads behind a load balancer or directly on bare metal.
 
 ## Architecture
 
@@ -22,12 +22,12 @@ ZClaw can be deployed as a standalone container exposing an HTTP REST API and a 
                  │  │ (API key)│  │ (file-based TTL)  │ │
                  │  └──────────┘  └───────────────────┘ │
                  │           ┌─────────────┐            │
-                 │           │  ZClaw SDK  │            │
+                 │           │ Core Engine │            │
                  │           └─────────────┘            │
                  └─────────────────────────────────────┘
 ```
 
-The server delegates all LLM interaction to the SDK's `generateText` and `streamText` functions. Every request flows through the same core agent loop, so tool execution, hooks, abort handling, and usage tracking behave identically to direct SDK usage.
+The server delegates all LLM interaction directly to the core `runAgentLoop`, bypassing the SDK layer. Every request flows through the same core agent loop, so tool execution, hooks, abort handling, and usage tracking behave identically to direct SDK usage.
 
 ### Key characteristics
 

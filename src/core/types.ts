@@ -6,6 +6,7 @@
  */
 
 import type { ZclawError as ZclawErrorType } from "./errors.js";
+import type { Middleware } from "./middleware.js";
 
 // ── Provider ──────────────────────────────────────────────────────────
 
@@ -117,6 +118,8 @@ export interface GenerateTextOptions {
   hooks?: Hooks;
   signal?: AbortSignal;
   config?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  middleware?: Middleware[];
 }
 
 export interface GenerateTextResult {
@@ -165,9 +168,11 @@ export interface AgentCreateOptions {
   skills?: string[];
   maxSteps?: number;
   permissionMode?: "auto" | "confirm";
-  persist?: string | SessionStore;
+  persist?: string | PersistenceBackend | PersistenceConfig | SessionStore;
   hooks?: Hooks;
   config?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  middleware?: Middleware[];
 }
 
 export interface SdkAgent {
@@ -190,6 +195,30 @@ export interface AgentResponse {
 
 // ── Session ───────────────────────────────────────────────────────────
 
+/**
+ * Composable persistence backend. Implementations handle raw storage
+ * (file system, Redis, SQLite, etc.). Server-specific metadata (TTL,
+ * apiKeyHash) flows through the `metadata` field on `SessionData`.
+ */
+export interface PersistenceBackend {
+  save(id: string, data: SessionData): Promise<void>;
+  load(id: string): Promise<SessionData | null>;
+  delete(id: string): Promise<void>;
+  list(): Promise<string[]>;
+}
+
+/**
+ * Configuration object for creating a persistence backend via the factory.
+ * `type` selects the backend; remaining keys are backend-specific options.
+ */
+export interface PersistenceConfig {
+  type: string;
+  [key: string]: unknown;
+}
+
+/**
+ * @deprecated Use `PersistenceBackend` instead. Kept for backward compatibility.
+ */
 export interface SessionStore {
   save(sessionId: string, messages: Message[]): Promise<void>;
   load(sessionId: string): Promise<Message[] | null>;
@@ -204,6 +233,8 @@ export interface SessionData {
   updatedAt: number;
   provider?: ProviderType;
   model?: string;
+  /** Arbitrary metadata for backends or consumers (e.g., TTL, apiKeyHash). */
+  metadata?: Record<string, unknown>;
 }
 
 // ── Skills ────────────────────────────────────────────────────────────

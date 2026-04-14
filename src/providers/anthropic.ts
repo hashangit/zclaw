@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { ProviderMessage, ProviderResponse, ProviderToolCall, LLMProvider } from './types.js';
+import { ProviderMessage, ProviderResponse, ProviderToolCall, LLMProvider, ChatOptions } from './types.js';
+import type { ToolDefinition } from '../tools/interface.js';
 
 export class AnthropicProvider implements LLMProvider {
   private client: Anthropic;
@@ -14,7 +15,7 @@ export class AnthropicProvider implements LLMProvider {
     this.model = model;
   }
 
-  async chat(messages: ProviderMessage[], tools: any[]): Promise<ProviderResponse> {
+  async chat(messages: ProviderMessage[], tools: ToolDefinition[], options?: ChatOptions): Promise<ProviderResponse> {
     // Extract system messages
     const systemParts: string[] = [];
     const nonSystem: ProviderMessage[] = [];
@@ -59,10 +60,10 @@ export class AnthropicProvider implements LLMProvider {
     }
 
     // Translate tool definitions
-    const anthropicTools: Anthropic.Tool[] = tools.map((t: any) => ({
+    const anthropicTools: Anthropic.Tool[] = tools.map((t) => ({
       name: t.function.name,
       description: t.function.description,
-      input_schema: t.function.parameters,
+      input_schema: t.function.parameters as Anthropic.Tool.InputSchema,
     }));
 
     const response = await this.client.messages.create({
@@ -71,7 +72,7 @@ export class AnthropicProvider implements LLMProvider {
       system: systemParts.length ? systemParts.join('\n') : undefined,
       messages: anthropicMessages,
       tools: anthropicTools,
-    });
+    }, { signal: options?.signal });
 
     // Translate response
     let content: string | undefined;

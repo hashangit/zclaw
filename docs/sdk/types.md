@@ -117,6 +117,10 @@ interface GenerateTextOptions {
   hooks?: Hooks;
   /** Abort controller signal for cancellation. */
   signal?: AbortSignal;
+  /** Middleware pipeline functions. */
+  middleware?: Middleware[];
+  /** Adapter-specific metadata passed to middleware. */
+  metadata?: Record<string, unknown>;
   /** Extra config passed to tool handlers. */
   config?: Record<string, unknown>;
 }
@@ -217,10 +221,14 @@ interface AgentCreateOptions {
   maxSteps?: number;
   /** Tool execution mode. Default: "auto". */
   permissionMode?: "auto" | "confirm";
-  /** Session persistence: directory path or custom SessionStore. */
-  persist?: string | SessionStore;
+  /** Session persistence: path, backend instance, or config object. */
+  persist?: string | PersistenceBackend | PersistenceConfig;
   /** Lifecycle callbacks. */
   hooks?: Hooks;
+  /** Middleware pipeline functions. */
+  middleware?: Middleware[];
+  /** Adapter-specific metadata passed to middleware. */
+  metadata?: Record<string, unknown>;
   /** Extra config passed to tool handlers. */
   config?: Record<string, unknown>;
 }
@@ -326,12 +334,19 @@ interface ToolResult {
 
 ```typescript
 interface ToolDefinition {
-  /** Tool name, e.g. "read_file", "web_search". */
-  name: string;
-  /** Description of what the tool does. Used by the LLM for tool selection. */
-  description: string;
-  /** JSON Schema defining the tool's parameters. */
-  parameters: Record<string, unknown>;
+  type: "function";
+  function: {
+    /** Tool name, e.g. "read_file", "web_search". */
+    name: string;
+    /** Description of what the tool does. Used by the LLM for tool selection. */
+    description: string;
+    /** JSON Schema defining the tool's parameters. */
+    parameters: {
+      type: "object";
+      properties: Record<string, unknown>;
+      required: string[];
+    };
+  };
 }
 ```
 
@@ -476,20 +491,54 @@ interface ProviderConfig {
 }
 ```
 
-## Session Types
+### ChatOptions
 
-### SessionStore
+Options passed to the low-level provider `chat()` method:
 
 ```typescript
-interface SessionStore {
-  /** Save messages for a session. Creates or updates. */
-  save(sessionId: string, messages: Message[]): Promise<void>;
-  /** Load messages for a session. Returns null if not found. */
-  load(sessionId: string): Promise<Message[] | null>;
+interface ChatOptions {
+  /** AbortSignal to cancel in-flight HTTP requests. */
+  signal?: AbortSignal;
+}
+```
+
+### LLMProvider
+
+Low-level provider interface. Implementations wrap specific LLM APIs.
+
+```typescript
+interface LLMProvider {
+  chat(messages: ProviderMessage[], tools: ToolDefinition[], options?: ChatOptions): Promise<ProviderResponse>;
+}
+```
+
+## Session Types
+
+### PersistenceBackend
+
+The standard interface for session storage. Implement this for custom backends (Redis, SQLite, etc.):
+
+```typescript
+interface PersistenceBackend {
+  /** Save session data. Creates or updates. */
+  save(sessionId: string, data: SessionData): Promise<void>;
+  /** Load session data. Returns null if not found. */
+  load(sessionId: string): Promise<SessionData | null>;
   /** Delete a session. */
   delete(sessionId: string): Promise<void>;
   /** List all session IDs. */
   list(): Promise<string[]>;
+}
+```
+
+### PersistenceConfig
+
+```typescript
+interface PersistenceConfig {
+  /** Backend type: "file", "memory", or custom registered type. */
+  type: string;
+  /** Backend-specific options (path, url, etc.). */
+  [key: string]: unknown;
 }
 ```
 
@@ -509,26 +558,85 @@ interface SessionData {
   provider?: ProviderType;
   /** Model used for this session. */
   model?: string;
+  /** Arbitrary metadata (e.g. apiKeyHash for server sessions). */
+  metadata?: Record<string, unknown>;
 }
 ```
 
-### FileSessionStore
+### SessionStore (deprecated)
 
-File-backed store, created by `createSessionStore()`:
+Use `PersistenceBackend` instead. The legacy interface is preserved for backward compatibility:
 
 ```typescript
-// Factory function
-function createSessionStore(path?: string): SessionStore;
-// Default path: ~/.zclaw/sessions/
+/** @deprecated Use PersistenceBackend instead */
+interface SessionStore {
+  save(sessionId: string, messages: Message[]): Promise<void>;
+  load(sessionId: string): Promise<Message[] | null>;
+  delete(sessionId: string): Promise<void>;
+  list(): Promise<string[]>;
+}
 ```
 
-### MemorySessionStore
+## Middleware Types
 
-In-memory store, created by `createMemoryStore()`:
+### Middleware
 
 ```typescript
-// Factory function
-function createMemoryStore(): SessionStore;
+type Middleware = (
+  ctx: PipelineContext,
+  next: () => Promise<void>,
+) => Promise<void>;
+```
+
+### PipelineContext
+
+Carries all state through the middleware pipeline:
+
+```typescript
+interface PipelineContext {
+  /** Unique request identifier. */
+  requestId: string;
+  /** The messages being sent to the provider. */
+  messages: Message[];
+  /** Resolved provider instance. */
+  provider: LLMProvider;
+  /** Model name. */
+  model: string;
+  /** Tool definitions available for this invocation. */
+  toolDefs: ToolDefinition[];
+  /** Adapter-specific metadata. */
+  metadata: Record<string, unknown>;
+  /** The result, populated after the agent loop completes. */
+  result?: AgentLoopResult;
+  /** Abort signal. */
+  signal?: AbortSignal;
+  /** Timestamp when the pipeline started. */
+  startedAt: number;
+}
+```
+
+### Built-in middleware
+
+```typescript
+// Logging — logs request start and response finish
+function loggingMiddleware(options?: {
+  logRequest?: boolean;
+  logResponse?: boolean;
+  logger?: (message: string, meta?: Record<string, unknown>) => void;
+}): Middleware;
+
+// Rate limiting — token bucket per key
+function rateLimitMiddleware(options: {
+  maxRequests: number;
+  windowMs: number;
+  keyExtractor?: (ctx: PipelineContext) => string;
+}): Middleware;
+
+// Auth — validate identity from context
+function authMiddleware(options: {
+  validate: (ctx: PipelineContext) => boolean | Promise<boolean>;
+  errorMessage?: string;
+}): Middleware;
 ```
 
 ## Skill Types
@@ -548,6 +656,231 @@ interface SkillMetadata {
   /** Restrict which tools this skill can use. */
   allowedTools?: string[];
 }
+```
+
+### SkillModelConfig
+
+Per-skill model selection. Used in `SkillFrontmatter.model`:
+
+```typescript
+interface SkillModelConfig {
+  /** Provider type, e.g. "openai", "anthropic", "glm", "openai-compatible". */
+  provider?: string;
+  /** Model id or nickname, e.g. "gpt-5.4", "sonnet", "claude-haiku-4-5-20251001". */
+  model: string;
+}
+```
+
+### SkillFrontmatter
+
+All fields a skill author can write in the YAML header of a `SKILL.md` file:
+
+```typescript
+interface SkillFrontmatter {
+  /** Skill name (required). */
+  name: string;
+  /** Short description shown to the LLM (required). */
+  description: string;
+  /** Semantic version. */
+  version?: string;
+  /** Author name. */
+  author?: string;
+  /** Tags for categorization. */
+  tags?: string[];
+  /** Restrict which tools this skill can use. */
+  allowedTools?: string[];
+  /** Priority for skill resolution (higher wins). */
+  priority?: number;
+  /** Declared argument names, e.g. ["environment", "service"]. */
+  args?: string[];
+  /** Preferred provider/model for this skill. */
+  model?: SkillModelConfig;
+}
+```
+
+### Skill
+
+Full skill object returned by the registry. Body is loaded lazily via `getBody()`:
+
+```typescript
+interface Skill {
+  /** Unique skill identifier. */
+  name: string;
+  /** Short description. */
+  description: string;
+  /** Semantic version. */
+  version: string;
+  /** Author name. */
+  author?: string;
+  /** Tags for categorization. */
+  tags: string[];
+  /** Restrict which tools this skill can use. */
+  allowedTools?: string[];
+  /** Priority for skill resolution. */
+  priority: number;
+  /** Base path for @path resolution. */
+  basePath: string;
+  /** Discovery source (built-in, global, local). */
+  source: string;
+  /** Raw frontmatter from the SKILL.md file. */
+  frontmatter: SkillFrontmatter;
+  /** Absolute path to SKILL.md for lazy body loading. */
+  filePath: string;
+}
+```
+
+### SkillRegistry
+
+The skill registry interface used to look up and load skills:
+
+```typescript
+interface SkillRegistry {
+  /** Look up a skill by name. */
+  get(name: string): Skill | undefined;
+  /** Return all registered skills. */
+  getAll(): Skill[];
+  /** Return lightweight metadata for all skills. */
+  getMetadata(): SkillMetadata[];
+  /** Lazily load the skill body text. */
+  getBody(name: string): Promise<string | undefined>;
+}
+```
+
+### TruncationResult
+
+Returned by `limitSkillBody()` when enforcing size limits:
+
+```typescript
+interface TruncationResult {
+  /** The (possibly truncated) body. */
+  body: string;
+  /** Whether truncation was applied. */
+  truncated: boolean;
+  /** Original body size in characters. */
+  originalChars: number;
+  /** Estimated original token count (chars / 4). */
+  originalTokenEstimate: number;
+  /** Final body size in characters. */
+  finalChars: number;
+  /** Estimated final token count (chars / 4). */
+  finalTokenEstimate: number;
+}
+```
+
+### SkillInvocationResult
+
+Returned by `invokeSkill()` with the constructed prompt and provider-switching metadata:
+
+```typescript
+interface SkillInvocationResult {
+  /** The constructed prompt to send to the agent. */
+  prompt: string;
+  /** Resolved skill metadata. */
+  skill: SkillMetadata;
+  /** Whether the skill has a preferred provider that needs switching. */
+  providerSwitchNeeded: boolean;
+  /** The preferred provider type (if any). */
+  preferredProvider?: string;
+  /** The preferred model (if any). */
+  preferredModel?: string;
+}
+```
+
+### ProviderSwitcherConfig
+
+Configuration for creating a skill provider switcher:
+
+```typescript
+interface ProviderSwitcherConfig {
+  /** The current active provider. */
+  provider: LLMProvider;
+  /** The current active model name. */
+  model: string;
+  /** Available model configurations keyed by provider type. */
+  models: Record<string, { apiKey: string; baseUrl?: string; model: string }>;
+}
+```
+
+### SkillProviderSwitcher
+
+Temporarily changes the active provider/model based on skill preferences and can restore the original when done:
+
+```typescript
+interface SkillProviderSwitcher {
+  /** Switch provider if the skill requires it. Returns true if switched. */
+  switchIfNeeded(skillResult: SkillInvocationResult): Promise<boolean>;
+  /** Restore the original provider/model. */
+  restore(): void;
+  /** The current active provider. */
+  readonly activeProvider: LLMProvider;
+  /** The current active model name. */
+  readonly activeModel: string;
+}
+```
+
+### Skill body size constants and functions
+
+```typescript
+/** Default maximum skill body size in characters (~8k tokens). */
+const DEFAULT_SKILL_BODY_MAX_CHARS = 32_000;
+
+/** Default warning threshold in characters (~2k tokens). */
+const DEFAULT_SKILL_BODY_WARN_CHARS = 8_000;
+
+/** Resolved skill body limits from environment variables. */
+function getSkillBodyLimits(): {
+  maxChars: number;  // ZCLAW_SKILL_BODY_MAX_CHARS (default: 32000)
+  warnChars: number; // ZCLAW_SKILL_BODY_WARN_CHARS (default: 8000)
+};
+
+/** Enforce size limits on a skill body. Fail-soft: never throws. */
+function limitSkillBody(
+  body: string,
+  maxChars?: number,
+  warnChars?: number,
+): TruncationResult;
+```
+
+### buildSkillCatalog
+
+Builds a skill catalog string suitable for appending to the system prompt:
+
+```typescript
+function buildSkillCatalog(metadata: SkillMetadata[]): string;
+```
+
+### invokeSkill
+
+Central orchestrator for skill invocation. Parses input, looks up the skill, substitutes arguments, resolves `@path` references, and returns a constructed prompt:
+
+```typescript
+function invokeSkill(options: {
+  input: string;
+  registry: SkillRegistry;
+  skillsPath?: string;
+}): Promise<SkillInvocationResult | null>;
+```
+
+### createSkillProviderSwitcher
+
+Creates a switcher that temporarily changes the active provider/model based on skill preferences:
+
+```typescript
+function createSkillProviderSwitcher(
+  config: ProviderSwitcherConfig,
+): SkillProviderSwitcher;
+```
+
+## Session Registration
+
+### registerBackend
+
+Register a custom persistence backend for session storage. Built-in backends (`file`, `memory`) are registered automatically:
+
+```typescript
+type BackendFactory = (config: PersistenceConfig) => PersistenceBackend;
+
+function registerBackend(type: string, factory: BackendFactory): void;
 ```
 
 ## Related pages

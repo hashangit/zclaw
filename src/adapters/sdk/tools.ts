@@ -18,4 +18,5 @@ export {
   // Registry and execution
   registerTool,
   executeTool,
+  getAllToolDefinitions,
 } from "../../core/tool-executor.js";

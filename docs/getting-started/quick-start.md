@@ -106,6 +106,10 @@ async function main() {
 main()
 ```
 
+::: tip Interrupting Responses
+Using the CLI? Press **ESC** at any time while the agent is responding to cancel mid-stream. The in-flight request is aborted, tool execution stops between steps, and your conversation context is preserved so you can continue chatting immediately.
+:::
+
 ## Step 5: Switch Providers
 
 Change providers with a single line:

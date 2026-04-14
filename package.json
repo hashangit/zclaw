@@ -28,7 +28,9 @@
     "server": "node dist/adapters/server/standalone.js",
     "dev": "tsx src/adapters/cli/index.ts",
     "dev:server": "tsx src/adapters/server/standalone.ts",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "prepublishOnly": "pnpm run build"
   },
   "files": [
@@ -97,6 +99,7 @@
     "@types/nodemailer": "^7.0.9",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.4"
   }
 }

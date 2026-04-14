@@ -4,7 +4,14 @@
  * Central orchestrators and utilities for the ZClaw unified architecture.
  */
 
-export { invokeSkill, type SkillInvocationResult } from './skill-invoker.js';
+export {
+  invokeSkill,
+  createSkillProviderSwitcher,
+  type SkillInvocationResult,
+  type SkillProviderSwitcher,
+  type ProviderSwitcherConfig,
+} from './skill-invoker.js';
+export { buildSkillCatalog } from './skill-catalog.js';
 export {
   runAgentLoop,
   type AgentLoopOptions,
@@ -13,7 +20,9 @@ export {
   type ProviderFactory,
 } from './agent-loop.js';
 export { createHookExecutor, type HookExecutor } from './hooks.js';
-export { createSessionStore, createMemoryStore } from './session-store.js';
+export { StreamManager } from './stream-manager.js';
+export { createSessionStore, createMemoryStore, createPersistenceBackend, registerBackend, FilePersistenceBackend, MemoryPersistenceBackend } from './session-store.js';
+export type { BackendFactory } from './session-store.js';
 
 // Export error classes (canonical definitions live in ./errors.ts)
 export {
@@ -56,6 +65,8 @@ export type {
   // Session
   SessionStore,
   SessionData,
+  PersistenceBackend,
+  PersistenceConfig,
   // Skills
   SkillMetadata,
 } from './types.js';
@@ -109,4 +120,15 @@ export {
   getToolGroup,
   registerTool,
   executeTool,
+  getAllToolDefinitions,
 } from './tool-executor.js';
+
+// Export middleware pipeline
+export {
+  compose,
+  type PipelineContext,
+  type Middleware,
+} from './middleware.js';
+export { loggingMiddleware, type LoggingOptions } from './middleware/logging.js';
+export { rateLimitMiddleware, type RateLimitOptions } from './middleware/rate-limit.js';
+export { authMiddleware, type AuthOptions } from './middleware/auth.js';

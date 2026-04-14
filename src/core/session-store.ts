@@ -1,14 +1,22 @@
 /**
  * ZClaw SDK — Session persistence
  *
- * Provides file-based and in-memory session stores for persisting
- * conversation history across requests.
+ * Provides composable persistence backends for storing conversation history.
+ * Built-in "file" and "memory" backends are registered by default. Custom
+ * backends (Redis, SQLite, etc.) can be registered via `registerBackend()`.
+ *
+ * Legacy `SessionStore`-based API is preserved for backward compatibility.
  */
 
 import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { SessionStore, SessionData, Message } from "./types.js";
+import type {
+  PersistenceBackend,
+  PersistenceConfig,
+  SessionData,
+  SessionStore,
+} from "./types.js";
 
 // ── Session ID validation ───────────────────────────────────────────────
 
@@ -28,78 +36,65 @@ function defaultSessionPath(): string {
   return join(homedir(), ".zclaw", "sessions");
 }
 
-// ── File-based SessionStore ─────────────────────────────────────────────
+// ── File-based PersistenceBackend ───────────────────────────────────────
 
 /**
- * File-backed session store. Each session is stored as a JSON file
+ * File-backed persistence backend. Each session is stored as a JSON file
  * at `{basePath}/{sessionId}.json`.
  */
-class FileSessionStore implements SessionStore {
+export class FilePersistenceBackend implements PersistenceBackend {
   private basePath: string;
 
   constructor(basePath: string) {
     this.basePath = basePath;
   }
 
-  private filePath(sessionId: string): string {
-    return join(this.basePath, `${sessionId}.json`);
+  private filePath(id: string): string {
+    return join(this.basePath, `${id}.json`);
   }
 
   private async ensureDir(): Promise<void> {
     await fs.mkdir(this.basePath, { recursive: true });
   }
 
-  async save(sessionId: string, messages: Message[]): Promise<void> {
-    validateSessionId(sessionId);
+  async save(id: string, data: SessionData): Promise<void> {
+    validateSessionId(id);
     await this.ensureDir();
 
+    const existing = await this.loadFromDisk(id);
     const now = Date.now();
-    let data: SessionData;
 
-    // Try to load existing session to preserve createdAt and metadata
-    try {
-      const raw = await fs.readFile(this.filePath(sessionId), "utf-8");
-      const existing = JSON.parse(raw) as SessionData;
-      data = {
-        id: sessionId,
-        messages,
-        createdAt: existing.createdAt,
-        updatedAt: now,
-        provider: existing.provider,
-        model: existing.model,
-      };
-    } catch {
-      // New session
-      data = {
-        id: sessionId,
-        messages,
-        createdAt: now,
-        updatedAt: now,
-      };
-    }
+    const full: SessionData = existing
+      ? {
+          id,
+          messages: data.messages,
+          createdAt: existing.createdAt,
+          updatedAt: now,
+          provider: data.provider ?? existing.provider,
+          model: data.model ?? existing.model,
+          metadata: data.metadata ?? existing.metadata,
+        }
+      : {
+          id,
+          messages: data.messages,
+          createdAt: now,
+          updatedAt: now,
+          provider: data.provider,
+          model: data.model,
+          metadata: data.metadata,
+        };
 
-    await fs.writeFile(
-      this.filePath(sessionId),
-      JSON.stringify(data, null, 2),
-      "utf-8",
-    );
+    await fs.writeFile(this.filePath(id), JSON.stringify(full, null, 2), "utf-8");
   }
 
-  async load(sessionId: string): Promise<Message[] | null> {
-    validateSessionId(sessionId);
-    try {
-      const raw = await fs.readFile(this.filePath(sessionId), "utf-8");
-      const data = JSON.parse(raw) as SessionData;
-      return data.messages;
-    } catch {
-      return null;
-    }
+  async load(id: string): Promise<SessionData | null> {
+    return this.loadFromDisk(id);
   }
 
-  async delete(sessionId: string): Promise<void> {
-    validateSessionId(sessionId);
+  async delete(id: string): Promise<void> {
+    validateSessionId(id);
     try {
-      await fs.unlink(this.filePath(sessionId));
+      await fs.unlink(this.filePath(id));
     } catch {
       // File doesn't exist — nothing to delete
     }
@@ -112,38 +107,47 @@ class FileSessionStore implements SessionStore {
       .filter((name) => name.endsWith(".json"))
       .map((name) => name.slice(0, -".json".length));
   }
+
+  private async loadFromDisk(id: string): Promise<SessionData | null> {
+    try {
+      const raw = await fs.readFile(this.filePath(id), "utf-8");
+      return JSON.parse(raw) as SessionData;
+    } catch {
+      return null;
+    }
+  }
 }
 
-// ── In-memory SessionStore ──────────────────────────────────────────────
+// ── In-memory PersistenceBackend ────────────────────────────────────────
 
 /**
- * In-memory session store backed by a Map. Useful for testing.
+ * In-memory persistence backend backed by a Map. Useful for testing.
  */
-class MemorySessionStore implements SessionStore {
+export class MemoryPersistenceBackend implements PersistenceBackend {
   private store = new Map<string, SessionData>();
 
-  async save(sessionId: string, messages: Message[]): Promise<void> {
-    validateSessionId(sessionId);
-    const existing = this.store.get(sessionId);
+  async save(id: string, data: SessionData): Promise<void> {
+    validateSessionId(id);
+    const existing = this.store.get(id);
     const now = Date.now();
 
-    this.store.set(sessionId, {
-      id: sessionId,
-      messages,
+    this.store.set(id, {
+      id,
+      messages: data.messages,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-      provider: existing?.provider,
-      model: existing?.model,
+      provider: data.provider ?? existing?.provider,
+      model: data.model ?? existing?.model,
+      metadata: data.metadata ?? existing?.metadata,
     });
   }
 
-  async load(sessionId: string): Promise<Message[] | null> {
-    const data = this.store.get(sessionId);
-    return data?.messages ?? null;
+  async load(id: string): Promise<SessionData | null> {
+    return this.store.get(id) ?? null;
   }
 
-  async delete(sessionId: string): Promise<void> {
-    this.store.delete(sessionId);
+  async delete(id: string): Promise<void> {
+    this.store.delete(id);
   }
 
   async list(): Promise<string[]> {
@@ -151,20 +155,109 @@ class MemorySessionStore implements SessionStore {
   }
 }
 
-// ── Public API ──────────────────────────────────────────────────────────
+// ── Backend factory / registry ──────────────────────────────────────────
+
+export type BackendFactory = (config: PersistenceConfig) => PersistenceBackend;
+
+const registry = new Map<string, BackendFactory>();
+
+// Register built-in backends
+registry.set("file", (config) => new FilePersistenceBackend((config.path as string) ?? defaultSessionPath()));
+registry.set("memory", () => new MemoryPersistenceBackend());
 
 /**
- * Creates a file-based session store.
+ * Register a custom persistence backend factory.
  *
- * @param path  Directory to store session JSON files in.
- *              Defaults to `~/.zclaw/sessions/`.
+ * @param type    Unique backend identifier (e.g., "redis", "sqlite")
+ * @param factory Factory function that creates a `PersistenceBackend` from config
+ */
+export function registerBackend(type: string, factory: BackendFactory): void {
+  registry.set(type, factory);
+}
+
+/**
+ * Create a persistence backend from a config object.
+ * Uses the `type` field to look up the registered factory.
+ *
+ * @throws Error if `type` is not registered
+ */
+export function createPersistenceBackend(config: PersistenceConfig): PersistenceBackend {
+  const factory = registry.get(config.type);
+  if (!factory) {
+    throw new Error(
+      `Unknown persistence backend type "${config.type}". Registered types: ${Array.from(registry.keys()).join(", ")}`,
+    );
+  }
+  return factory(config);
+}
+
+// ── Deprecated legacy API ───────────────────────────────────────────────
+
+/**
+ * @deprecated Use `FilePersistenceBackend` or `createPersistenceBackend({ type: "file", path })` instead.
+ */
+class FileSessionStore implements SessionStore {
+  private backend: FilePersistenceBackend;
+
+  constructor(basePath: string) {
+    this.backend = new FilePersistenceBackend(basePath);
+  }
+
+  async save(sessionId: string, messages: import("./types.js").Message[]): Promise<void> {
+    await this.backend.save(sessionId, { id: sessionId, messages, createdAt: Date.now(), updatedAt: Date.now() });
+  }
+
+  async load(sessionId: string): Promise<import("./types.js").Message[] | null> {
+    const data = await this.backend.load(sessionId);
+    return data?.messages ?? null;
+  }
+
+  async delete(sessionId: string): Promise<void> {
+    await this.backend.delete(sessionId);
+  }
+
+  async list(): Promise<string[]> {
+    return this.backend.list();
+  }
+}
+
+/**
+ * @deprecated Use `MemoryPersistenceBackend` or `createPersistenceBackend({ type: "memory" })` instead.
+ */
+class MemorySessionStore implements SessionStore {
+  private backend: MemoryPersistenceBackend;
+
+  constructor() {
+    this.backend = new MemoryPersistenceBackend();
+  }
+
+  async save(sessionId: string, messages: import("./types.js").Message[]): Promise<void> {
+    await this.backend.save(sessionId, { id: sessionId, messages, createdAt: Date.now(), updatedAt: Date.now() });
+  }
+
+  async load(sessionId: string): Promise<import("./types.js").Message[] | null> {
+    const data = await this.backend.load(sessionId);
+    return data?.messages ?? null;
+  }
+
+  async delete(sessionId: string): Promise<void> {
+    await this.backend.delete(sessionId);
+  }
+
+  async list(): Promise<string[]> {
+    return this.backend.list();
+  }
+}
+
+/**
+ * @deprecated Use `createPersistenceBackend({ type: "file", path })` instead.
  */
 export function createSessionStore(path?: string): SessionStore {
   return new FileSessionStore(path ?? defaultSessionPath());
 }
 
 /**
- * Creates an in-memory session store for testing.
+ * @deprecated Use `createPersistenceBackend({ type: "memory" })` instead.
  */
 export function createMemoryStore(): SessionStore {
   return new MemorySessionStore();

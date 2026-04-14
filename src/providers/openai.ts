@@ -1,5 +1,6 @@
 import { OpenAI } from 'openai';
-import { ProviderMessage, ProviderResponse, ProviderToolCall, LLMProvider } from './types.js';
+import { ProviderMessage, ProviderResponse, ProviderToolCall, LLMProvider, ChatOptions } from './types.js';
+import type { ToolDefinition } from '../tools/interface.js';
 
 export class OpenAIProvider implements LLMProvider {
   private client: OpenAI;
@@ -10,12 +11,12 @@ export class OpenAIProvider implements LLMProvider {
     this.model = model;
   }
 
-  async chat(messages: ProviderMessage[], tools: any[]): Promise<ProviderResponse> {
+  async chat(messages: ProviderMessage[], tools: ToolDefinition[], options?: ChatOptions): Promise<ProviderResponse> {
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages: messages as OpenAI.ChatCompletionMessageParam[],
-      tools,
-    });
+      tools: tools as OpenAI.ChatCompletionTool[],
+    }, { signal: options?.signal });
 
     const message = response.choices[0]?.message;
     if (!message) return {};

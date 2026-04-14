@@ -53,8 +53,10 @@ console.log(agent.getUsage());
 | `skills`        | `string[]`                               | *(none)*                   | Skill names to activate |
 | `maxSteps`      | `number`                                 | `10`                       | Maximum agent loop iterations per call |
 | `permissionMode`| `"auto" \| "confirm"`                    | `"auto"`                   | *(Not yet implemented)* Whether tools execute automatically or require confirmation |
-| `persist`       | `string \| SessionStore`                 | *(none)*                   | Directory path for file-based persistence, or a custom `SessionStore` instance |
+| `persist`       | `string \| PersistenceBackend \| PersistenceConfig` | *(none)*          | Directory path, backend instance, or config object (e.g. `{ type: "memory" }`) |
 | `hooks`         | `Hooks`                                  | *(none)*                   | Lifecycle callbacks |
+| `middleware`    | `Middleware[]`                            | *(none)*                   | Request/response pipeline functions (auth, logging, rate limiting, etc.) |
+| `metadata`     | `Record<string, unknown>`                 | `{}`                       | Adapter-specific metadata passed to middleware via `PipelineContext` |
 | `config`        | `Record<string, unknown>`                | `{}`                       | Extra config passed to tool handlers |
 
 ## SdkAgent interface
@@ -164,14 +166,24 @@ console.log(r2.text);
 
 ### Session persistence
 
-Persist conversation history to disk so the agent can resume across process restarts:
+Persist conversation history so the agent can resume across process restarts:
 
 ```typescript
 import { createAgent } from "zclaw-core";
 
-// File-based persistence (stored in the given directory)
+// Option 1: File-based persistence (backward compatible — just pass a path)
 const agent = await createAgent({
   persist: "./sessions/my-agent",
+});
+
+// Option 2: In-memory persistence (great for testing)
+const agent2 = await createAgent({
+  persist: { type: "memory" },
+});
+
+// Option 3: Explicit file config
+const agent3 = await createAgent({
+  persist: { type: "file", path: "/var/data/sessions" },
 });
 
 await agent.chat("My name is Alice");
@@ -182,31 +194,52 @@ await agent.chat("I'm working on a React project");
 // The conversation history will be loaded automatically.
 ```
 
-#### Custom session store
+#### Custom persistence backends
 
-Implement the `SessionStore` interface for custom backends (Redis, database, etc.):
+Register custom backends (Redis, SQLite, encrypted storage, etc.) with `registerBackend`:
 
 ```typescript
-import { createAgent, type SessionStore } from "zclaw-core";
+import { registerBackend, createAgent, type PersistenceBackend, type SessionData } from "zclaw-core";
 
-const redisStore: SessionStore = {
-  async save(sessionId, messages) {
-    await redis.set(`session:${sessionId}`, JSON.stringify(messages));
-  },
-  async load(sessionId) {
+class RedisBackend implements PersistenceBackend {
+  constructor(private url: string) { /* connect */ }
+
+  async save(sessionId: string, data: SessionData): Promise<void> {
+    await redis.set(`session:${sessionId}`, JSON.stringify(data));
+  }
+  async load(sessionId: string): Promise<SessionData | null> {
     const raw = await redis.get(`session:${sessionId}`);
     return raw ? JSON.parse(raw) : null;
-  },
-  async delete(sessionId) {
+  }
+  async delete(sessionId: string): Promise<void> {
     await redis.del(`session:${sessionId}`);
-  },
-  async list() {
+  }
+  async list(): Promise<string[]> {
     const keys = await redis.keys("session:*");
     return keys.map((k) => k.replace("session:", ""));
-  },
+  }
+}
+
+// Register once at startup
+registerBackend("redis", (config) => new RedisBackend(config.url as string));
+
+// Then use by type name
+const agent = await createAgent({
+  persist: { type: "redis", url: "redis://localhost:6379" },
+});
+```
+
+#### Pass a backend instance directly
+
+```typescript
+const myBackend: PersistenceBackend = {
+  async save(id, data) { /* custom logic */ },
+  async load(id) { return null; },
+  async delete(id) {},
+  async list() { return []; },
 };
 
-const agent = await createAgent({ persist: redisStore });
+const agent = await createAgent({ persist: myBackend });
 ```
 
 ### Dynamic tools
@@ -244,6 +277,10 @@ try {
 }
 ```
 
+::: info
+`abort()` cancels the in-flight HTTP request to the LLM provider, not just the agent loop between steps. The `AbortSignal` propagates through to the underlying provider SDK (OpenAI, Anthropic, etc.), so network resources are released immediately.
+:::
+
 ### Inspect history
 
 ```typescript
@@ -261,30 +298,82 @@ agent.clear();
 console.log(agent.getHistory().length); // 1 (just the system prompt)
 ```
 
-## SessionStore interface
+## Persistence types
+
+### PersistenceBackend interface
 
 ```typescript
-interface SessionStore {
-  save(sessionId: string, messages: Message[]): Promise<void>;
-  load(sessionId: string): Promise<Message[] | null>;
+interface PersistenceBackend {
+  save(sessionId: string, data: SessionData): Promise<void>;
+  load(sessionId: string): Promise<SessionData | null>;
   delete(sessionId: string): Promise<void>;
   list(): Promise<string[]>;
 }
 ```
 
-ZClaw provides two built-in implementations:
-
-- **`createSessionStore(path?)`** -- File-backed store. Each session is a JSON file. Defaults to `~/.zclaw/sessions/`.
-- **`createMemoryStore()`** -- In-memory `Map`-backed store for testing.
+### PersistenceConfig
 
 ```typescript
-import { createSessionStore, createMemoryStore } from "zclaw-core";
+interface PersistenceConfig {
+  type: string;           // "file", "memory", or custom registered type
+  [key: string]: unknown; // Backend-specific options (path, url, etc.)
+}
+```
 
-// Production: file-based
-const fileStore = createSessionStore("./data/sessions");
+Built-in backends and factory functions:
 
-// Testing: in-memory
-const testStore = createMemoryStore();
+- **`createPersistenceBackend(config)`** -- Creates a backend from a config object
+- **`registerBackend(type, factory)`** -- Registers a custom backend type
+- **`createSessionStore(path?)`** -- Legacy file-backed store (deprecated, use `createPersistenceBackend`)
+- **`createMemoryStore()`** -- Legacy in-memory store (deprecated, use `{ type: "memory" }`)
+
+## Middleware
+
+Add cross-cutting concerns (logging, auth, rate limiting) to agent execution:
+
+```typescript
+import {
+  createAgent,
+  loggingMiddleware,
+  rateLimitMiddleware,
+  authMiddleware,
+} from "zclaw-core";
+
+const agent = await createAgent({
+  middleware: [
+    authMiddleware({
+      validate: (ctx) => !!ctx.metadata.apiKey,
+      errorMessage: "Missing API key",
+    }),
+    rateLimitMiddleware({
+      maxRequests: 60,
+      windowMs: 60_000,
+      keyExtractor: (ctx) => String(ctx.metadata.userId ?? "anonymous"),
+    }),
+    loggingMiddleware({
+      logRequest: true,
+      logResponse: true,
+    }),
+  ],
+  metadata: { apiKey: process.env.MY_API_KEY, userId: "user-123" },
+});
+```
+
+### Custom middleware
+
+```typescript
+import type { Middleware } from "zclaw-core";
+
+const auditLog: Middleware = async (ctx, next) => {
+  console.log(`[audit] request ${ctx.requestId} started`);
+  const start = Date.now();
+
+  await next(); // Continue to the agent loop
+
+  console.log(`[audit] request ${ctx.requestId} finished in ${Date.now() - start}ms`);
+};
+
+const agent = await createAgent({ middleware: [auditLog] });
 ```
 
 ## Related APIs

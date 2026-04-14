@@ -225,6 +225,10 @@ const finishReason = await stream.finishReason;
 console.log(`Ended: ${finishReason}`); // "aborted"
 ```
 
+::: info
+The `AbortSignal` propagates to the underlying provider SDK (OpenAI, Anthropic, etc.), cancelling the in-flight HTTP request at the network level rather than only checking between agent loop steps. This means network resources are released immediately on abort.
+:::
+
 ### Combined callbacks and async iteration
 
 Use both callbacks for immediate side effects and async iteration for downstream processing:

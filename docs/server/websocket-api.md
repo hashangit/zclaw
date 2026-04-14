@@ -67,7 +67,7 @@ Send a user message and receive a streaming response.
 
 ### `abort`
 
-Cancel the current in-flight chat request.
+Cancel the current in-flight chat request. The AbortSignal is passed through to the provider SDK, so the underlying HTTP request to the LLM is cancelled at the network level.
 
 ```json
 {

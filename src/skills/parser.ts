@@ -1,9 +1,45 @@
 import { readFile } from 'fs/promises';
-import { Skill, SkillFrontmatter } from './types.js';
+import { Skill, SkillFrontmatter, getSkillBodyLimits } from './types.js';
 
 export async function parseSkillFile(filePath: string): Promise<Skill> {
   const content = await readFile(filePath, 'utf-8');
   const { frontmatter, body } = extractFrontmatter(content);
+
+  if (!frontmatter.name) throw new Error(`Skill missing 'name' field: ${filePath}`);
+  if (!frontmatter.description) throw new Error(`Skill missing 'description' field: ${filePath}`);
+
+  // Warn at load time if body exceeds the soft warning threshold
+  const { warnChars } = getSkillBodyLimits();
+  if (body.length > warnChars) {
+    console.warn(
+      `[SKILLS] Warning: Skill "${frontmatter.name}" body is ${body.length} chars ` +
+      `(~${Math.ceil(body.length / 4)} tokens). Consider trimming below ${warnChars} chars ` +
+      `for optimal context usage.`
+    );
+  }
+
+  return {
+    name: frontmatter.name,
+    description: frontmatter.description,
+    version: frontmatter.version || '1.0.0',
+    author: frontmatter.author,
+    tags: frontmatter.tags || [],
+    allowedTools: frontmatter.allowedTools,
+    priority: frontmatter.priority || 0,
+    basePath: '',
+    source: '',
+    frontmatter,
+    filePath,
+  };
+}
+
+/**
+ * Parse only the YAML frontmatter from a skill file.
+ * Discards the body text immediately — body is loaded lazily via getBody().
+ */
+export async function parseFrontmatter(filePath: string): Promise<Skill> {
+  const content = await readFile(filePath, 'utf-8');
+  const frontmatter = extractFrontmatterOnly(content);
 
   if (!frontmatter.name) throw new Error(`Skill missing 'name' field: ${filePath}`);
   if (!frontmatter.description) throw new Error(`Skill missing 'description' field: ${filePath}`);
@@ -19,7 +55,7 @@ export async function parseSkillFile(filePath: string): Promise<Skill> {
     basePath: '',
     source: '',
     frontmatter,
-    bodyCache: body,
+    filePath,
   };
 }
 
@@ -38,6 +74,25 @@ function extractFrontmatter(content: string): { frontmatter: SkillFrontmatter; b
   const body = trimmed.slice(endIdx + 3).trimStart();
 
   return { frontmatter: parseYaml(yaml), body };
+}
+
+/**
+ * Extract only the frontmatter from a skill file.
+ * The body text is not returned — used during discovery to avoid holding bodies in memory.
+ */
+function extractFrontmatterOnly(content: string): SkillFrontmatter {
+  const trimmed = content.trimStart();
+  if (!trimmed.startsWith('---')) {
+    return {} as SkillFrontmatter;
+  }
+
+  const endIdx = trimmed.indexOf('---', 3);
+  if (endIdx === -1) {
+    return {} as SkillFrontmatter;
+  }
+
+  const yaml = trimmed.slice(3, endIdx);
+  return parseYaml(yaml);
 }
 
 function parseYaml(yaml: string): SkillFrontmatter {

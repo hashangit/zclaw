@@ -10,10 +10,13 @@
 import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
-import * as crypto from "crypto";
-import type { ProviderType, GenerateTextResult, Usage } from "../../core/types.js";
-import { generateText, streamText } from "../sdk/index.js";
-import { configureProviders, getProvider, getDefaultProviderType } from "../../core/provider-resolver.js";
+
+import type { ProviderType, GenerateTextResult, Usage, Message } from "../../core/types.js";
+import { runAgentLoop } from "../../core/agent-loop.js";
+import { createHookExecutor } from "../../core/hooks.js";
+import { resolveTools, getAllToolDefinitions } from "../../core/tool-executor.js";
+import { generateId, now } from "../../core/message-convert.js";
+import { configureProviders, getProvider, resolveFromEnv } from "../../core/provider-resolver.js";
 import { createRestHandler, type RestHandlerContext } from "./rest.js";
 import { setupWebSocket, closeWebSocket, type WebSocketHandlerContext } from "./websocket.js";
 import { ServerSessionManager } from "./session-store.js";
@@ -59,50 +62,16 @@ function resolvePort(options?: ServerOptions): number {
 // ── Provider initialization ────────────────────────────────────────────
 
 function initializeProvidersFromEnv(): void {
-  const config: Record<string, { apiKey: string; model?: string; baseUrl?: string }> = {};
-
-  if (process.env.OPENAI_API_KEY) {
-    config.openai = {
-      apiKey: process.env.OPENAI_API_KEY,
-      model: process.env.OPENAI_MODEL ?? "gpt-4o",
-    };
-  }
-  if (process.env.ANTHROPIC_API_KEY) {
-    config.anthropic = {
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514",
-    };
-  }
-  if (process.env.GLM_API_KEY) {
-    config.glm = {
-      apiKey: process.env.GLM_API_KEY,
-      model: process.env.GLM_MODEL ?? "glm-5.1",
-    };
-  }
-  if ((process.env.OPENAI_COMPAT_API_KEY || process.env.ZCLAW_API_KEY) &&
-      (process.env.OPENAI_COMPAT_BASE_URL || process.env.OPENAI_BASE_URL)) {
-    config["openai-compatible"] = {
-      apiKey: process.env.OPENAI_COMPAT_API_KEY || process.env.ZCLAW_API_KEY!,
-      baseUrl: process.env.OPENAI_COMPAT_BASE_URL || process.env.OPENAI_BASE_URL!,
-      model: process.env.ZCLAW_MODEL ?? "gpt-4o",
-    };
-  }
-
-  if (Object.keys(config).length > 0) {
-    const defaultProvider = (process.env.ZCLAW_PROVIDER as ProviderType) ??
-      (config.openai ? "openai" : Object.keys(config)[0]) as ProviderType;
-
-    configureProviders({
-      ...config,
-      default: defaultProvider,
-    } as any);
+  const config = resolveFromEnv();
+  if (config) {
+    configureProviders(config);
   }
 }
 
-// ── SDK wrapper functions ───────────────────────────────────────────────
+// ── Core-backed generation functions ───────────────────────────────────
 
 /**
- * Thin wrapper around SDK's generateText for server use.
+ * Server-side generateText using core agent loop directly.
  */
 async function serverGenerateText(options: {
   message: string;
@@ -112,12 +81,48 @@ async function serverGenerateText(options: {
   maxSteps?: number;
   skills?: string[];
 }): Promise<GenerateTextResult> {
-  return generateText(options.message, {
-    model: options.model,
-    provider: options.provider,
-    tools: options.tools,
-    maxSteps: options.maxSteps ?? 5,
+  // Resolve provider
+  const { provider: llmProvider, model } = await getProvider(options.provider);
+
+  // Resolve tools
+  const toolDefs = options.tools ? resolveTools(options.tools) : getAllToolDefinitions();
+
+  // Hooks
+  const hooks = createHookExecutor();
+
+  // Build message list
+  const messages: Message[] = [];
+  messages.push({
+    id: generateId(),
+    role: "user",
+    content: options.message,
+    timestamp: now(),
   });
+
+  // Run the agent loop
+  const result = await runAgentLoop({
+    provider: llmProvider,
+    model: options.model ?? model,
+    messages,
+    toolDefs,
+    maxSteps: options.maxSteps ?? 5,
+    hooks,
+  });
+
+  // Extract final text from last assistant message
+  const lastAssistant = [...result.messages]
+    .reverse()
+    .find((m) => m.role === "assistant" && m.content);
+  const text = lastAssistant?.content ?? "";
+
+  return {
+    text,
+    steps: result.steps,
+    toolCalls: result.toolCalls,
+    usage: result.usage,
+    finishReason: result.finishReason as GenerateTextResult["finishReason"],
+    messages: result.messages,
+  };
 }
 
 function listModels(): Record<ProviderType, string[]> {
@@ -293,7 +298,7 @@ export async function createServer(options?: ServerOptions): Promise<http.Server
 }
 
 /**
- * Thin wrapper around SDK's streamText for server use.
+ * Server-side streamText using core agent loop directly.
  */
 async function serverStreamText(opts: {
   message: string;
@@ -312,25 +317,62 @@ async function serverStreamText(opts: {
   signal?: AbortSignal;
 }): Promise<void> {
   try {
-    const stream = await streamText(opts.message, {
-      model: opts.model,
-      provider: opts.provider,
-      tools: opts.tools,
-      maxSteps: opts.maxSteps ?? 5,
-      onText: opts.onText,
-      onToolCall: opts.onToolCall,
-      onToolResult: opts.onToolResult,
-      onStep: opts.onStep,
-      signal: opts.signal,
+    // Resolve provider
+    const { provider: llmProvider, model } = await getProvider(opts.provider);
+
+    // Resolve tools
+    const toolDefs = opts.tools ? resolveTools(opts.tools) : getAllToolDefinitions();
+
+    // Hooks
+    const hooks = createHookExecutor();
+
+    // Build message list
+    const messages: Message[] = [];
+    messages.push({
+      id: generateId(),
+      role: "user",
+      content: opts.message,
+      timestamp: now(),
     });
 
-    const [text, usage, finishReason] = await Promise.all([
-      stream.fullText,
-      stream.usage,
-      stream.finishReason,
-    ]);
+    // Accumulate text for the final result
+    let accumulatedText = "";
 
-    opts.onDone({ text, usage, finishReason });
+    // Run the agent loop with onStep callbacks
+    const result = await runAgentLoop({
+      provider: llmProvider,
+      model: opts.model ?? model,
+      messages,
+      toolDefs,
+      maxSteps: opts.maxSteps ?? 5,
+      hooks,
+      signal: opts.signal,
+      onStep: (step) => {
+        if (step.type === "text" && step.content) {
+          accumulatedText += step.content;
+          opts.onText(step.content);
+        }
+        if (step.type === "tool_call" && step.toolCall) {
+          opts.onToolCall({
+            name: step.toolCall.name,
+            args: step.toolCall.args,
+            callId: step.toolCall.name,
+          });
+          opts.onToolResult({
+            callId: step.toolCall.name,
+            output: step.toolCall.result,
+            success: !step.toolCall.result.startsWith("Error:"),
+          });
+        }
+        opts.onStep(step);
+      },
+    });
+
+    opts.onDone({
+      text: accumulatedText,
+      usage: result.usage,
+      finishReason: result.finishReason,
+    });
   } catch (err) {
     opts.onError({
       code: "STREAM_ERROR",

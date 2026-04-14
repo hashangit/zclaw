@@ -20,6 +20,7 @@ import { homedir } from 'os';
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB per file
 const MAX_REFERENCES = 10; // Max @references per input
+const MAX_TOTAL_RESOLVED_SIZE = 2 * 1024 * 1024; // 2MB total across all inlined files
 
 /**
  * Extract all @reference patterns from text.
@@ -84,6 +85,7 @@ export async function resolveReferences(text: string, projectRoot?: string): Pro
   if (refs.length === 0) return text;
 
   let result = text;
+  let cumulativeSize = 0;
 
   for (const ref of refs) {
     const resolvedPath = resolveReference(ref, root);
@@ -108,6 +110,14 @@ export async function resolveReferences(text: string, projectRoot?: string): Pro
       }
 
       const content = await readFile(resolvedPath, 'utf-8');
+
+      // Cumulative size cap — stop inlining if total exceeds budget
+      if (cumulativeSize + content.length > MAX_TOTAL_RESOLVED_SIZE) {
+        result = result.replace(`@${ref}`, `[Skipped: cumulative resolved size would exceed ${Math.round(MAX_TOTAL_RESOLVED_SIZE / 1024)}KB limit]: @${ref}]`);
+        continue;
+      }
+      cumulativeSize += content.length;
+
       const ext = resolvedPath.split('.').pop() || '';
       const langMap: Record<string, string> = {
         ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',

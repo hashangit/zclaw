@@ -8,6 +8,7 @@ import { ScreenshotTool } from './screenshot.js';
 import { ImageTool } from './image.js';
 import { PromptOptimizerTool } from './prompt-optimizer.js';
 import { getSkillRegistry } from '../skills/index.js';
+import { limitSkillBody } from '../skills/types.js';
 
 const UseSkillTool: ToolModule = {
   name: "Skill Invocation",
@@ -59,7 +60,14 @@ const UseSkillTool: ToolModule = {
       }
     }
 
-    let result = `# ${skill.name} Skill Activated\n\n${resolvedBody}`;
+    // Enforce body size limits
+    const { body: limitedBody, truncated, originalTokenEstimate, finalTokenEstimate } =
+      limitSkillBody(resolvedBody);
+
+    let result = `# ${skill.name} Skill Activated\n\n${limitedBody}`;
+    if (truncated) {
+      result += `\n\n> Note: Skill body was truncated (${originalTokenEstimate} -> ${finalTokenEstimate} estimated tokens). The skill may not function as intended.`;
+    }
     if (skillArgs && Object.keys(skillArgs).length > 0) {
       result += `\n\n## Skill Arguments\n${JSON.stringify(skillArgs, null, 2)}`;
     }
@@ -69,7 +77,7 @@ const UseSkillTool: ToolModule = {
 };
 
 // Central Registry of all available tools
-export const toolRegistry: ToolModule[] = [
+export const builtInTools: ToolModule[] = [
   ShellTool,
   ReadFileTool,
   WriteFileTool,
@@ -83,16 +91,3 @@ export const toolRegistry: ToolModule[] = [
   ImageTool,
   UseSkillTool
 ];
-
-export function getToolDefinitions() {
-  return toolRegistry.map(t => t.definition);
-}
-
-export async function executeToolHandler(name: string, args: any, fullConfig: any): Promise<string> {
-  const tool = toolRegistry.find(t => t.definition.function.name === name);
-  if (!tool) {
-    return `Error: Tool ${name} not found.`;
-  }
-  
-  return await tool.handler(args, fullConfig);
-}

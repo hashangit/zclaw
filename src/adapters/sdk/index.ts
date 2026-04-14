@@ -19,21 +19,33 @@ import type {
 } from "../../core/types.js";
 import { getProvider } from "../../core/provider-resolver.js";
 import { createHookExecutor } from "../../core/hooks.js";
-import { resolveTools } from "./tools.js";
-import { getToolDefinitions } from "../../tools/index.js";
+import { StreamManager } from "../../core/stream-manager.js";
+import { resolveTools, getAllToolDefinitions } from "./tools.js";
 import { runAgentLoop } from "../../core/agent-loop.js";
 import {
   generateId,
   now,
   toZclawError,
 } from "../../core/message-convert.js";
+import type { Middleware } from "../../core/middleware.js";
 
 // ── Re-exports ───────────────────────────────────────────────────────────
 
 export { createAgent } from "./agent.js";
 export { tool, CORE_TOOLS, COMM_TOOLS, ADVANCED_TOOLS, ALL_TOOLS } from "./tools.js";
 export { configureProviders, provider } from "../../core/provider-resolver.js";
+export { createSkillProviderSwitcher } from "../../core/skill-invoker.js";
 export type { SSEOptions } from "./http.js";
+
+// Re-export middleware pipeline
+export {
+  compose,
+  type PipelineContext,
+  type Middleware,
+  loggingMiddleware,
+  rateLimitMiddleware,
+  authMiddleware,
+} from "../../core/index.js";
 
 // Re-export all types
 export type {
@@ -57,9 +69,23 @@ export type {
   AgentResponse,
   SessionStore,
   SessionData,
+  PersistenceBackend,
+  PersistenceConfig,
   SkillMetadata,
   ZclawError,
 } from "../../core/types.js";
+
+export {
+  createPersistenceBackend,
+  registerBackend,
+  createSessionStore,
+  createMemoryStore,
+} from "../../core/session-store.js";
+
+export type {
+  SkillProviderSwitcher,
+  ProviderSwitcherConfig,
+} from "../../core/skill-invoker.js";
 
 // ── generateText ─────────────────────────────────────────────────────────
 
@@ -90,7 +116,7 @@ export async function generateText(
   const { provider: llmProvider, model } = await getProvider(opts.provider);
 
   // Resolve tools
-  const toolDefs = opts.tools ? resolveTools(opts.tools) : getToolDefinitions();
+  const toolDefs = opts.tools ? resolveTools(opts.tools) : getAllToolDefinitions();
 
   // Hooks
   const hooks = createHookExecutor(opts.hooks);
@@ -115,6 +141,8 @@ export async function generateText(
     hooks,
     signal: opts.signal,
     config: opts.config,
+    metadata: opts.metadata,
+    middleware: opts.middleware,
   });
 
   // Get the final text
@@ -167,7 +195,7 @@ export async function streamText(
   const { provider: llmProvider, model } = await getProvider(opts.provider);
 
   // Resolve tools
-  const toolDefs = opts.tools ? resolveTools(opts.tools) : getToolDefinitions();
+  const toolDefs = opts.tools ? resolveTools(opts.tools) : getAllToolDefinitions();
 
   // Hooks — merge stream-level callbacks with any base hooks
   const mergedHooks = { ...opts.hooks };
@@ -185,40 +213,11 @@ export async function streamText(
   // Abort controller
   const abortController = new AbortController();
 
-  // Promises for results
-  let textResolve!: (text: string) => void;
-  let usageResolve!: (usage: Usage) => void;
-  let finishResolve!: (reason: string) => void;
-  const fullTextPromise = new Promise<string>((r) => { textResolve = r; });
-  const usagePromise = new Promise<Usage>((r) => { usageResolve = r; });
-  const finishReasonPromise = new Promise<string>((r) => { finishResolve = r; });
-
-  // Queues for async iterables
-  const textQueue: string[] = [];
-  const stepQueue: StepResult[] = [];
-  let textDone = false;
-  let stepsDone = false;
-  let textQueueResolver: any = null;
-  let stepQueueResolver: any = null;
-
-  function enqueueText(delta: string): void {
-    textQueue.push(delta);
-    if (textQueueResolver) {
-      textQueueResolver();
-      textQueueResolver = null;
-    }
-  }
-
-  function enqueueStep(step: StepResult): void {
-    stepQueue.push(step);
-    if (stepQueueResolver) {
-      stepQueueResolver();
-      stepQueueResolver = null;
-    }
-  }
+  // Stream manager handles queues, async iterables, and SSE
+  const stream = new StreamManager();
 
   // Run loop in background
-  const loopPromise = (async () => {
+  (async () => {
     try {
       const result = await runAgentLoop({
         provider: llmProvider,
@@ -230,11 +229,13 @@ export async function streamText(
         hooks,
         signal: abortController.signal,
         config: opts.config,
+        metadata: opts.metadata,
+        middleware: opts.middleware,
         onStep: (step) => {
           if (opts.onStep) opts.onStep(step);
           if (step.type === "text" && step.content) {
             if (opts.onText) opts.onText(step.content);
-            enqueueText(step.content);
+            stream.enqueueText(step.content);
           }
           if (step.type === "tool_call" && step.toolCall) {
             if (opts.onToolCall) {
@@ -244,122 +245,38 @@ export async function streamText(
               opts.onToolResult({ callId: step.toolCall.name, output: step.toolCall.result, success: true });
             }
           }
-          enqueueStep(step);
+          stream.enqueueStep(step);
         },
       });
 
-      textResolve!(textQueue.join(""));
-      usageResolve!(result.usage);
-      finishResolve!(result.finishReason);
+      // fullText: join all text deltas that were enqueued
+      const allText = result.steps
+        .filter((s) => s.type === "text")
+        .map((s) => s.content ?? "")
+        .join("");
+
+      stream.resolveText(allText);
+      stream.resolveUsage(result.usage);
+      stream.resolveFinish(result.finishReason);
     } catch (err) {
       const zclawErr = toZclawError(err, "PROVIDER_ERROR");
       if (opts.onError) opts.onError(zclawErr);
-      textResolve!("");
-      usageResolve!({ promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0 });
-      finishResolve!("error");
+      stream.resolveText("");
+      stream.resolveUsage({ promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0 });
+      stream.resolveFinish("error");
     } finally {
-      textDone = true;
-      stepsDone = true;
-      // Trigger any pending queue resolvers
-      if (textQueueResolver !== null) {
-        textQueueResolver();
-        textQueueResolver = null;
-      }
-      if (stepQueueResolver !== null) {
-        stepQueueResolver();
-        stepQueueResolver = null;
-      }
+      stream.complete();
     }
   })();
 
-  // Async iterable for text
-  const textStream: AsyncIterable<string> = {
-    [Symbol.asyncIterator]() {
-      return {
-        async next() {
-          while (textQueue.length === 0 && !textDone) {
-            await new Promise<void>((r) => { textQueueResolver = r; });
-          }
-          if (textQueue.length > 0) {
-            return { value: textQueue.shift()!, done: false };
-          }
-          return { value: undefined, done: true } as any;
-        },
-      };
-    },
-  };
-
-  // Async iterable for steps
-  const stepsStream: AsyncIterable<StepResult> = {
-    [Symbol.asyncIterator]() {
-      return {
-        async next() {
-          while (stepQueue.length === 0 && !stepsDone) {
-            await new Promise<void>((r) => { stepQueueResolver = r; });
-          }
-          if (stepQueue.length > 0) {
-            return { value: stepQueue.shift()!, done: false };
-          }
-          return { value: undefined, done: true } as any;
-        },
-      };
-    },
-  };
-
-  // SSE stream helper
-  function toSSEStream(): ReadableStream {
-    const encoder = new TextEncoder();
-
-    return new ReadableStream({
-      async start(controller) {
-        // Wait for the loop to complete
-        await loopPromise;
-
-        // Emit all text chunks as SSE events
-        for (const chunk of textQueue) {
-          const event = JSON.stringify({ type: "text", content: chunk });
-          controller.enqueue(encoder.encode(`data: ${event}\n\n`));
-        }
-
-        // Emit all steps as SSE events
-        for (const step of stepQueue) {
-          const event = JSON.stringify({ type: "step", data: step });
-          controller.enqueue(encoder.encode(`data: ${event}\n\n`));
-        }
-
-        // Emit final usage
-        const usageVal = await usagePromise;
-        const usageEvent = JSON.stringify({ type: "usage", data: usageVal });
-        controller.enqueue(encoder.encode(`data: ${usageEvent}\n\n`));
-
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      },
-      cancel() {
-        abortController.abort();
-      },
-    });
-  }
-
-  // Response helper for HTTP servers
-  function toResponse(): Response {
-    return new Response(toSSEStream(), {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
-    });
-  }
-
   return {
-    textStream,
-    steps: stepsStream,
-    fullText: fullTextPromise,
-    usage: usagePromise,
-    finishReason: finishReasonPromise,
+    textStream: stream.textStream,
+    steps: stream.stepsStream,
+    fullText: stream.fullText,
+    usage: stream.usage,
+    finishReason: stream.finishReason,
     abort: () => abortController.abort(),
-    toResponse,
-    toSSEStream,
+    toResponse: () => stream.toResponse(),
+    toSSEStream: () => stream.toSSEStream(),
   };
 }
