@@ -13,6 +13,15 @@ import type {
 } from "../../core/types.js";
 import { authMiddleware, hasScope } from "./auth.js";
 import { ServerSessionManager } from "./session-store.js";
+import {
+  handleGetSettings,
+  handlePatchSettings,
+  handleGetSettingsSchema,
+  handlePostProvider,
+  handlePatchProvider,
+  handleDeleteProvider,
+  type SettingsHandlerContext,
+} from "./settings-handlers.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -97,6 +106,32 @@ function matchRoute(
     return { handler: "chat", params: {} };
   }
 
+  // Settings routes
+  if (method === "GET" && path === "/v1/settings/schema") {
+    return { handler: "settings_schema", params: {} };
+  }
+  if (method === "GET" && path === "/v1/settings") {
+    return { handler: "settings", params: {} };
+  }
+  if (method === "PATCH" && path === "/v1/settings") {
+    return { handler: "settings_patch", params: {} };
+  }
+  const settingsCategoryMatch = path.match(/^\/v1\/settings\/([a-z]+)$/);
+  if (settingsCategoryMatch) {
+    if (method === "GET") return { handler: "settings", params: { category: settingsCategoryMatch[1] } };
+    if (method === "PATCH") return { handler: "settings_patch", params: { category: settingsCategoryMatch[1] } };
+  }
+
+  // Provider routes
+  if (method === "POST" && path === "/v1/providers") {
+    return { handler: "provider_post", params: {} };
+  }
+  const providerMatch = path.match(/^\/v1\/providers\/([a-z-]+)$/);
+  if (providerMatch) {
+    if (method === "PATCH") return { handler: "provider_patch", params: { type: providerMatch[1] } };
+    if (method === "DELETE") return { handler: "provider_delete", params: { type: providerMatch[1] } };
+  }
+
   // GET /v1/sessions/:id
   const sessionMatch = path.match(/^\/v1\/sessions\/([a-f0-9-]+)$/);
   if (method === "GET" && sessionMatch) {
@@ -140,6 +175,24 @@ export function createRestHandler(ctx: RestHandlerContext) {
           break;
         case "session":
           await handleGetSession(req, res, ctx, route.params.id);
+          break;
+        case "settings":
+          await handleSettingsGet(req, res, ctx, route.params.category);
+          break;
+        case "settings_schema":
+          await handleSettingsSchema(req, res, ctx);
+          break;
+        case "settings_patch":
+          await handleSettingsPatch(req, res, ctx, route.params.category);
+          break;
+        case "provider_post":
+          await handleProviderPost(req, res, ctx);
+          break;
+        case "provider_patch":
+          await handleProviderPatch(req, res, ctx, route.params.type);
+          break;
+        case "provider_delete":
+          await handleProviderDelete(req, res, ctx, route.params.type);
           break;
         default:
           sendError(res, 404, "NOT_FOUND", "Unknown endpoint");
@@ -289,4 +342,103 @@ async function handleGetSession(
   }
 
   sendJSON(res, 200, session);
+}
+
+// ── Settings handler wrappers ────────────────────────────────────────────
+
+// Note: These require a SettingsHandlerContext with settingsManager.
+// The server setup code must extend RestHandlerContext or provide settingsManager separately.
+// For now, these check for settingsManager availability and return 503 if not configured.
+
+function getSettingsCtx(ctx: RestHandlerContext): SettingsHandlerContext | null {
+  const sCtx = (ctx as any).settingsHandlerContext as SettingsHandlerContext | undefined;
+  return sCtx ?? null;
+}
+
+async function handleSettingsGet(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RestHandlerContext,
+  category?: string,
+): Promise<void> {
+  const key = authMiddleware(req);
+  if (!key) { sendError(res, 401, "UNAUTHORIZED", "Missing or invalid API key"); return; }
+  (req as any).apiKey = key;
+
+  const sCtx = getSettingsCtx(ctx);
+  if (!sCtx) { sendError(res, 503, "SERVICE_UNAVAILABLE", "Settings not configured"); return; }
+  await handleGetSettings(req, res, sCtx, category);
+}
+
+async function handleSettingsSchema(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RestHandlerContext,
+): Promise<void> {
+  const key = authMiddleware(req);
+  if (!key) { sendError(res, 401, "UNAUTHORIZED", "Missing or invalid API key"); return; }
+  (req as any).apiKey = key;
+
+  const sCtx = getSettingsCtx(ctx);
+  if (!sCtx) { sendError(res, 503, "SERVICE_UNAVAILABLE", "Settings not configured"); return; }
+  await handleGetSettingsSchema(req, res, sCtx);
+}
+
+async function handleSettingsPatch(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RestHandlerContext,
+  category?: string,
+): Promise<void> {
+  const key = authMiddleware(req);
+  if (!key) { sendError(res, 401, "UNAUTHORIZED", "Missing or invalid API key"); return; }
+  (req as any).apiKey = key;
+
+  const sCtx = getSettingsCtx(ctx);
+  if (!sCtx) { sendError(res, 503, "SERVICE_UNAVAILABLE", "Settings not configured"); return; }
+  await handlePatchSettings(req, res, sCtx, category);
+}
+
+async function handleProviderPost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RestHandlerContext,
+): Promise<void> {
+  const key = authMiddleware(req);
+  if (!key) { sendError(res, 401, "UNAUTHORIZED", "Missing or invalid API key"); return; }
+  (req as any).apiKey = key;
+
+  const sCtx = getSettingsCtx(ctx);
+  if (!sCtx) { sendError(res, 503, "SERVICE_UNAVAILABLE", "Settings not configured"); return; }
+  await handlePostProvider(req, res, sCtx);
+}
+
+async function handleProviderPatch(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RestHandlerContext,
+  type: string,
+): Promise<void> {
+  const key = authMiddleware(req);
+  if (!key) { sendError(res, 401, "UNAUTHORIZED", "Missing or invalid API key"); return; }
+  (req as any).apiKey = key;
+
+  const sCtx = getSettingsCtx(ctx);
+  if (!sCtx) { sendError(res, 503, "SERVICE_UNAVAILABLE", "Settings not configured"); return; }
+  await handlePatchProvider(req, res, sCtx, type);
+}
+
+async function handleProviderDelete(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: RestHandlerContext,
+  type: string,
+): Promise<void> {
+  const key = authMiddleware(req);
+  if (!key) { sendError(res, 401, "UNAUTHORIZED", "Missing or invalid API key"); return; }
+  (req as any).apiKey = key;
+
+  const sCtx = getSettingsCtx(ctx);
+  if (!sCtx) { sendError(res, 503, "SERVICE_UNAVAILABLE", "Settings not configured"); return; }
+  await handleDeleteProvider(req, res, sCtx, type);
 }

@@ -91,7 +91,9 @@ All three adapters delegate to a single `runAgentLoop` in `src/core/agent-loop.t
 | Errors | `src/core/errors.ts` | `ZclawError` hierarchy with `code` + `retryable` |
 | Stream manager | `src/core/stream-manager.ts` | Shared streaming queue, async iterables, SSE for SDK and agent |
 | Session store | `src/core/session-store.ts` | `PersistenceBackend` factory + registry, file & memory backends |
-| SDK entry | `src/adapters/sdk/index.ts` | `generateText`, `streamText`, `createAgent` |
+| Settings schema | `src/core/settings-schema.ts` | 37 dot-key settings, validation, env vars, categories |
+| Settings manager | `src/core/settings-manager.ts` | `SettingsManager` with get/set/reset/list, persistence, masking |
+| SDK entry | `src/adapters/sdk/index.ts` | `generateText`, `streamText`, `createAgent`, `settings` |
 | CLI entry | `src/adapters/cli/index.ts` | Commander setup, delegates to `repl.ts` |
 | CLI REPL | `src/adapters/cli/repl.ts` | Interrupt handling, `runChat()`, command registry builder |
 | Server entry | `src/adapters/server/index.ts` | HTTP + WebSocket, delegates to core directly |
@@ -129,7 +131,7 @@ File-based plugin system. YAML frontmatter + body. Skills can specify allowed to
 
 ### CLI (`src/adapters/cli/`)
 
-Interactive REPL. Commander.js args → `loadMergedConfig()` → setup wizard → `Agent` class → REPL loop. Slash commands via registry (`/help`, `/clear`, `/exit`, `/compact`). ESC key triggers `AbortSignal`.
+Interactive REPL. Commander.js args → `loadMergedConfig()` → setup wizard → `Agent` class → REPL loop. Slash commands via registry (`/help`, `/clear`, `/exit`, `/compact`, `/settings`). ESC key triggers `AbortSignal`.
 
 ### SDK (`src/adapters/sdk/`)
 
@@ -149,7 +151,7 @@ Env vars per provider: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GLM_API_KEY`, `OP
 
 - **No bundler** — plain `tsc` to ES2022 NodeNext. Dev via `tsx`.
 - **Package exports** — `zclaw` (SDK), `zclaw/react`, `zclaw/server`. Binaries: `zclaw` (CLI), `zclaw-server`.
-- **Vitest test suite (partial)** — 78 tests across 7 files covering P0/P1 areas; CI gates publish on test pass
+- **Vitest test suite (partial)** — 161 tests across 10 files covering P0/P1 areas; CI gates publish on test pass
 - **Errors carry metadata** — `code` (machine-readable) + `retryable` flag on all `ZclawError` subclasses.
 - **Hook errors are non-fatal** — never crash the agent loop.
 - **Dynamic provider imports** — unused provider SDKs stay out of memory.

@@ -33,6 +33,7 @@ import { exitHandler } from './commands/exit.js';
 import { compactHandler } from './commands/compact.js';
 import { skillsHandler } from './commands/skills.js';
 import { modelsHandler } from './commands/models.js';
+import { settingsHandler } from './commands/settings.js';
 import type { ApproveToolFn, PermissionLevel } from '../../core/types.js';
 import { resolvePermissionLevel } from '../../core/permission.js';
 
@@ -210,6 +211,10 @@ function buildCommandRegistry(agent: Agent, config: any, activeProviderType: str
   registry.register('models', modelsHandler(agent, config, activeProviderType), {
     description: 'Switch providers and models',
     aliases: ['model'],
+  });
+  registry.register('settings', settingsHandler(), {
+    description: 'View and edit configuration',
+    aliases: ['config', 'setting'],
   });
 
   return registry;

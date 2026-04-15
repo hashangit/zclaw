@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `src/core/permission.ts` — Permission matrix with 3 pure functions (`needsApproval`, `resolvePermissionLevel`, `getToolRiskCategory`).
 - 12 built-in tools categorized by risk; custom tools default to "destructive" (deny-by-default).
 - 25 new tests (22 in `permission.test.ts`, 3 in `tool-executor.test.ts`).
+- **Settings System**: Schema-driven settings management with CLI, SDK, and Server adapters.
+- `src/core/settings-schema.ts` — 37 settings mapped to AppConfig paths with validation metadata, env var overrides, and category grouping.
+- `src/core/settings-manager.ts` — SettingsManager with get/set/reset/list/onChange, secret masking, origin resolution, atomic file persistence, and deep merge for provider configs.
+- CLI `/settings` command with subcommands: `list`, `get`, `set`, `reset`, `edit`, `wizard`, `export`, `help`. Aliases: `/config`, `/setting`.
+- SDK `settings` facade exporting get/set/apply/list/listByCategory/onChange/reset/resetAll.
+- Server REST endpoints: `GET/PATCH /v1/settings`, `GET /v1/settings/schema`, `POST/PATCH/DELETE /v1/providers`.
+- Server WebSocket message types for settings get/update/change broadcast.
+- 58 new tests (30 unit + 28 integration) covering schema, manager, validation, persistence, events, and secret masking.
 
 ### Changed
 

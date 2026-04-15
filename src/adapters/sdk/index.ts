@@ -33,6 +33,7 @@ import type { Middleware } from "../../core/middleware.js";
 
 export { createAgent } from "./agent.js";
 export { tool, CORE_TOOLS, COMM_TOOLS, ADVANCED_TOOLS, ALL_TOOLS } from "./tools.js";
+export { settings, SettingsError } from "./settings.js";
 export { configureProviders, provider } from "../../core/provider-resolver.js";
 export { createSkillProviderSwitcher } from "../../core/skill-invoker.js";
 export type { SSEOptions } from "./http.js";

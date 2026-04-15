@@ -108,6 +108,40 @@ export interface PingMessage {
   clientTime: string;
 }
 
+export interface GetSettingsMessage {
+  type: "get_settings";
+  id?: string;
+  category?: string;
+}
+
+export interface UpdateSettingsMessage {
+  type: "update_settings";
+  id?: string;
+  settings: Record<string, any>;
+}
+
+export interface ListProvidersMessage {
+  type: "list_providers";
+  id?: string;
+}
+
+export interface SetProviderMessage {
+  type: "set_provider";
+  id?: string;
+  provider: {
+    type: string;
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+  };
+}
+
+export interface RemoveProviderMessage {
+  type: "remove_provider";
+  id?: string;
+  providerType: string;
+}
+
 export type ClientMessage =
   | ChatMessage
   | ToolApprovalResponse
@@ -117,7 +151,12 @@ export type ClientMessage =
   | SwitchProviderMessage
   | ListModelsMessage
   | ListSkillsMessage
-  | PingMessage;
+  | PingMessage
+  | GetSettingsMessage
+  | UpdateSettingsMessage
+  | ListProvidersMessage
+  | SetProviderMessage
+  | RemoveProviderMessage;
 
 // ── Server → Client message types ────────────────────────────────────
 
@@ -226,6 +265,37 @@ export interface SkillsListMessage {
   skills: { name: string; description: string; tags: string[] }[];
 }
 
+export interface SettingsMessage {
+  type: "settings";
+  id?: string;
+  settings: Record<string, any>;
+  error?: { code: string; message: string };
+}
+
+export interface SettingsUpdatedMessage {
+  type: "settings_updated";
+  id?: string;
+  applied?: Record<string, any>;
+  requiresRestart?: boolean;
+  restartAffected?: string[];
+  error?: { code: string; message: string; details?: Array<{ field: string; message: string }> };
+}
+
+export interface ProvidersListMessage {
+  type: "providers_list";
+  id?: string;
+  providers: Record<string, any>;
+}
+
+export interface SettingsChangedMessage {
+  type: "settings_changed";
+  changedCategories: string[];
+  changedFields: string[];
+  requiresRestart: boolean;
+  restartAffected: string[];
+  timestamp: string;
+}
+
 export type ServerMessage =
   | AckMessage
   | TextDeltaMessage
@@ -242,7 +312,11 @@ export type ServerMessage =
   | ErrorMessage
   | PongMessage
   | ModelsListMessage
-  | SkillsListMessage;
+  | SkillsListMessage
+  | SettingsMessage
+  | SettingsUpdatedMessage
+  | ProvidersListMessage
+  | SettingsChangedMessage;
 
 // ── Context ──────────────────────────────────────────────────────────
 

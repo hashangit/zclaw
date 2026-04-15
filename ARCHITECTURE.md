@@ -51,6 +51,8 @@ src/
 │   ├── stream-manager.ts   # Shared streaming queue, async iterables, SSE
 │   ├── errors.ts            # Error class hierarchy
 │   ├── permission.ts        # Permission matrix (levels × risk categories)
+│   ├── settings-schema.ts   # Static settings map, schema, env vars, categories
+│   ├── settings-manager.ts  # SettingsManager (get/set/reset/list, persistence, masking)
 │   ├── middleware.ts         # Pipeline types + compose()
 │   ├── middleware/           # Built-in middleware
 │   │   ├── logging.ts       # Request/response logging
@@ -89,9 +91,10 @@ src/
 │   │   ├── setup.ts         # Interactive setup wizard
 │   │   ├── config-loader.ts # Multi-source config loading
 │   │   ├── docker-utils.ts  # Docker/non-interactive detection
-│   │   └── commands/        # Slash commands (/help, /clear, /exit, /compact, /skills, /models)
+│   │   └── commands/        # Slash commands (/help, /clear, /exit, /compact, /skills, /models, /settings)
 │   ├── sdk/                 # Programmatic library (npm package)
-│   │   ├── index.ts         # generateText, streamText, createAgent
+│   │   ├── index.ts         # generateText, streamText, createAgent, settings
+│   │   ├── settings.ts      # SDK settings facade (get/set/reset/list/onChange)
 │   │   ├── agent.ts         # SdkAgent (session, streaming, provider switching)
 │   │   ├── http.ts          # SSE streaming helpers
 │   │   ├── react.ts         # createUseChat React hook factory
@@ -101,7 +104,8 @@ src/
 │       ├── websocket.ts     # WS re-export hub (setup + teardown)
 │       ├── ws-types.ts      # WS type shims and protocol message interfaces
 │       ├── ws-handlers.ts   # WS connection handlers and safe send
-│       ├── rest.ts          # REST endpoints
+│       ├── rest.ts          # REST endpoints (includes /v1/settings and /v1/providers routes)
+│       ├── settings-handlers.ts # Settings REST + WS handlers with async mutex
 │       ├── auth.ts          # API key auth with scopes
 │       ├── session-store.ts # Server sessions with TTL + concurrency, delegates to PersistenceBackend
 │       └── standalone.ts    # Docker/production entry point
@@ -217,6 +221,31 @@ Key functions:
 | `getToolRiskCategory(toolName, registry?)` | Looks up a tool's risk category, defaults to `"destructive"` |
 
 Applied in `runAgentLoop` as a pre-filter before tool execution. CLI uses `--strict`/`--moderate`/`--yolo`/`--headless` flags; SDK accepts `permissionLevel` option; Server enforces a `maxPermissionLevel` ceiling per connection.
+
+### Settings System (`settings-schema.ts`, `settings-manager.ts`)
+
+Schema-driven settings management with unified get/set/reset across CLI, SDK, and Server adapters.
+
+**Schema** (`settings-schema.ts`): Static data mapping 37 dot-key settings to `AppConfig` paths, with validation metadata (type, secret, restart-required, enum values, min/max), env var overrides (20 mappings), and category grouping (6 categories: providers, image, smtp, search, notifications, agent).
+
+**Manager** (`settings-manager.ts`): `SettingsManager` class providing:
+
+| Method | Description |
+|--------|-------------|
+| `get(dotKey)` | Read value with secret masking and origin resolution |
+| `set(dotKey, rawValue)` | Validate → persist to config file → update in-memory → emit change event |
+| `reset(dotKey)` | Remove from config file, revert to default (or env var) |
+| `resetAll()` | Clear config file, rebuild from env vars |
+| `list()` / `listByCategory()` | All settings with metadata |
+| `onChange(callback)` | Subscribe to changes, returns unsubscribe function |
+
+Key behaviors:
+- **Secret masking**: Strings ≥8 chars show first 3 + last 4 chars; shorter show `******`
+- **Origin resolution**: env var → project config → global config → default
+- **Atomic persistence**: Write to temp file → rename, with backup
+- **Deep merge**: Setting one provider key preserves sibling provider configs
+- **Validation**: Type coercion (string → number/boolean), enum constraints, URL parsing, hostname regex
+- **SettingsError**: Extends `ZclawError` with codes `SETTINGS_INVALID_KEY`, `SETTINGS_VALIDATION_FAILED`, `SETTINGS_WRITE_FAILED`
 
 ### Session Store (`session-store.ts`)
 
@@ -433,7 +462,7 @@ VitePress site in `docs/` with sections: getting-started, guides, SDK reference,
 
 ## Known Gaps
 
-- **Test suite (partial)** — Vitest configured with 78 tests across 7 files covering P0/P1 (errors, message-convert, args, parser, tool-executor, hooks, session-store). CI `test` job gates `publish-npm`.
+- **Test suite (partial)** — Vitest configured with 161 tests across 10 files covering P0/P1 (errors, message-convert, args, parser, tool-executor, hooks, session-store, settings, settings-integration, permission). CI `test` job gates `publish-npm`.
 - **Tool registry duplication** — FIXED: single source in `src/core/tool-executor.ts`, `tools/index.ts` is pure module collection
 - **ProviderType defined in two places** — FIXED: single definition in `src/core/types.ts`, re-exported from `src/providers/types.ts`
 - **Streaming duplication** — FIXED: `StreamManager` in `src/core/stream-manager.ts` is the single queue/iterable/SSE implementation used by both `streamText()` and `chatStream()`
