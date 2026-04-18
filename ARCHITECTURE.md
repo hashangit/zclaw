@@ -226,7 +226,7 @@ Applied in `runAgentLoop` as a pre-filter before tool execution. CLI uses `--str
 
 Schema-driven settings management with unified get/set/reset across CLI, SDK, and Server adapters.
 
-**Schema** (`settings-schema.ts`): Static data mapping 37 dot-key settings to `AppConfig` paths, with validation metadata (type, secret, restart-required, enum values, min/max), env var overrides (20 mappings), and category grouping (6 categories: providers, image, smtp, search, notifications, agent).
+**Schema** (`settings-schema.ts`): Static data mapping 31 dot-key settings to `AppConfig` paths, with validation metadata (type, secret, restart-required, enum values, min/max), env var overrides (20 mappings), and category grouping (5 categories: providers, permissions, tools, notifications, skills).
 
 **Manager** (`settings-manager.ts`): `SettingsManager` class providing:
 

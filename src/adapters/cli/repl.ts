@@ -216,6 +216,9 @@ function buildCommandRegistry(agent: Agent, config: any, activeProviderType: str
     description: 'View and edit configuration',
     aliases: ['config', 'setting'],
   });
+  registry.register('setup', async () => { await runSetup(); }, {
+    description: 'Run the setup wizard',
+  });
 
   return registry;
 }

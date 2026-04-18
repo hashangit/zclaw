@@ -83,9 +83,9 @@ describe('settings-schema', () => {
   });
 
   it('getSettingsByCategory returns correct keys', () => {
-    const agentKeys = getSettingsByCategory('agent');
-    expect(agentKeys).toContain('agent.permissionLevel');
-    expect(agentKeys).toContain('agent.autoConfirm');
+    const permKeys = getSettingsByCategory('permissions');
+    expect(permKeys).toContain('agent.permissionLevel');
+    expect(permKeys).toContain('agent.autoConfirm');
 
     const providerKeys = getSettingsByCategory('providers');
     expect(providerKeys.length).toBeGreaterThanOrEqual(8);
@@ -208,8 +208,8 @@ describe('SettingsManager', () => {
     const mgr = createTestManager();
     const grouped = mgr.listByCategory();
     expect(Object.keys(grouped)).toContain('providers');
-    expect(Object.keys(grouped)).toContain('agent');
-    expect(grouped.agent.length).toBeGreaterThanOrEqual(2);
+    expect(Object.keys(grouped)).toContain('permissions');
+    expect(grouped.permissions.length).toBeGreaterThanOrEqual(2);
   });
 
   it('reset() removes a value', async () => {

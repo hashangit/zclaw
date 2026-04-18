@@ -9,10 +9,9 @@
 
 export type SettingsCategory =
   | 'providers'
+  | 'permissions'
   | 'tools'
-  | 'agent'
-  | 'server'
-  | 'persistence'
+  | 'notifications'
   | 'skills';
 
 export interface SettingsMapEntry {
@@ -46,24 +45,19 @@ export const SETTINGS_CATEGORIES: {
     description: 'LLM provider configuration (API keys, models, base URLs)',
   },
   {
+    key: 'permissions',
+    label: 'Permissions & Safety',
+    description: 'Permission level and auto-confirm settings',
+  },
+  {
     key: 'tools',
-    label: 'Tools',
-    description: 'Image generation, SMTP email, web search, and notification settings',
+    label: 'Tools & Integrations',
+    description: 'Image generation, SMTP email, and web search settings',
   },
   {
-    key: 'agent',
-    label: 'Agent Behavior',
-    description: 'Permission level, auto-confirm, and agent runtime options',
-  },
-  {
-    key: 'server',
-    label: 'Server',
-    description: 'HTTP/WS server configuration (reserved for future use)',
-  },
-  {
-    key: 'persistence',
-    label: 'Session & Persistence',
-    description: 'Session storage backend configuration (reserved for future use)',
+    key: 'notifications',
+    label: 'Notifications',
+    description: 'Feishu, DingTalk, and WeCom webhook settings',
   },
   {
     key: 'skills',
@@ -107,16 +101,16 @@ const entries: [string, SettingsMapEntry][] = [
   ['search.tavilyApiKey', { dotKey: 'search.tavilyApiKey', configPath: ['tavilyApiKey'], category: 'tools', label: 'Tavily API Key' }],
 
   // Notifications
-  ['notifications.feishu.webhook', { dotKey: 'notifications.feishu.webhook', configPath: ['feishuWebhook'], category: 'tools', label: 'Feishu Webhook URL' }],
-  ['notifications.feishu.keyword', { dotKey: 'notifications.feishu.keyword', configPath: ['feishuKeyword'], category: 'tools', label: 'Feishu Keyword' }],
-  ['notifications.dingtalk.webhook', { dotKey: 'notifications.dingtalk.webhook', configPath: ['dingtalkWebhook'], category: 'tools', label: 'DingTalk Webhook URL' }],
-  ['notifications.dingtalk.keyword', { dotKey: 'notifications.dingtalk.keyword', configPath: ['dingtalkKeyword'], category: 'tools', label: 'DingTalk Keyword' }],
-  ['notifications.wecom.webhook', { dotKey: 'notifications.wecom.webhook', configPath: ['wecomWebhook'], category: 'tools', label: 'WeCom Webhook URL' }],
-  ['notifications.wecom.keyword', { dotKey: 'notifications.wecom.keyword', configPath: ['wecomKeyword'], category: 'tools', label: 'WeCom Keyword' }],
+  ['notifications.feishu.webhook', { dotKey: 'notifications.feishu.webhook', configPath: ['feishuWebhook'], category: 'notifications', label: 'Feishu Webhook URL' }],
+  ['notifications.feishu.keyword', { dotKey: 'notifications.feishu.keyword', configPath: ['feishuKeyword'], category: 'notifications', label: 'Feishu Keyword' }],
+  ['notifications.dingtalk.webhook', { dotKey: 'notifications.dingtalk.webhook', configPath: ['dingtalkWebhook'], category: 'notifications', label: 'DingTalk Webhook URL' }],
+  ['notifications.dingtalk.keyword', { dotKey: 'notifications.dingtalk.keyword', configPath: ['dingtalkKeyword'], category: 'notifications', label: 'DingTalk Keyword' }],
+  ['notifications.wecom.webhook', { dotKey: 'notifications.wecom.webhook', configPath: ['wecomWebhook'], category: 'notifications', label: 'WeCom Webhook URL' }],
+  ['notifications.wecom.keyword', { dotKey: 'notifications.wecom.keyword', configPath: ['wecomKeyword'], category: 'notifications', label: 'WeCom Keyword' }],
 
-  // Agent
-  ['agent.permissionLevel', { dotKey: 'agent.permissionLevel', configPath: ['permissionLevel'], category: 'agent', label: 'Permission Level' }],
-  ['agent.autoConfirm', { dotKey: 'agent.autoConfirm', configPath: ['autoConfirm'], category: 'agent', label: 'Auto-Confirm All Tools' }],
+  // Permissions
+  ['agent.permissionLevel', { dotKey: 'agent.permissionLevel', configPath: ['permissionLevel'], category: 'permissions', label: 'Permission Level' }],
+  ['agent.autoConfirm', { dotKey: 'agent.autoConfirm', configPath: ['autoConfirm'], category: 'permissions', label: 'Auto-Confirm All Tools' }],
 ];
 
 export const SETTINGS_MAP: Map<string, SettingsMapEntry> = new Map(entries);

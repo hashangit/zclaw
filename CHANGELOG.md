@@ -7,8 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Redesigned `/settings` interactive mode into a 3-level drill-down wizard with bordered ASCII headers and mini-forms
+- Reorganized settings categories from 6 to 5: Providers & Models, Permissions & Safety, Tools & Integrations, Notifications, Skills
+- `/settings` with no arguments now launches the wizard (was a plain list)
+- Removed `/settings edit` and `/settings wizard` subcommands
+
 ### Added
 
+- `/setup` slash command to access the setup wizard directly
+- Bordered mini-form with type-appropriate prompts (password masking, enum lists, boolean confirms)
+- Env var override warnings in the setting editor
+- Number field validation with min/max constraints
 - **Permission Levels System**: 3-tier permission matrix (strict/moderate/permissive) with 4 tool risk categories (safe/edit/communications/destructive) controlling which tools auto-execute vs. require human approval.
 - CLI flags: `--headless`, `--strict`, `--moderate`, `--yolo` for controlling tool approval behavior.
 - SDK: `permissionLevel` option on `GenerateTextOptions`, `StreamTextOptions`, and `AgentCreateOptions`.
@@ -25,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Server REST endpoints: `GET/PATCH /v1/settings`, `GET /v1/settings/schema`, `POST/PATCH/DELETE /v1/providers`.
 - Server WebSocket message types for settings get/update/change broadcast.
 - 58 new tests (30 unit + 28 integration) covering schema, manager, validation, persistence, events, and secret masking.
+
+### Fixed
+
+- Boolean settings can now be set to `false` through the wizard
+- Wizard exits cleanly on Ctrl+C at any level
 
 ### Changed
 
