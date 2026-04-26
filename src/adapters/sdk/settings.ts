@@ -18,7 +18,7 @@ import {
   getConfigPaths,
   applyEnvOverrides,
   AppConfig,
-} from '../cli/config-loader.js';
+} from '../../core/config.js';
 
 // ── Singleton ─────────────────────────────────────────────────────────────
 
@@ -28,15 +28,15 @@ function getManager(): SettingsManager {
   if (!manager) {
     const config = applyEnvOverrides(loadMergedConfig());
     const paths = getConfigPaths();
-    const projectConfig = loadJsonConfig(paths.local);
-    const globalConfig = loadJsonConfig(paths.global);
+    const projectResult = loadJsonConfig(paths.local);
+    const globalResult = loadJsonConfig(paths.global);
 
     manager = new SettingsManager({
       config,
       projectConfigPath: paths.local,
       globalConfigPath: paths.global,
-      projectConfig: projectConfig as Record<string, any>,
-      globalConfig: globalConfig as Record<string, any>,
+      projectConfig: projectResult.config as Record<string, any>,
+      globalConfig: globalResult.config as Record<string, any>,
     });
   }
   return manager;

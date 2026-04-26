@@ -12,7 +12,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { ProviderType } from '../../providers/types.js';
 import { createProvider, ProviderConfig } from '../../providers/factory.js';
-import { MODEL_CATALOG, CUSTOM_MODEL_VALUE } from '../../models-catalog.js';
+import { MODEL_CATALOG, CUSTOM_MODEL_VALUE, DEFAULT_MODELS } from '../../models-catalog.js';
 import { resolveProviderConfigFromApp } from '../../core/provider-resolver.js';
 import { Agent } from './agent.js';
 import {
@@ -93,24 +93,24 @@ export async function runSetup(options: any = {}): Promise<void> {
       const answers = await inquirer.prompt([
         { type: 'password', name: 'apiKey', message: ex?.apiKey ? `OpenAI-Compatible API Key (Leave empty to keep ${maskSecret(ex.apiKey)}):` : 'OpenAI-Compatible API Key:', mask: '*', validate: (input: string) => (input || ex?.apiKey) ? true : 'API Key cannot be empty.' },
         { type: 'input', name: 'baseUrl', message: 'API Base URL:', default: ex?.baseUrl || currentConfig.baseUrl || 'https://api.openai.com/v1' },
-        { type: 'input', name: 'model', message: 'Default Model:', default: ex?.model || currentConfig.model || 'gpt-4o' }
+        { type: 'input', name: 'model', message: 'Default Model:', default: ex?.model || currentConfig.model || DEFAULT_MODELS['openai-compatible'] }
       ]);
       modelsConfig['openai-compatible'] = { apiKey: answers.apiKey || ex?.apiKey || '', baseUrl: answers.baseUrl, model: answers.model };
     } else if (p === 'openai') {
       const answers = await inquirer.prompt([
         { type: 'password', name: 'apiKey', message: ex?.apiKey ? `OpenAI API Key (Leave empty to keep ${maskSecret(ex.apiKey)}):` : 'OpenAI API Key:', mask: '*', validate: (input: string) => (input || ex?.apiKey) ? true : 'API Key cannot be empty.' },
-        { type: 'input', name: 'model', message: 'Default Model:', default: ex?.model || 'gpt-4o' }
+        { type: 'input', name: 'model', message: 'Default Model:', default: ex?.model || DEFAULT_MODELS.openai }
       ]);
       modelsConfig.openai = { apiKey: answers.apiKey || ex?.apiKey || '', model: answers.model };
     } else if (p === 'anthropic') {
       const answers = await inquirer.prompt([
         { type: 'password', name: 'apiKey', message: ex?.apiKey ? `Anthropic API Key (Leave empty to keep ${maskSecret(ex.apiKey)}):` : 'Anthropic API Key:', mask: '*', validate: (input: string) => (input || ex?.apiKey) ? true : 'API Key cannot be empty.' },
-        { type: 'input', name: 'model', message: 'Default Model:', default: ex?.model || 'claude-sonnet-4-5-20250929' }
+        { type: 'input', name: 'model', message: 'Default Model:', default: ex?.model || DEFAULT_MODELS.anthropic }
       ]);
       modelsConfig.anthropic = { apiKey: answers.apiKey || ex?.apiKey || '', model: answers.model };
     } else if (p === 'glm') {
       const keyAnswer = await inquirer.prompt<{ apiKey: string }>([{ type: 'password', name: 'apiKey', message: ex?.apiKey ? `GLM API Key (Leave empty to keep ${maskSecret(ex.apiKey)}):` : 'GLM API Key:', mask: '*', validate: (input: string) => (input || ex?.apiKey) ? true : 'API Key cannot be empty.' }]);
-      const modelAnswer = await inquirer.prompt<{ model: string }>([{ type: 'list', name: 'model', message: 'Select Model:', choices: ['haiku', 'sonnet', 'opus'], default: ex?.model || 'sonnet' }]);
+      const modelAnswer = await inquirer.prompt<{ model: string }>([{ type: 'list', name: 'model', message: 'Select Model:', choices: ['haiku', 'sonnet', 'opus'], default: ex?.model || DEFAULT_MODELS.glm }]);
       modelsConfig.glm = { apiKey: keyAnswer.apiKey || ex?.apiKey || '', model: modelAnswer.model };
     }
   }
@@ -389,19 +389,19 @@ async function addProviderInline(config: AppConfig): Promise<ProviderType | null
     const answers = await inquirer.prompt([
       { type: 'password', name: 'apiKey', message: 'API Key:', mask: '*', validate: (input: string) => input ? true : 'API Key cannot be empty.' },
       { type: 'input', name: 'baseUrl', message: 'API Base URL:', default: 'https://api.openai.com/v1' },
-      { type: 'input', name: 'model', message: 'Default Model:', default: 'gpt-4o' },
+      { type: 'input', name: 'model', message: 'Default Model:', default: DEFAULT_MODELS['openai-compatible'] },
     ]);
     config.models['openai-compatible'] = { apiKey: answers.apiKey, baseUrl: answers.baseUrl, model: answers.model };
   } else if (provider === 'openai') {
     const answers = await inquirer.prompt([
       { type: 'password', name: 'apiKey', message: 'OpenAI API Key:', mask: '*', validate: (input: string) => input ? true : 'API Key cannot be empty.' },
-      { type: 'input', name: 'model', message: 'Default Model:', default: 'gpt-5.4' },
+      { type: 'input', name: 'model', message: 'Default Model:', default: DEFAULT_MODELS.openai },
     ]);
     config.models.openai = { apiKey: answers.apiKey, model: answers.model };
   } else if (provider === 'anthropic') {
     const answers = await inquirer.prompt([
       { type: 'password', name: 'apiKey', message: 'Anthropic API Key:', mask: '*', validate: (input: string) => input ? true : 'API Key cannot be empty.' },
-      { type: 'input', name: 'model', message: 'Default Model:', default: 'claude-sonnet-4-6-20260320' },
+      { type: 'input', name: 'model', message: 'Default Model:', default: DEFAULT_MODELS.anthropic },
     ]);
     config.models.anthropic = { apiKey: answers.apiKey, model: answers.model };
   } else if (provider === 'glm') {
@@ -409,7 +409,7 @@ async function addProviderInline(config: AppConfig): Promise<ProviderType | null
       { type: 'password', name: 'apiKey', message: 'GLM API Key:', mask: '*', validate: (input: string) => input ? true : 'API Key cannot be empty.' },
     ]);
     const modelAnswer = await inquirer.prompt<{ model: string }>([
-      { type: 'select', name: 'model', message: 'Select Model:', choices: ['haiku', 'sonnet', 'opus'], default: 'sonnet' },
+      { type: 'select', name: 'model', message: 'Select Model:', choices: ['haiku', 'sonnet', 'opus'], default: DEFAULT_MODELS.glm },
     ]);
     config.models.glm = { apiKey: keyAnswer.apiKey, model: modelAnswer.model };
   }
@@ -427,19 +427,19 @@ async function editProviderConfig(config: AppConfig, providerType: ProviderType)
     const answers = await inquirer.prompt([
       { type: 'password', name: 'apiKey', message: ex?.apiKey ? `API Key (Leave empty to keep ${maskSecret(ex.apiKey)}):` : 'API Key:', mask: '*', validate: (input: string) => (input || ex?.apiKey) ? true : 'API Key cannot be empty.' },
       { type: 'input', name: 'baseUrl', message: 'API Base URL:', default: ex?.baseUrl || 'https://api.openai.com/v1' },
-      { type: 'input', name: 'model', message: 'Default Model:', default: ex?.model || 'gpt-4o' },
+      { type: 'input', name: 'model', message: 'Default Model:', default: ex?.model || DEFAULT_MODELS['openai-compatible'] },
     ]);
     config.models!['openai-compatible'] = { apiKey: answers.apiKey || ex?.apiKey || '', baseUrl: answers.baseUrl, model: answers.model };
   } else if (providerType === 'openai') {
     const answers = await inquirer.prompt([
       { type: 'password', name: 'apiKey', message: ex?.apiKey ? `OpenAI API Key (Leave empty to keep ${maskSecret(ex.apiKey)}):` : 'OpenAI API Key:', mask: '*', validate: (input: string) => (input || ex?.apiKey) ? true : 'API Key cannot be empty.' },
-      { type: 'input', name: 'model', message: 'Default Model:', default: ex?.model || 'gpt-5.4' },
+      { type: 'input', name: 'model', message: 'Default Model:', default: ex?.model || DEFAULT_MODELS.openai },
     ]);
     config.models!.openai = { apiKey: answers.apiKey || ex?.apiKey || '', model: answers.model };
   } else if (providerType === 'anthropic') {
     const answers = await inquirer.prompt([
       { type: 'password', name: 'apiKey', message: ex?.apiKey ? `Anthropic API Key (Leave empty to keep ${maskSecret(ex.apiKey)}):` : 'Anthropic API Key:', mask: '*', validate: (input: string) => (input || ex?.apiKey) ? true : 'API Key cannot be empty.' },
-      { type: 'input', name: 'model', message: 'Default Model:', default: ex?.model || 'claude-sonnet-4-5-20250929' },
+      { type: 'input', name: 'model', message: 'Default Model:', default: ex?.model || DEFAULT_MODELS.anthropic },
     ]);
     config.models!.anthropic = { apiKey: answers.apiKey || ex?.apiKey || '', model: answers.model };
   } else if (providerType === 'glm') {
@@ -447,7 +447,7 @@ async function editProviderConfig(config: AppConfig, providerType: ProviderType)
       { type: 'password', name: 'apiKey', message: ex?.apiKey ? `GLM API Key (Leave empty to keep ${maskSecret(ex.apiKey)}):` : 'GLM API Key:', mask: '*', validate: (input: string) => (input || ex?.apiKey) ? true : 'API Key cannot be empty.' },
     ]);
     const modelAnswer = await inquirer.prompt<{ model: string }>([
-      { type: 'list', name: 'model', message: 'Select Model:', choices: ['haiku', 'sonnet', 'opus'], default: ex?.model || 'sonnet' },
+      { type: 'list', name: 'model', message: 'Select Model:', choices: ['haiku', 'sonnet', 'opus'], default: ex?.model || DEFAULT_MODELS.glm },
     ]);
     config.models!.glm = { apiKey: keyAnswer.apiKey || ex?.apiKey || '', model: modelAnswer.model };
   }
@@ -644,7 +644,7 @@ export async function handleModelsCommand(
           type: 'input',
           name: 'model',
           message: 'Enter model name:',
-          default: config.models[selected]?.model || 'gpt-4o',
+          default: config.models[selected]?.model || DEFAULT_MODELS['openai-compatible'],
         },
       ]);
       model = customAnswer.model;

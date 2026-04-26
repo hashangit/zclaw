@@ -61,51 +61,25 @@ export const ALL_TOOLS = [...CORE_TOOLS, ...COMM_TOOLS, ...ADVANCED_TOOLS];
 let customToolCounter = 0;
 
 /**
- * Convert a Zod-like schema or plain parameter object into JSON Schema.
+ * Convert a parameter definition into JSON Schema.
  *
- * Handles:
- *  - Zod schemas that expose a `.toJsonSchema()` or `_def` shape
- *  - Plain `{ type: "object", properties: {...}, required: [...] }` objects
- *  - Anything else is wrapped in a generic object schema
+ * Accepts plain `{ type: "object", properties: {...}, required: [...] }` objects.
+ * Anything else is wrapped in a generic object schema.
  */
 function parametersToJsonSchema(parameters: unknown): Record<string, unknown> {
   if (parameters == null || typeof parameters !== "object") {
     return { type: "object", properties: {} };
   }
 
-  // Already a plain JSON Schema object
+  const rec = parameters as Record<string, unknown>;
+
+  // Already a valid JSON Schema object — validate basic shape
   if (
-    "type" in (parameters as Record<string, unknown>) &&
-    "properties" in (parameters as Record<string, unknown>)
+    "type" in rec && "properties" in rec
+    && typeof rec.type === "string"
+    && typeof rec.properties === "object" && rec.properties !== null
   ) {
-    return parameters as Record<string, unknown>;
-  }
-
-  // Zod-like schema with a `.parse` method — try known conversion paths
-  const zod = parameters as Record<string, unknown>;
-  if (typeof zod.parse === "function" || typeof zod.safeParse === "function") {
-    // zod-to-json-schema style: `_def` is the Zod internals marker
-    if (typeof zod._def === "object" && zod._def !== null) {
-      // Attempt to use zod-to-json-schema if available at runtime
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { zodToJsonSchema } = require("zod-to-json-schema");
-        const schema = zodToJsonSchema(parameters);
-        // zod-to-json-schema wraps in `{ $schema, ... }`; return the core
-        const { $schema, ...rest } = schema as Record<string, unknown>;
-        return rest;
-      } catch {
-        // zod-to-json-schema not installed — fall back to generic schema
-      }
-    }
-
-    // Fallback: try calling a `toJsonSchema` method if the schema defines one
-    if (typeof zod.toJsonSchema === "function") {
-      return zod.toJsonSchema() as Record<string, unknown>;
-    }
-
-    // Last resort for Zod schemas we can't introspect
-    return { type: "object", properties: {} };
+    return rec;
   }
 
   // Unknown shape — wrap generically

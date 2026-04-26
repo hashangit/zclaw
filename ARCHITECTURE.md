@@ -97,7 +97,6 @@ src/
 │   │   ├── settings.ts      # SDK settings facade (get/set/reset/list/onChange)
 │   │   ├── agent.ts         # SdkAgent (session, streaming, provider switching)
 │   │   ├── http.ts          # SSE streaming helpers
-│   │   ├── react.ts         # createUseChat React hook factory
 │   │   └── tools.ts         # Re-export layer
 │   └── server/              # Standalone WebSocket + REST server
 │       ├── index.ts         # HTTP server creation, core agent loop delegation
@@ -301,9 +300,8 @@ Interactive REPL built on Commander.js.
 
 Programmatic library published as `zclaw-core` on npm.
 
-Three entry points:
+Two entry points:
 - `zclaw` → `generateText()`, `streamText()`, `createAgent()`
-- `zclaw/react` → `createUseChat()` hook factory
 - `zclaw/server` → Server adapter (imports core directly, no SDK dependency)
 
 `createAgent()` returns `SdkAgent` with: `chat()`, `chatStream()`, `switchProvider()`, `abort()`, `clear()`, `getHistory()`, `getUsage()`. Supports session persistence via `persist` option.
@@ -392,8 +390,6 @@ The signal reaches the provider's HTTP call, cancelling the in-flight request.
 
 Async iterable pattern with queue-based backpressure. Used by SDK (`streamText`) and Server (SSE). SSE format follows the standard `data: ...\n\n` protocol with typed events (`text`, `tool_call`, `tool_result`, `error`, `done`).
 
-React hook (`createUseChat`) lazily loads React and manages SSE parsing with buffer handling for partial chunks.
-
 ### Configuration
 
 Multi-layer merge with precedence (highest wins):
@@ -425,7 +421,6 @@ TypeScript (`tsc`) targeting ES2022 with NodeNext module resolution. No bundler 
 ```json
 {
   ".":       "dist/adapters/sdk/index.js",     // SDK library
-  "./react": "dist/adapters/sdk/react.js",      // React hook
   "./server": "dist/adapters/server/index.js"   // Server
 }
 ```
@@ -459,17 +454,3 @@ VitePress site in `docs/` with sections: getting-started, guides, SDK reference,
 | `@path` reference resolution with allowlist | Convenience without compromising security |
 | Hook errors are non-fatal | Observability hooks must never crash the agent loop |
 | Token estimation (char-based) | Avoids extra API calls; sufficient for usage tracking |
-
-## Known Gaps
-
-- **Test suite (partial)** — Vitest configured with 161 tests across 10 files covering P0/P1 (errors, message-convert, args, parser, tool-executor, hooks, session-store, settings, settings-integration, permission). CI `test` job gates `publish-npm`.
-- **Tool registry duplication** — FIXED: single source in `src/core/tool-executor.ts`, `tools/index.ts` is pure module collection
-- **ProviderType defined in two places** — FIXED: single definition in `src/core/types.ts`, re-exported from `src/providers/types.ts`
-- **Streaming duplication** — FIXED: `StreamManager` in `src/core/stream-manager.ts` is the single queue/iterable/SSE implementation used by both `streamText()` and `chatStream()`
-- **Skill loading coupled to CLI** — FIXED: `createSkillProviderSwitcher()` in `src/core/skill-invoker.ts` replaces `switchToSkillModel()`/`restoreProvider()` from CLI `Agent` class; all adapters can now use skill provider switching
-- ~~**No skill body size limits**~~ — FIXED: three-layer defense with load-time warning (`parser.ts`), injection-time truncation (`limitSkillBody` in `types.ts`, applied in `skill-invoker.ts` and `tools/index.ts`), and cumulative cap in `resolver.ts` (2MB total)
-- ~~**Skill catalog only in CLI**~~ — FIXED: `buildSkillCatalog()` extracted to `src/core/skill-catalog.ts`, `skillCatalog` option on `AgentLoopOptions` enables injection at agent-loop level for all adapters
-- ~~**Server imports SDK**~~ — FIXED: `server/index.ts` imports directly from core (`agent-loop`, `hooks`, `tool-executor`, `message-convert`, `provider-resolver`)
-- ~~**Large files with mixed responsibilities**~~ — FIXED: `websocket.ts` split into `ws-types.ts` + `ws-handlers.ts` + re-export hub; `provider-resolver.ts` split into `provider-env.ts` + `provider-config.ts` + re-export hub; `cli/index.ts` split into `repl.ts` + `commands/skills.ts` + `commands/models.ts` + Commander setup
-- ~~**No middleware pipeline**~~ — FIXED: `(ctx, next) => Promise<void>` middleware chain in `src/core/middleware.ts` with `compose()`. Built-in logging, rate-limit, and auth middleware. Pass-through from SDK (`generateText`, `streamText`, `createAgent`). 100% backward compatible (no middleware = identical behavior)
-- ~~**Session persistence hardcoded**~~ — FIXED: `PersistenceBackend` interface with `createPersistenceBackend()` factory and `registerBackend()` registry in `src/core/session-store.ts`. Built-in `file` and `memory` backends. Server's `ServerSessionManager` accepts optional `backend` option, delegating raw storage while keeping TTL/concurrency/cleanup logic. 100% backward compatible — `persist: string` still works via legacy adapter.

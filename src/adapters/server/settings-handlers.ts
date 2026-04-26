@@ -16,7 +16,7 @@ import { hasScope } from './auth.js';
 export interface SettingsHandlerContext {
   settingsManager: SettingsManager;
   /** Get all connected WS clients (excluding sender) */
-  getOtherClients: (excludeWs?: WebSocket) => Array<{ ws: WebSocket; state: ConnectionState; apiKey?: ApiKeyEntry }>;
+  getOtherClients: (excludeWs?: WebSocket) => Array<{ ws: WebSocket; state: ConnectionState }>;
 }
 
 // ── Mutex ─────────────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ function requireScope(res: ServerResponse, apiKey: ApiKeyEntry | undefined, scop
 }
 
 function requireWsScope(state: ConnectionState, scope: KeyScope): boolean {
-  const apiKey = (state as any).apiKey as ApiKeyEntry | undefined;
+  const apiKey = state.apiKey;
   return !!apiKey && hasScope(apiKey, scope);
 }
 

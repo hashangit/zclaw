@@ -6,7 +6,9 @@
  */
 
 import * as crypto from "crypto";
-import { authMiddleware } from "./auth.js";
+import { authMiddleware, hasScope } from "./auth.js";
+import type { ApiKeyEntry, KeyScope } from "./auth.js";
+import { hashKey } from "./session-store.js";
 import type {
   WebSocket,
   WSServer,
@@ -18,10 +20,17 @@ import type {
   ResumeMessage,
   ReconnectMessage,
   SwitchProviderMessage,
+  GetSettingsMessage,
+  UpdateSettingsMessage,
+  ListProvidersMessage,
+  SetProviderMessage,
+  RemoveProviderMessage,
   WebSocketHandlerContext,
   ConnectionState,
 } from "./ws-types.js";
 import type { PermissionLevel } from "../../core/types.js";
+import type { SettingsHandlerContext } from "./settings-handlers.js";
+import { handleWsGetSettings, handleWsUpdateSettings } from "./settings-handlers.js";
 
 // ── Active connections registry ──────────────────────────────────────
 
@@ -33,6 +42,8 @@ const pendingApprovals = new Map<string, {
   resolve: (approved: boolean) => void;
   timer: ReturnType<typeof setTimeout>;
   ws: WebSocket;
+  toolName: string;
+  createdAt: number;
 }>();
 
 /**
@@ -40,6 +51,22 @@ const pendingApprovals = new Map<string, {
  */
 export function getActiveConnectionCount(): number {
   return activeConnections.size;
+}
+
+/**
+ * Get all connected WS clients (excluding the given one).
+ * Used by settings broadcast to notify other connections of changes.
+ */
+export function getOtherClients(
+  excludeWs?: WebSocket,
+): Array<{ ws: WebSocket; state: ConnectionState }> {
+  const clients: Array<{ ws: WebSocket; state: ConnectionState }> = [];
+  for (const [ws, state] of activeConnections) {
+    if (ws !== excludeWs) {
+      clients.push({ ws, state });
+    }
+  }
+  return clients;
 }
 
 // ── Send helper ──────────────────────────────────────────────────────
@@ -81,6 +108,8 @@ export function handleConnection(
     activeProvider: null,
     activeModel: null,
     maxPermissionLevel: ctx.maxPermissionLevel,
+    apiKeyHash: hashKey(key.key),
+    apiKey: key,
   };
 
   activeConnections.set(ws, state);
@@ -112,10 +141,10 @@ export function handleConnection(
         handleToolApprovalResponse(ws, msg);
         break;
       case "resume":
-        handleResume(ws, msg, state, ctx);
+        void handleResume(ws, msg, state, ctx);
         break;
       case "reconnect":
-        handleReconnect(ws, msg, state, ctx);
+        void handleReconnect(ws, msg, state, ctx);
         break;
       case "switch_provider":
         handleSwitchProvider(ws, msg, state);
@@ -131,6 +160,26 @@ export function handleConnection(
           type: "pong",
           serverTime: new Date().toISOString(),
         });
+        break;
+      case "get_settings":
+        handleWsSettingsMessage(ws, msg as GetSettingsMessage, state, ctx, (sCtx) =>
+          handleWsGetSettings(msg as GetSettingsMessage, ws, state, sCtx));
+        break;
+      case "update_settings":
+        handleWsSettingsMessage(ws, msg as UpdateSettingsMessage, state, ctx, (sCtx) =>
+          void handleWsUpdateSettings(msg as UpdateSettingsMessage, ws, state, sCtx));
+        break;
+      case "list_providers":
+        handleWsSettingsMessage(ws, msg as ListProvidersMessage, state, ctx, (sCtx) =>
+          handleWsListProviders(msg as ListProvidersMessage, ws, state, sCtx));
+        break;
+      case "set_provider":
+        handleWsSettingsMessage(ws, msg as SetProviderMessage, state, ctx, (sCtx) =>
+          void handleWsSetProvider(msg as SetProviderMessage, ws, state, sCtx));
+        break;
+      case "remove_provider":
+        handleWsSettingsMessage(ws, msg as RemoveProviderMessage, state, ctx, (sCtx) =>
+          void handleWsRemoveProvider(msg as RemoveProviderMessage, ws, state, sCtx));
         break;
       default:
         safeSend(ws, {
@@ -219,6 +268,7 @@ function handleChat(
       skills: msg.options?.skills,
       sessionId: state.sessionId ?? undefined,
       permissionLevel: effectivePermissionLevel,
+      approveTool: createServerApproveTool(ws),
       signal: abortController.signal,
       onText: (delta) => {
         safeSend(ws, {
@@ -318,7 +368,7 @@ function handleAbort(
 
 // ── Tool approval handler ────────────────────────────────────────────
 
-const APPROVAL_TIMEOUT_MS = 60_000; // 60 seconds
+const APPROVAL_TIMEOUT_MS = 30_000; // 30 seconds
 
 /**
  * Create an `approveTool` callback for the server adapter.
@@ -342,7 +392,7 @@ export function createServerApproveTool(ws: WebSocket): import("../../core/types
         resolve(false); // Timeout → deny
       }, APPROVAL_TIMEOUT_MS);
 
-      pendingApprovals.set(callId, { resolve, timer, ws });
+      pendingApprovals.set(callId, { resolve, timer, ws, toolName: call.name, createdAt: Date.now() });
     });
   };
 }
@@ -357,6 +407,17 @@ function handleToolApprovalResponse(
   // QA-001: Only the originating connection may resolve the approval
   if (pending.ws !== ws) return;
 
+  // Defense-in-depth: verify the tool name matches the pending request
+  if (msg.name !== pending.toolName) return;
+
+  // Reject expired approvals (defense-in-depth, timer should have fired)
+  if (Date.now() - pending.createdAt > APPROVAL_TIMEOUT_MS) {
+    clearTimeout(pending.timer);
+    pendingApprovals.delete(msg.callId);
+    pending.resolve(false);
+    return;
+  }
+
   clearTimeout(pending.timer);
   pendingApprovals.delete(msg.callId);
   pending.resolve(msg.approved);
@@ -364,13 +425,13 @@ function handleToolApprovalResponse(
 
 // ── Resume handler ───────────────────────────────────────────────────
 
-function handleResume(
+async function handleResume(
   ws: WebSocket,
   msg: ResumeMessage,
   state: ConnectionState,
   ctx: WebSocketHandlerContext,
-): void {
-  const session = ctx.sessionManager.getSession(msg.sessionId);
+): Promise<void> {
+  const session = await ctx.sessionManager.getSession(msg.sessionId, state.apiKeyHash);
   if (!session) {
     safeSend(ws, {
       type: "error",
@@ -392,13 +453,13 @@ function handleResume(
 
 // ── Reconnect handler ────────────────────────────────────────────────
 
-function handleReconnect(
+async function handleReconnect(
   ws: WebSocket,
   msg: ReconnectMessage,
   state: ConnectionState,
   ctx: WebSocketHandlerContext,
-): void {
-  const session = ctx.sessionManager.getSession(msg.sessionId);
+): Promise<void> {
+  const session = await ctx.sessionManager.getSession(msg.sessionId, state.apiKeyHash);
   if (!session) {
     safeSend(ws, {
       type: "error",
@@ -469,6 +530,130 @@ function handleListSkills(
     type: "skills_list",
     skills: ctx.listSkills(),
   });
+}
+
+// ── Settings dispatch helper ────────────────────────────────────────────
+
+function handleWsSettingsMessage(
+  ws: WebSocket,
+  _msg: ClientMessage,
+  _state: ConnectionState,
+  ctx: WebSocketHandlerContext,
+  fn: (sCtx: SettingsHandlerContext) => void,
+): void {
+  const sCtx = ctx.settingsHandlerContext;
+  if (!sCtx) {
+    safeSend(ws, {
+      type: "error",
+      code: "SERVICE_UNAVAILABLE",
+      retryable: false,
+      message: "Settings not configured",
+    });
+    return;
+  }
+  fn(sCtx);
+}
+
+// ── WS scope helper ─────────────────────────────────────────────────────
+
+function requireWsScope(state: ConnectionState, scope: KeyScope): boolean {
+  return !!state.apiKey && hasScope(state.apiKey, scope);
+}
+
+// ── WS Settings: list providers ─────────────────────────────────────────
+
+function handleWsListProviders(
+  msg: ListProvidersMessage,
+  ws: WebSocket,
+  state: ConnectionState,
+  ctx: SettingsHandlerContext,
+): void {
+  if (!requireWsScope(state, "agent:read")) {
+    safeSend(ws, { type: "providers_list", id: msg.id, providers: {}, error: { code: "FORBIDDEN", message: "Requires agent:read scope" } } as any);
+    return;
+  }
+
+  const providers: Record<string, any> = {};
+  for (const pType of ["openai", "anthropic", "glm", "openai-compatible"]) {
+    const prefix = `providers.${pType === "openai-compatible" ? "openai-compat" : pType}`;
+    const apiKeyVal = ctx.settingsManager.get(`${prefix}.apiKey`).value;
+    if (apiKeyVal != null) {
+      providers[pType] = { type: pType };
+      const model = ctx.settingsManager.get(`${prefix}.model`).value;
+      if (model) providers[pType].model = model;
+      if (pType === "openai-compatible") {
+        const baseUrl = ctx.settingsManager.get(`${prefix}.baseUrl`).value;
+        if (baseUrl) providers[pType].baseUrl = baseUrl;
+      }
+    }
+  }
+
+  safeSend(ws, { type: "providers_list", id: msg.id, providers } as any);
+}
+
+// ── WS Settings: set provider ───────────────────────────────────────────
+
+async function handleWsSetProvider(
+  msg: SetProviderMessage,
+  ws: WebSocket,
+  state: ConnectionState,
+  ctx: SettingsHandlerContext,
+): Promise<void> {
+  if (!requireWsScope(state, "admin")) {
+    safeSend(ws, { type: "settings_updated", id: msg.id, error: { code: "FORBIDDEN", message: "Requires admin scope" } } as any);
+    return;
+  }
+
+  const { type: providerType, apiKey, baseUrl, model } = msg.provider;
+  const VALID_PROVIDER_TYPES = new Set(["openai", "anthropic", "glm", "openai-compatible"]);
+  if (!providerType || !VALID_PROVIDER_TYPES.has(providerType)) {
+    safeSend(ws, { type: "settings_updated", id: msg.id, error: { code: "VALIDATION_ERROR", message: "Invalid provider type" } } as any);
+    return;
+  }
+
+  const prefix = `providers.${providerType === "openai-compatible" ? "openai-compat" : providerType}`;
+  try {
+    if (apiKey) await ctx.settingsManager.set(`${prefix}.apiKey`, apiKey);
+    if (model) await ctx.settingsManager.set(`${prefix}.model`, model);
+    if (baseUrl && providerType === "openai-compatible") await ctx.settingsManager.set(`${prefix}.baseUrl`, baseUrl);
+  } catch (e: any) {
+    safeSend(ws, { type: "settings_updated", id: msg.id, error: { code: "SET_ERROR", message: e.message } } as any);
+    return;
+  }
+
+  safeSend(ws, { type: "settings_updated", id: msg.id, applied: { [providerType]: true }, requiresRestart: false, restartAffected: [] } as any);
+}
+
+// ── WS Settings: remove provider ────────────────────────────────────────
+
+async function handleWsRemoveProvider(
+  msg: RemoveProviderMessage,
+  ws: WebSocket,
+  state: ConnectionState,
+  ctx: SettingsHandlerContext,
+): Promise<void> {
+  if (!requireWsScope(state, "admin")) {
+    safeSend(ws, { type: "settings_updated", id: msg.id, error: { code: "FORBIDDEN", message: "Requires admin scope" } } as any);
+    return;
+  }
+
+  const VALID_PROVIDER_TYPES = new Set(["openai", "anthropic", "glm", "openai-compatible"]);
+  if (!msg.providerType || !VALID_PROVIDER_TYPES.has(msg.providerType)) {
+    safeSend(ws, { type: "settings_updated", id: msg.id, error: { code: "VALIDATION_ERROR", message: "Invalid provider type" } } as any);
+    return;
+  }
+
+  const prefix = `providers.${msg.providerType === "openai-compatible" ? "openai-compat" : msg.providerType}`;
+  try {
+    await ctx.settingsManager.reset(`${prefix}.apiKey`);
+    try { await ctx.settingsManager.reset(`${prefix}.model`); } catch { /* may not exist */ }
+    try { await ctx.settingsManager.reset(`${prefix}.baseUrl`); } catch { /* may not exist */ }
+  } catch (e: any) {
+    safeSend(ws, { type: "settings_updated", id: msg.id, error: { code: "RESET_ERROR", message: e.message } } as any);
+    return;
+  }
+
+  safeSend(ws, { type: "settings_updated", id: msg.id, applied: { removed: msg.providerType }, requiresRestart: false, restartAffected: [] } as any);
 }
 
 // ── Active connections accessor (for closeWebSocket) ──────────────────

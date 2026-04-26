@@ -6,7 +6,7 @@
  * are structured rather than printed to the console.
  */
 
-import type { LLMProvider, ProviderMessage, ProviderToolCall } from "../../providers/types.js";
+import type { LLMProvider } from "../../providers/types.js";
 import type {
   AgentCreateOptions,
   AgentResponse,
@@ -261,12 +261,12 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
                 streamOptions.onToolCall({
                   name: step.toolCall.name,
                   args: step.toolCall.args,
-                  callId: step.toolCall.name,
+                  callId: step.toolCall.id,
                 });
               }
               if (streamOptions?.onToolResult) {
                 streamOptions.onToolResult({
-                  callId: step.toolCall.name,
+                  callId: step.toolCall.id,
                   output: step.toolCall.result,
                   success: true,
                 });

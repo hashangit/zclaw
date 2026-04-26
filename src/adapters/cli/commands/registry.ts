@@ -149,14 +149,3 @@ export class CommandRegistry {
     return [...this.commands.values()];
   }
 }
-
-// ── Singleton ──────────────────────────────────────────────────────────
-
-let _registry: CommandRegistry | null = null;
-
-export function getCommandRegistry(): CommandRegistry {
-  if (!_registry) {
-    _registry = new CommandRegistry();
-  }
-  return _registry;
-}

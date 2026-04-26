@@ -11,7 +11,7 @@ import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
 
-import type { ProviderType, GenerateTextResult, Usage, Message, PermissionLevel } from "../../core/types.js";
+import type { ProviderType, GenerateTextResult, Usage, Message, PermissionLevel, ApproveToolFn } from "../../core/types.js";
 import { runAgentLoop } from "../../core/agent-loop.js";
 import { createHookExecutor } from "../../core/hooks.js";
 import { resolveTools, getAllToolDefinitions } from "../../core/tool-executor.js";
@@ -19,7 +19,11 @@ import { generateId, now } from "../../core/message-convert.js";
 import { configureProviders, getProvider, resolveFromEnv } from "../../core/provider-resolver.js";
 import { createRestHandler, type RestHandlerContext } from "./rest.js";
 import { setupWebSocket, closeWebSocket, type WebSocketHandlerContext } from "./websocket.js";
+import { createServerApproveTool, getOtherClients } from "./ws-handlers.js";
 import { ServerSessionManager } from "./session-store.js";
+import { SettingsManager } from "../../core/settings-manager.js";
+import type { SettingsHandlerContext } from "./settings-handlers.js";
+import { loadMergedConfig, getConfigPaths, loadJsonConfig } from "../../core/config.js";
 import { MODEL_CATALOG } from "../../models-catalog.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -234,6 +238,23 @@ export async function createServer(options?: ServerOptions): Promise<http.Server
   });
   sessionManager.startCleanup();
 
+  // Create settings handler context (shared by REST and WS)
+  const configPaths = getConfigPaths();
+  const mergedConfig = loadMergedConfig();
+  const projectConfig = loadJsonConfig(configPaths.local);
+  const globalConfig = loadJsonConfig(configPaths.global);
+  const settingsManager = new SettingsManager({
+    config: mergedConfig as unknown as Record<string, any>,
+    projectConfigPath: configPaths.local,
+    globalConfigPath: configPaths.global,
+    projectConfig: projectConfig.config as Record<string, any>,
+    globalConfig: globalConfig.config as Record<string, any>,
+  });
+  const settingsHandlerContext: SettingsHandlerContext = {
+    settingsManager,
+    getOtherClients,
+  };
+
   // Create REST handler context
   const restCtx: RestHandlerContext = {
     version,
@@ -242,6 +263,7 @@ export async function createServer(options?: ServerOptions): Promise<http.Server
     generateText: (opts) => serverGenerateText(opts, serverPermissionLevel),
     listModels,
     listSkills,
+    settingsHandlerContext,
   };
 
   const restHandler = createRestHandler(restCtx);
@@ -284,6 +306,7 @@ export async function createServer(options?: ServerOptions): Promise<http.Server
     listModels,
     listSkills,
     maxPermissionLevel: options?.maxPermissionLevel,
+    settingsHandlerContext,
   };
 
   // Set up WebSocket (async, but we wait for it)
@@ -321,6 +344,7 @@ async function serverStreamText(
     skills?: string[];
     sessionId?: string;
     permissionLevel?: PermissionLevel;
+    approveTool?: ApproveToolFn;
     onText: (delta: string) => void;
     onToolCall: (info: { name: string; args: Record<string, unknown>; callId: string }) => void;
     onToolResult: (info: { callId: string; output: string; success: boolean }) => void;
@@ -362,6 +386,7 @@ async function serverStreamText(
       maxSteps: opts.maxSteps ?? 5,
       hooks,
       permissionLevel: opts.permissionLevel ?? serverPermissionLevel,
+      approveTool: opts.approveTool,
       signal: opts.signal,
       onStep: (step) => {
         if (step.type === "text" && step.content) {
@@ -372,10 +397,10 @@ async function serverStreamText(
           opts.onToolCall({
             name: step.toolCall.name,
             args: step.toolCall.args,
-            callId: step.toolCall.name,
+            callId: step.toolCall.id,
           });
           opts.onToolResult({
-            callId: step.toolCall.name,
+            callId: step.toolCall.id,
             output: step.toolCall.result,
             success: !step.toolCall.result.startsWith("Error:"),
           });

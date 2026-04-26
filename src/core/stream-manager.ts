@@ -166,7 +166,7 @@ export class StreamManager {
               controller.enqueue(
                 encoder.encode(
                   sseLine("tool_call", {
-                    callId: step.toolCall.name,
+                    callId: step.toolCall.id,
                     name: step.toolCall.name,
                     args: step.toolCall.args,
                   }),
@@ -176,7 +176,7 @@ export class StreamManager {
               controller.enqueue(
                 encoder.encode(
                   sseLine("tool_result", {
-                    callId: step.toolCall.name,
+                    callId: step.toolCall.id,
                     output: step.toolCall.result,
                     success: true,
                   }),

@@ -3,7 +3,7 @@
 import type { Message, StepResult, ToolCall, Usage, ZclawError, ApproveToolFn, PermissionLevel } from "./types.js";
 import type { LLMProvider, ProviderMessage, ProviderToolCall } from "../providers/types.js";
 import type { ToolDefinition } from "../tools/interface.js";
-import { generateId, now, estimateTokens, toZclawError, messageToProviderMessage, providerToolCallToToolCall } from "./message-convert.js";
+import { generateId, now, toZclawError, messageToProviderMessage, providerToolCallToToolCall } from "./message-convert.js";
 import { executeTool } from "./tool-executor.js";
 import type { HookExecutor } from "./hooks.js";
 import type { Middleware, PipelineContext } from "./middleware.js";
@@ -376,7 +376,9 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
         }
         const duration = now() - start;
 
-        totalCompletionChars += output.length;
+        // Note: tool output chars are NOT counted here because they will be
+        // counted as promptChars on the next loop iteration when the message
+        // history (including tool results) is sent to the provider.
 
         // Add tool result message
         messages.push({
@@ -391,6 +393,7 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
         const toolStep: StepResult = {
           type: "tool_call",
           toolCall: {
+            id: tc.id,
             name: tc.name,
             args: parsedArgs,
             result: output,
@@ -430,8 +433,8 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
   }
 
   // Calculate usage
-  const promptTokens = estimateTokens("p".repeat(totalPromptChars));
-  const completionTokens = estimateTokens("p".repeat(totalCompletionChars));
+  const promptTokens = Math.ceil(totalPromptChars / 4);
+  const completionTokens = Math.ceil(totalCompletionChars / 4);
   const usage: Usage = {
     promptTokens,
     completionTokens,

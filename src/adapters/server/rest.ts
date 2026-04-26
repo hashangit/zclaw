@@ -12,7 +12,7 @@ import type {
   GenerateTextResult,
 } from "../../core/types.js";
 import { authMiddleware, hasScope } from "./auth.js";
-import { ServerSessionManager } from "./session-store.js";
+import { ServerSessionManager, hashKey } from "./session-store.js";
 import {
   handleGetSettings,
   handlePatchSettings,
@@ -42,6 +42,8 @@ export interface RestHandlerContext {
   listModels: () => Record<ProviderType, string[]>;
   /** List available skill metadata */
   listSkills: () => SkillMetadata[];
+  /** Settings handler context — required for settings/provider routes */
+  settingsHandlerContext?: SettingsHandlerContext;
 }
 
 interface ChatRequest {
@@ -335,7 +337,7 @@ async function handleGetSession(
     return;
   }
 
-  const session = ctx.sessionManager.getSession(sessionId);
+  const session = await ctx.sessionManager.getSession(sessionId, hashKey(key.key));
   if (!session) {
     sendError(res, 404, "NOT_FOUND", `Session ${sessionId} not found`);
     return;
@@ -351,8 +353,7 @@ async function handleGetSession(
 // For now, these check for settingsManager availability and return 503 if not configured.
 
 function getSettingsCtx(ctx: RestHandlerContext): SettingsHandlerContext | null {
-  const sCtx = (ctx as any).settingsHandlerContext as SettingsHandlerContext | undefined;
-  return sCtx ?? null;
+  return ctx.settingsHandlerContext ?? null;
 }
 
 async function handleSettingsGet(

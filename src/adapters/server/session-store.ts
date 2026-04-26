@@ -47,7 +47,7 @@ const DEFAULT_CLEANUP_INTERVAL = 5 * 60 * 1000;         // 5 minutes
 
 import * as crypto from "crypto";
 
-function hashKey(key: string): string {
+export function hashKey(key: string): string {
   return crypto.createHash("sha256").update(key).digest("hex").slice(0, 16);
 }
 
@@ -107,12 +107,13 @@ export class ServerSessionManager {
   /**
    * Create a new session. Enforces per-API-key session limits.
    * Returns the new SessionData or throws if the limit is exceeded.
+   * Awaits persistence — callers should await to ensure backend errors propagate.
    */
-  createSession(
+  async createSession(
     apiKey: string,
     provider?: ProviderType,
     model?: string,
-  ): SessionData {
+  ): Promise<SessionData> {
     const keyHash = hashKey(apiKey);
 
     // Enforce per-key limit
@@ -138,7 +139,7 @@ export class ServerSessionManager {
     };
 
     this.sessions.set(id, session);
-    this.persistSession(session);
+    await this.persistSessionAsync(session);
 
     return {
       id: session.id,
@@ -151,29 +152,28 @@ export class ServerSessionManager {
   }
 
   /**
-   * Get a session by its ID.
-   * Returns null if the session does not exist or has expired.
+   * Get a session by its ID, verifying ownership via API key hash.
+   * Returns null if the session does not exist, has expired, or is not owned
+   * by the provided API key.
    */
-  getSession(id: string): SessionData | null {
-    const session = this.sessions.get(id);
+  async getSession(id: string, apiKeyHash: string): Promise<SessionData | null> {
+    let session: TrackedSession | null | undefined = this.sessions.get(id);
+
     if (!session) {
-      // Try loading from backend
-      const loaded = this.loadSessionFromBackend(id);
-      if (!loaded) return null;
-      this.sessions.set(id, loaded);
-      return {
-        id: loaded.id,
-        messages: loaded.messages,
-        createdAt: loaded.createdAt,
-        updatedAt: loaded.updatedAt,
-        provider: loaded.provider,
-        model: loaded.model,
-      };
+      // Try loading from persistence backend
+      session = await this.loadSessionFromBackend(id);
+      if (!session) return null;
+      this.sessions.set(id, session);
     }
 
     // Check expiration
     if (this.isExpired(session)) {
       this.deleteSession(id);
+      return null;
+    }
+
+    // Ownership verification — constant-time comparison to prevent timing attacks
+    if (!this.verifyOwnership(session, apiKeyHash)) {
       return null;
     }
 
@@ -289,17 +289,48 @@ export class ServerSessionManager {
     });
   }
 
-  private loadSessionFromBackend(id: string): TrackedSession | null {
-    // Use synchronous fallback — the backend.load is async but we're in a
-    // sync context. We fire-and-forget the load and return null for now;
-    // the next getSession call will find it in memory.
-    // For the default file backend, this is fine because the server's
-    // in-memory map is the primary store and disk is the backup.
-    //
-    // Note: For backends that need async loading, the caller should await
-    // loadSession first. The sync getSession path returns null if not in
-    // memory, which is correct behavior for a server that restarts — sessions
-    // will be re-created on next request.
-    return null;
+  private async persistSessionAsync(session: TrackedSession): Promise<void> {
+    const data: SessionData = {
+      id: session.id,
+      messages: session.messages,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+      provider: session.provider,
+      model: session.model,
+      metadata: {
+        apiKeyHash: session.apiKeyHash,
+        lastActivityAt: session.lastActivityAt,
+      },
+    };
+    await this.backend.save(session.id, data);
+  }
+
+  private async loadSessionFromBackend(id: string): Promise<TrackedSession | null> {
+    try {
+      const data = await this.backend.load(id);
+      if (!data) return null;
+
+      const metadata = data.metadata ?? {};
+      return {
+        id: data.id,
+        messages: data.messages,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+        provider: data.provider,
+        model: data.model,
+        apiKeyHash: (metadata.apiKeyHash as string) ?? "",
+        lastActivityAt: (metadata.lastActivityAt as number) ?? data.updatedAt,
+      };
+    } catch (err) {
+      console.warn(`[session-store] Failed to load session ${id} from backend:`, err);
+      return null;
+    }
+  }
+
+  private verifyOwnership(session: TrackedSession, apiKeyHash: string): boolean {
+    const a = Buffer.from(session.apiKeyHash, "utf-8");
+    const b = Buffer.from(apiKeyHash, "utf-8");
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
   }
 }

@@ -49,6 +49,7 @@ export interface StepResult {
   type: "text" | "tool_call";
   content?: string;
   toolCall?: {
+    id: string;
     name: string;
     args: Record<string, unknown>;
     result: string;
@@ -78,7 +79,7 @@ export interface CumulativeUsage {
 export interface UserToolDefinition {
   name?: string;
   description: string;
-  parameters: unknown; // ZodSchema at runtime
+  parameters: unknown; // JSON Schema object at runtime
   execute: (args: unknown, context: ToolContext) => Promise<string | ToolResult>;
 }
 

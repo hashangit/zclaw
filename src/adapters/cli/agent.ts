@@ -10,6 +10,7 @@ import { runAgentLoop } from '../../core/agent-loop.js';
 import { generateId, now } from '../../core/message-convert.js';
 import { createHookExecutor } from '../../core/hooks.js';
 import { buildSkillCatalog } from '../../core/skill-catalog.js';
+import { DEFAULT_MODELS } from '../../models-catalog.js';
 import type { Message, StepResult, Usage, ToolCall, ApproveToolFn, PermissionLevel } from '../../core/types.js';
 
 export class Agent {
@@ -22,7 +23,7 @@ export class Agent {
   private skillCatalog: string = '';
   private abortController: AbortController | null = null;
 
-  constructor(provider: LLMProvider, model: string = 'gpt-4-turbo-preview', config: any = {}) {
+  constructor(provider: LLMProvider, model: string = DEFAULT_MODELS['openai-compatible'], config: any = {}) {
     this.provider = provider;
     this.model = model;
     this.config = config;

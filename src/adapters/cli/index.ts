@@ -28,7 +28,7 @@ dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkgPath = path.join(__dirname, '..', 'package.json');
-let version = '1.0.2';
+let version = '0.2.1';
 
 try {
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
@@ -86,18 +86,3 @@ if (process.argv.includes('--docker')) {
 }
 
 program.parse(process.argv);
-
-// Global error handler
-main().catch(err => {
-  if (err.message && (err.message.includes('User force closed') || err.message.includes('Prompt was canceled'))) {
-    console.log(chalk.cyan("\nGoodbye!"));
-    process.exit(0);
-  }
-  console.error(chalk.red("Fatal Error:"), err);
-  process.exit(1);
-});
-
-async function main() {
-  // Just a wrapper to keep the promise chain clean if needed,
-  // but currently logic is triggered by program.parse()
-}

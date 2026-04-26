@@ -1,247 +1,77 @@
 /**
  * ZClaw CLI — Config Loader
  *
- * Handles loading, merging, saving, and validating CLI configuration.
- * Extracted from index.ts for separation of concerns.
+ * Re-exports core config utilities and adds CLI-specific chalk output.
  */
 
 import chalk from 'chalk';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { ProviderType } from '../../providers/types.js';
+import {
+  AppConfig,
+  loadJsonConfig as coreLoadJsonConfig,
+  loadMergedConfig as coreLoadMergedConfig,
+  applyEnvOverrides,
+  getConfigPath,
+  getConfigDir,
+  getConfigPaths,
+  migrateLegacyFormat,
+  resolveActiveProviderType,
+  saveConfig as coreSaveConfig,
+  writeConfigToPath as coreWriteConfigToPath,
+  maskSecret,
+} from '../../core/config.js';
 
-// ── Constants ──────────────────────────────────────────────────────────
+// ── Re-exports (unchanged API for CLI consumers) ───────────────────────
 
-const GLOBAL_CONFIG_DIR = path.join(os.homedir(), '.zclaw');
-const GLOBAL_CONFIG_FILE = path.join(GLOBAL_CONFIG_DIR, 'setting.json');
-const LOCAL_CONFIG_FILE = path.join(process.cwd(), '.zclaw', 'setting.json');
+export {
+  AppConfig,
+  applyEnvOverrides,
+  getConfigPath,
+  getConfigDir,
+  getConfigPaths,
+  migrateLegacyFormat,
+  resolveActiveProviderType,
+  maskSecret,
+};
 
-// ── Types ──────────────────────────────────────────────────────────────
-
-export interface AppConfig {
-  provider?: ProviderType;
-  apiKey?: string;
-  baseUrl?: string;
-  model?: string;
-  models?: {
-    'openai-compatible'?: { apiKey: string; baseUrl: string; model: string; };
-    openai?: { apiKey: string; model: string; };
-    anthropic?: { apiKey: string; model: string; };
-    glm?: { apiKey: string; model: string; };
-  };
-  // Image gen (always OpenAI)
-  imageApiKey?: string;
-  imageBaseUrl?: string;
-  imageModel?: string;
-  imageSize?: string;
-  imageQuality?: string;
-  imageStyle?: string;
-  imageN?: number;
-  // Existing tools (unchanged)
-  smtpHost?: string;
-  smtpPort?: string;
-  smtpUser?: string;
-  smtpPass?: string;
-  smtpFrom?: string;
-  tavilyApiKey?: string;
-  autoConfirm?: boolean;
-  permissionLevel?: "strict" | "moderate" | "permissive";
-  feishuWebhook?: string;
-  feishuKeyword?: string;
-  dingtalkWebhook?: string;
-  dingtalkKeyword?: string;
-  wecomWebhook?: string;
-  wecomKeyword?: string;
-}
-
-// ── Config path helpers ────────────────────────────────────────────────
-
-/**
- * Returns the config file path for the given scope.
- * @param global - If true, returns the global config path; otherwise local.
- */
-export function getConfigPath(global?: boolean): string {
-  return global ? GLOBAL_CONFIG_FILE : LOCAL_CONFIG_FILE;
-}
-
-/**
- * Returns the config directory path for the given scope.
- * @param global - If true, returns the global config dir; otherwise local.
- */
-export function getConfigDir(global?: boolean): string {
-  return global ? GLOBAL_CONFIG_DIR : path.join(process.cwd(), '.zclaw');
-}
-
-/**
- * Returns both global and local config paths.
- */
-export function getConfigPaths(): { global: string; local: string; globalDir: string } {
-  return {
-    global: GLOBAL_CONFIG_FILE,
-    local: LOCAL_CONFIG_FILE,
-    globalDir: GLOBAL_CONFIG_DIR,
-  };
-}
-
-// ── JSON loading ───────────────────────────────────────────────────────
+// ── CLI wrappers with chalk output ─────────────────────────────────────
 
 /**
  * Load and parse a JSON config file, returning {} on failure.
+ * Logs parse warnings to console with chalk.
  */
 export function loadJsonConfig(filePath: string): AppConfig {
-  if (fs.existsSync(filePath)) {
-    try {
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    } catch (e) {
-      console.error(chalk.yellow(`Warning: Failed to parse config file at ${filePath}`));
-    }
+  const { config, warning } = coreLoadJsonConfig(filePath);
+  if (warning) {
+    console.error(chalk.yellow(warning));
   }
-  return {};
+  return config;
 }
-
-// ── Merge & overlay ────────────────────────────────────────────────────
 
 /**
  * Load global and local configs and merge them.
  * Priority: local > global.
  */
 export function loadMergedConfig(): AppConfig {
-  const globalConfig = loadJsonConfig(GLOBAL_CONFIG_FILE);
-  const localConfig = loadJsonConfig(LOCAL_CONFIG_FILE);
-  return { ...globalConfig, ...localConfig };
+  // Use the core version directly — it calls coreLoadJsonConfig internally
+  // and doesn't produce warnings the CLI needs to display at this level.
+  return coreLoadMergedConfig();
 }
-
-/**
- * Apply environment variable overrides to the merged config.
- * Env vars take priority over JSON config for tool settings.
- * Also injects provider API keys from env vars into the models map.
- */
-export function applyEnvOverrides(config: AppConfig): AppConfig {
-  // Tool settings
-  if (process.env.SMTP_HOST) config.smtpHost = process.env.SMTP_HOST;
-  if (process.env.SMTP_PORT) config.smtpPort = process.env.SMTP_PORT;
-  if (process.env.SMTP_USER) config.smtpUser = process.env.SMTP_USER;
-  if (process.env.SMTP_PASS) config.smtpPass = process.env.SMTP_PASS;
-  if (process.env.TAVILY_API_KEY) config.tavilyApiKey = process.env.TAVILY_API_KEY;
-  if (process.env.FEISHU_WEBHOOK) config.feishuWebhook = process.env.FEISHU_WEBHOOK;
-  if (process.env.FEISHU_KEYWORD) config.feishuKeyword = process.env.FEISHU_KEYWORD;
-  if (process.env.DINGTALK_WEBHOOK) config.dingtalkWebhook = process.env.DINGTALK_WEBHOOK;
-  if (process.env.DINGTALK_KEYWORD) config.dingtalkKeyword = process.env.DINGTALK_KEYWORD;
-  if (process.env.WECOM_WEBHOOK) config.wecomWebhook = process.env.WECOM_WEBHOOK;
-  if (process.env.WECOM_KEYWORD) config.wecomKeyword = process.env.WECOM_KEYWORD;
-
-  // Permission level
-  if (process.env.ZCLAW_PERMISSION) {
-    const val = process.env.ZCLAW_PERMISSION;
-    if (val === "strict" || val === "moderate" || val === "permissive") {
-      config.permissionLevel = val;
-    }
-  }
-
-  // Provider API keys — inject into models map from env vars
-  if (!config.models) config.models = {};
-
-  if (process.env.OPENAI_API_KEY) {
-    config.models['openai-compatible'] = {
-      apiKey: process.env.OPENAI_API_KEY,
-      baseUrl: process.env.OPENAI_COMPAT_BASE_URL || process.env.OPENAI_BASE_URL || config.models['openai-compatible']?.baseUrl || 'https://api.openai.com/v1',
-      model: process.env.OPENAI_MODEL || config.models['openai-compatible']?.model || 'gpt-4o',
-    };
-    // Also populate 'openai' if same key works
-    if (!config.models.openai?.apiKey) {
-      config.models.openai = {
-        apiKey: process.env.OPENAI_API_KEY,
-        model: process.env.OPENAI_MODEL || config.models.openai?.model || 'gpt-4o',
-      };
-    }
-  }
-  if (process.env.ANTHROPIC_API_KEY) {
-    config.models.anthropic = {
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      model: process.env.ANTHROPIC_MODEL || config.models.anthropic?.model || 'claude-sonnet-4-5-20250929',
-    };
-  }
-  if (process.env.GLM_API_KEY) {
-    config.models.glm = {
-      apiKey: process.env.GLM_API_KEY,
-      model: process.env.GLM_MODEL || config.models.glm?.model || 'sonnet',
-    };
-  }
-
-  return config;
-}
-
-/**
- * Auto-migrate legacy config format (top-level apiKey/baseUrl/model) to the
- * models map format used by the current architecture.
- */
-export function migrateLegacyFormat(
-  config: AppConfig,
-  options?: { model?: string },
-): AppConfig {
-  if (!config.models && (config.apiKey || process.env.OPENAI_API_KEY)) {
-    config.models = {
-      'openai-compatible': {
-        apiKey: process.env.OPENAI_API_KEY || config.apiKey || '',
-        baseUrl: process.env.OPENAI_COMPAT_BASE_URL || process.env.OPENAI_BASE_URL || config.baseUrl || 'https://api.openai.com/v1',
-        model: options?.model || process.env.OPENAI_MODEL || config.model || 'gpt-4o',
-      },
-    };
-    if (!config.provider) config.provider = 'openai-compatible';
-  }
-  return config;
-}
-
-/**
- * Resolve the active provider type from CLI flags, env vars, and config.
- * Checks LLM_PROVIDER env var as a standard alias for ZCLAW_PROVIDER.
- */
-export function resolveActiveProviderType(
-  config: AppConfig,
-  options?: { provider?: string },
-): ProviderType {
-  return (
-    (options?.provider as ProviderType) ||
-    (process.env.LLM_PROVIDER as ProviderType) ||
-    (process.env.ZCLAW_PROVIDER as ProviderType) ||
-    config.provider ||
-    'openai-compatible'
-  );
-}
-
-// ── Save ───────────────────────────────────────────────────────────────
 
 /**
  * Save config to disk. If a local config exists, saves there; otherwise global.
  */
 export function saveConfig(config: AppConfig): void {
-  const targetFile = fs.existsSync(path.join(process.cwd(), '.zclaw', 'setting.json'))
-    ? LOCAL_CONFIG_FILE
-    : GLOBAL_CONFIG_FILE;
-
-  writeConfigToPath(config, targetFile);
+  coreSaveConfig(config);
 }
 
 /**
  * Save config to a specific path.
+ * Logs errors to console with chalk.
  */
 export function writeConfigToPath(config: AppConfig, targetFile: string): void {
   try {
-    const dir = path.dirname(targetFile);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(targetFile, JSON.stringify(config, null, 2), { mode: 0o600 });
+    coreWriteConfigToPath(config, targetFile);
   } catch (e: any) {
     console.error(chalk.red(`Failed to save config: ${e.message}`));
   }
-}
-
-// ── Utility ────────────────────────────────────────────────────────────
-
-/**
- * Mask a secret string for display, showing only first 3 and last 4 chars.
- */
-export function maskSecret(secret?: string): string {
-  if (!secret || secret.length < 8) return '******';
-  return `${secret.slice(0, 3)}...${secret.slice(-4)}`;
 }

@@ -246,10 +246,10 @@ export async function streamText(
           }
           if (step.type === "tool_call" && step.toolCall) {
             if (opts.onToolCall) {
-              opts.onToolCall({ name: step.toolCall.name, args: step.toolCall.args, callId: step.toolCall.name });
+              opts.onToolCall({ name: step.toolCall.name, args: step.toolCall.args, callId: step.toolCall.id });
             }
             if (opts.onToolResult) {
-              opts.onToolResult({ callId: step.toolCall.name, output: step.toolCall.result, success: true });
+              opts.onToolResult({ callId: step.toolCall.id, output: step.toolCall.result, success: true });
             }
           }
           stream.enqueueStep(step);

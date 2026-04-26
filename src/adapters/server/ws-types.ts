@@ -69,6 +69,7 @@ export interface ChatMessage {
 export interface ToolApprovalResponse {
   type: "tool_approval_response";
   callId: string;
+  name: string;
   approved: boolean;
 }
 
@@ -331,6 +332,7 @@ export interface WebSocketHandlerContext {
     skills?: string[];
     sessionId?: string;
     permissionLevel?: PermissionLevel;
+    approveTool?: import("../../core/types.js").ApproveToolFn;
     onText: (delta: string) => void;
     onToolCall: (info: { name: string; args: Record<string, unknown>; callId: string }) => void;
     onToolResult: (info: { callId: string; output: string; success: boolean }) => void;
@@ -342,6 +344,7 @@ export interface WebSocketHandlerContext {
   listModels: () => Record<ProviderType, string[]>;
   listSkills: () => { name: string; description: string; tags: string[] }[];
   maxPermissionLevel?: PermissionLevel;
+  settingsHandlerContext?: import("./settings-handlers.js").SettingsHandlerContext;
 }
 
 // ── Connection state ─────────────────────────────────────────────────
@@ -353,4 +356,6 @@ export interface ConnectionState {
   activeModel: string | null;
   permissionLevel?: PermissionLevel;
   maxPermissionLevel?: PermissionLevel;
+  apiKeyHash: string;
+  apiKey?: import("./auth.js").ApiKeyEntry;
 }

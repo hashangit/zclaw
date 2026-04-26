@@ -6,16 +6,12 @@
  */
 
 import { GLM_MODEL_MAP } from "../providers/factory.js";
+import { DEFAULT_MODELS } from "../models-catalog.js";
 import type { MultiProviderConfig, ProviderType } from "./types.js";
 
 // ── Default models per provider ──────────────────────────────────────
 
-export const DEFAULT_MODELS: Record<ProviderType, string> = {
-  openai: "gpt-5.4",
-  anthropic: "claude-sonnet-4-6-20260320",
-  glm: "opus",
-  "openai-compatible": "gpt-5.4",
-};
+export { DEFAULT_MODELS };
 
 // ── Env var keys per provider ────────────────────────────────────────
 
@@ -124,19 +120,19 @@ export function resolveFromEnv(): MultiProviderConfig | null {
   if (process.env.OPENAI_API_KEY) {
     config.openai = {
       apiKey: process.env.OPENAI_API_KEY,
-      model: process.env.OPENAI_MODEL ?? "gpt-5.4",
+      model: process.env.OPENAI_MODEL ?? DEFAULT_MODELS.openai,
     };
   }
   if (process.env.ANTHROPIC_API_KEY) {
     config.anthropic = {
       apiKey: process.env.ANTHROPIC_API_KEY,
-      model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6-20260320",
+      model: process.env.ANTHROPIC_MODEL ?? DEFAULT_MODELS.anthropic,
     };
   }
   if (process.env.GLM_API_KEY) {
     config.glm = {
       apiKey: process.env.GLM_API_KEY,
-      model: process.env.GLM_MODEL ?? "opus",
+      model: process.env.GLM_MODEL ?? DEFAULT_MODELS.glm,
     };
   }
   const compatApiKey = process.env.OPENAI_COMPAT_API_KEY || process.env.ZCLAW_API_KEY;
@@ -151,7 +147,7 @@ export function resolveFromEnv(): MultiProviderConfig | null {
     config["openai-compatible"] = {
       apiKey: compatApiKey,
       baseUrl: compatBaseUrl,
-      model: process.env.OPENAI_COMPAT_MODEL ?? process.env.LLM_MODEL ?? process.env.ZCLAW_MODEL ?? "gpt-5.4",
+      model: process.env.OPENAI_COMPAT_MODEL ?? process.env.LLM_MODEL ?? process.env.ZCLAW_MODEL ?? DEFAULT_MODELS['openai-compatible'],
     };
   }
 

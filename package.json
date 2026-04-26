@@ -8,11 +8,7 @@
       "import": "./dist/adapters/sdk/index.js",
       "types": "./dist/adapters/sdk/index.d.ts"
     },
-    "./react": {
-      "import": "./dist/adapters/sdk/react.js",
-      "types": "./dist/adapters/sdk/react.d.ts"
-    },
-    "./server": {
+"./server": {
       "import": "./dist/adapters/server/index.js",
       "types": "./dist/adapters/server/index.d.ts"
     }

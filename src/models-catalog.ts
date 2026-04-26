@@ -30,3 +30,14 @@ export const MODEL_CATALOG: Record<ProviderType, ModelEntry[]> = {
 };
 
 export const CUSTOM_MODEL_VALUE = '__custom__';
+
+/**
+ * Default model ID for each provider.
+ * Single source of truth — all other files import from here.
+ */
+export const DEFAULT_MODELS: Record<ProviderType, string> = {
+  openai: 'gpt-5.4',
+  anthropic: 'claude-sonnet-4-6-20260320',
+  glm: 'opus',
+  'openai-compatible': 'gpt-5.4',
+};
