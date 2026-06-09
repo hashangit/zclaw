@@ -156,12 +156,16 @@ await next();
 
 ### What Happens When Middleware Throws
 
-**File:** `src/core/agent-loop.ts:146-160`
+**File:** `src/core/agent-loop.ts:146-165`
 
-If ANY middleware throws, the loop **never runs**. The error is caught and returned as a structured result — it's not a crash:
+If ANY middleware throws, the loop **never runs**. The error is caught and returned as a structured result — it's not a crash. Since v0.2.2, middleware errors are also logged to `console.error` for audit trail:
 
 ```ts
 catch (err) {
+  // Log the error for audit trail even though middleware chain was interrupted
+  console.error(`[middleware] request ${ctx.requestId} failed after ${Date.now() - ctx.startedAt}ms:`,
+    err instanceof Error ? err.message : String(err));
+
   return {
     messages,
     steps: [],
@@ -289,6 +293,22 @@ await hooks.onError(zclawErr);
 
 This is defined in `HookExecutor` but **never called inside the loop**. The adapter calls it after getting the result back. This is an adapter-level hook, not a loop-level one.
 
+### Provider Factory Restore
+
+**File:** `src/core/agent-loop.ts:220-428`
+
+When a skill switches the active provider via `switchProvider()`, the original provider is restored after each loop step. As of v0.2.2, this restore runs in a `finally` block, so it executes on **every exit path** — including text-only completion, errors, and aborts — preventing provider state from leaking into subsequent agent runs.
+
+```ts
+for (let step = 0; step < maxSteps; step++) {
+  try {
+    // ... loop body ...
+  } finally {
+    if (providerFactory) providerFactory.restore();
+  }
+}
+```
+
 ### What Makes Hooks Special: The Safety Wrapper
 
 **File:** `src/core/hooks.ts:43-53`
@@ -386,6 +406,10 @@ SessionData = {
 ```
 
 When `save()` is called, it **merges** with existing data — it preserves `createdAt` from the existing file and updates `updatedAt` to now. Repeated saves don't destroy the original creation timestamp.
+
+::: tip Atomic writes (v0.2.2+)
+`FilePersistenceBackend.save()` writes to a temporary file first, then renames it to the target path. This ensures a crash mid-write never leaves a corrupt session file on disk.
+:::
 
 ---
 

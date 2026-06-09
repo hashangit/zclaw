@@ -229,6 +229,8 @@ export interface AgentResponse {
  * apiKeyHash) flows through the `metadata` field on `SessionData`.
  */
 export interface PersistenceBackend {
+  /** Brand discriminator to distinguish from SessionStore */
+  __persistenceBackend: true;
   save(id: string, data: SessionData): Promise<void>;
   load(id: string): Promise<SessionData | null>;
   delete(id: string): Promise<void>;

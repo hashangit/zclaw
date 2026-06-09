@@ -46,25 +46,23 @@ import type { Middleware } from "../../core/middleware.js";
  * If the object already has the `PersistenceBackend` signature, it passes through.
  */
 function wrapAsPersistenceBackend(store: SessionStore | PersistenceBackend): PersistenceBackend {
-  // If it already matches PersistenceBackend (save takes SessionData), cast directly
-  if ("save" in store) {
-    // Heuristic: if save.length >= 2, assume it's either shape.
-    // We wrap both to ensure SessionData is passed correctly.
-    const s = store as SessionStore;
-    return {
-      save: async (id, data) => {
-        await s.save(id, data.messages);
-      },
-      load: async (id) => {
-        const messages = await s.load(id);
-        if (!messages) return null;
-        return { id, messages, createdAt: Date.now(), updatedAt: Date.now() };
-      },
-      delete: s.delete.bind(s),
-      list: s.list.bind(s),
-    };
+  if ("__persistenceBackend" in store && store.__persistenceBackend === true) {
+    return store as PersistenceBackend;
   }
-  return store as PersistenceBackend;
+  const s = store as SessionStore;
+  return {
+    __persistenceBackend: true as const,
+    save: async (id, data) => {
+      await s.save(id, data.messages);
+    },
+    load: async (id) => {
+      const messages = await s.load(id);
+      if (!messages) return null;
+      return { id, messages, createdAt: Date.now(), updatedAt: Date.now() };
+    },
+    delete: s.delete.bind(s),
+    list: s.list.bind(s),
+  };
 }
 
 // ── createAgent ──────────────────────────────────────────────────────────
@@ -98,7 +96,22 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
   // State
   const messages: Message[] = [];
   const sessionId = generateId();
-  let abortController = new AbortController();
+  let activeAbortController: AbortController = new AbortController();
+
+  // Concurrency guard — only one chat/chatStream at a time
+  let lock: Promise<void> = Promise.resolve();
+  let releaseLock: (() => void) | null = null;
+
+  function acquire(): Promise<void> {
+    const prev = lock;
+    lock = new Promise<void>((r) => { releaseLock = r; });
+    return prev;
+  }
+
+  function release(): void {
+    releaseLock?.();
+    releaseLock = null;
+  }
 
   // Cumulative usage
   const cumulativeUsage: CumulativeUsage = {
@@ -156,8 +169,10 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
   // ── chat() ──────────────────────────────────────────────────────────────
 
   async function chat(userMessage: string): Promise<AgentResponse> {
+    await acquire();
+    try {
     // Reset abort controller for this call
-    abortController = new AbortController();
+    activeAbortController = new AbortController();
 
     // Add user message
     messages.push({
@@ -177,7 +192,7 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
       systemPrompt: systemPrompt,
       maxSteps,
       hooks: hookExecutor,
-      signal: abortController.signal,
+      signal: activeAbortController.signal,
       config: opts.config,
       metadata: opts.metadata,
       middleware: opts.middleware,
@@ -205,6 +220,9 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
       toolCalls: result.toolCalls,
       usage: result.usage,
     };
+    } finally {
+      release();
+    }
   }
 
   // ── chatStream() ────────────────────────────────────────────────────────
@@ -213,7 +231,10 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
     message: string,
     streamOptions?: StreamTextOptions,
   ): Promise<StreamTextResult> {
+    await acquire();
+    try {
     const streamAbort = new AbortController();
+    activeAbortController = streamAbort;
     const mergedHooks = {
       ...opts.hooks,
       ...streamOptions,
@@ -233,7 +254,7 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
     // Stream manager handles queues, async iterables, and SSE
     const stream = new StreamManager();
 
-    // Run the loop in the background
+    // Run the loop in the background — lock released in finally when done
     (async () => {
       try {
         const result = await runAgentLoop({
@@ -299,6 +320,7 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
       } finally {
         stream.complete();
         await persistMessages();
+        release();
       }
     })();
 
@@ -312,6 +334,10 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
       toResponse: () => stream.toResponse(),
       toSSEStream: () => stream.toSSEStream(),
     };
+    } catch (_err) {
+      release();
+      throw _err;
+    }
   }
 
   // ── switchProvider() ────────────────────────────────────────────────────
@@ -354,7 +380,7 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
   // ── abort() ─────────────────────────────────────────────────────────────
 
   function abort(): void {
-    abortController.abort();
+    activeAbortController.abort();
   }
 
   // ── clear() ─────────────────────────────────────────────────────────────

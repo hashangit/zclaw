@@ -7,19 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.2] - 2026-06-10
+
+This release fixes five bugs found during a holistic system audit — two that could silently lose data under real workloads, one that broke SSE streaming order, one that left provider state corrupted after skill execution, and one that made `agent.abort()` a no-op during streaming. Session files are now written atomically, and a brand discriminator on `PersistenceBackend` stops metadata from being stripped when custom backends are passed to `createAgent()`.
+
+### Fixed
+
+- **SSE events arrived out of order** (`stream-manager.ts`): `toSSEStream()` drained the text queue completely before touching the step queue, so consumers saw all text deltas first, then all tool events — even when tools actually ran between text chunks. Added a unified `eventQueue` that preserves the real interleaved order. Text and step streams still work independently for non-SSE consumers.
+- **`agent.abort()` did nothing during `chatStream()`** (`sdk/agent.ts`): `chatStream()` created its own local `AbortController`, but `agent.abort()` still called `.abort()` on a stale closure variable. Now tracks a single `activeAbortController` that both `chat()` and `chatStream()` assign before starting the loop.
+- **`PersistenceBackend` instances lost metadata on save** (`sdk/agent.ts`, `types.ts`, `session-store.ts`): `wrapAsPersistenceBackend()` couldn't tell `SessionStore` from `PersistenceBackend` — both have a `save` method, so it always wrapped, calling `.save(id, data.messages)` and throwing away `createdAt`, `provider`, `model`, and custom `metadata`. Added a `__persistenceBackend` brand field to the interface and both built-in backends; the wrapper now passes through branded instances untouched. **Breaking**: third-party `PersistenceBackend` implementations must add `readonly __persistenceBackend = true as const`.
+- **Skill provider switching leaked state after loop exit** (`agent-loop.ts`): `providerFactory.restore()` was only called inside the tool-calls block. On text-only completion, errors, or aborts, the factory stayed in a switched state — the next agent run would start with the wrong provider. Wrapped the entire loop body in `try/finally` so `restore()` runs on every exit path.
+- **Concurrent `chat()`/`chatStream()` calls corrupted the message history** (`sdk/agent.ts`): `chatStream()` runs the agent loop in a background IIFE and returns immediately. Nothing prevented a second call from starting while the first was still mutating the shared `messages` array — no lock, no guard. Added a promise-based `acquire()`/`release()` lock that serializes all chat operations. A second call blocks until the first completes.
+- **Session files were not written atomically** (`session-store.ts`): `FilePersistenceBackend.save()` used a bare `fs.writeFile()` — a crash mid-write left a corrupt JSON file. Now writes to a temp file first, then renames to the target path, matching the atomic pattern already used by `SettingsManager`.
+- **Middleware errors left no audit trail** (`agent-loop.ts`): When outer middleware (auth, rate-limit) threw, the error was caught and returned as a structured result, but nothing was logged. Added a `console.error` in the middleware catch block so rejected requests show up in server logs.
+
 ### Changed
 
-- Redesigned `/settings` interactive mode into a 3-level drill-down wizard with bordered ASCII headers and mini-forms
-- Reorganized settings categories from 6 to 5: Providers & Models, Permissions & Safety, Tools & Integrations, Notifications, Skills
-- `/settings` with no arguments now launches the wizard (was a plain list)
-- Removed `/settings edit` and `/settings wizard` subcommands
+- Redesigned `/settings` interactive mode into a 3-level drill-down wizard with bordered ASCII headers and mini-forms.
+- Reorganized settings categories from 6 to 5: Providers & Models, Permissions & Safety, Tools & Integrations, Notifications, Skills.
+- `/settings` with no arguments now launches the wizard (was a plain list).
+- Removed `/settings edit` and `/settings wizard` subcommands.
+- All 12 built-in tools now carry a `risk` field (`safe`, `edit`, `communications`, or `destructive`).
+- `--headless` flag replaces the binary `ZCLAW_SHELL_APPROVE` approval mechanism.
+- Unknown and custom tools default to `destructive` risk category, requiring approval in all modes except `permissive`.
+- `ToolModule` interface now includes optional `risk` field.
+- `permissionMode` option removed from `AgentCreateOptions` (replaced by `permissionLevel`).
 
 ### Added
 
-- `/setup` slash command to access the setup wizard directly
-- Bordered mini-form with type-appropriate prompts (password masking, enum lists, boolean confirms)
-- Env var override warnings in the setting editor
-- Number field validation with min/max constraints
+- `/setup` slash command to access the setup wizard directly.
+- Bordered mini-form with type-appropriate prompts (password masking, enum lists, boolean confirms).
+- Env var override warnings in the setting editor.
+- Number field validation with min/max constraints.
 - **Permission Levels System**: 3-tier permission matrix (strict/moderate/permissive) with 4 tool risk categories (safe/edit/communications/destructive) controlling which tools auto-execute vs. require human approval.
 - CLI flags: `--headless`, `--strict`, `--moderate`, `--yolo` for controlling tool approval behavior.
 - SDK: `permissionLevel` option on `GenerateTextOptions`, `StreamTextOptions`, and `AgentCreateOptions`.
@@ -36,19 +55,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Server REST endpoints: `GET/PATCH /v1/settings`, `GET /v1/settings/schema`, `POST/PATCH/DELETE /v1/providers`.
 - Server WebSocket message types for settings get/update/change broadcast.
 - 58 new tests (30 unit + 28 integration) covering schema, manager, validation, persistence, events, and secret masking.
-
-### Fixed
-
-- Boolean settings can now be set to `false` through the wizard
-- Wizard exits cleanly on Ctrl+C at any level
-
-### Changed
-
-- All 12 built-in tools now carry a `risk` field (`safe`, `edit`, `communications`, or `destructive`).
-- `--headless` flag replaces the binary `ZCLAW_SHELL_APPROVE` approval mechanism.
-- Unknown and custom tools default to `destructive` risk category, requiring approval in all modes except `permissive`.
-- `ToolModule` interface now includes optional `risk` field.
-- `permissionMode` option removed from `AgentCreateOptions` (replaced by `permissionLevel`).
 
 ### Security
 
@@ -97,4 +103,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Monolithic `src/index.ts` entry point (replaced by modular architecture).
 
+[v0.2.2]: https://github.com/hashangit/zclaw/compare/v0.2.1...v0.2.2
 [v0.2.0]: https://github.com/hashangit/zclaw/compare/v0.1.0...v0.2.0

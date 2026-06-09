@@ -210,5 +210,6 @@ Use `reconnect` when you know the last message you received and only need the de
 
 - Sessions are persisted to disk after every message
 - The server loads sessions from disk on demand (lazy loading)
+- **Writes are atomic** (v0.2.2+): data is written to a temporary file first, then renamed into place. A crash mid-write never leaves a corrupt session file.
 - Persistence is best-effort -- write failures do not crash the server
 - In-memory sessions are rebuilt from disk on server restart

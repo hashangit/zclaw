@@ -25,17 +25,20 @@ await agent.chat("I am working on a React project");
 // History is loaded automatically.
 ```
 
-## SessionStore interface
+## PersistenceBackend interface
 
-All session stores implement the same interface:
+All persistence backends implement the same interface:
 
 ```typescript
-interface SessionStore {
-  /** Save messages for a session. Creates or updates. */
-  save(sessionId: string, messages: Message[]): Promise<void>;
+interface PersistenceBackend {
+  /** Brand discriminator — distinguishes from SessionStore. */
+  readonly __persistenceBackend: true;
 
-  /** Load messages for a session. Returns null if not found. */
-  load(sessionId: string): Promise<Message[] | null>;
+  /** Save session data (messages, metadata, timestamps). Creates or updates. */
+  save(sessionId: string, data: SessionData): Promise<void>;
+
+  /** Load full session data. Returns null if not found. */
+  load(sessionId: string): Promise<SessionData | null>;
 
   /** Delete a session. */
   delete(sessionId: string): Promise<void>;
@@ -45,22 +48,26 @@ interface SessionStore {
 }
 ```
 
+::: warning Breaking change in v0.2.2
+Third-party `PersistenceBackend` implementations must now include `readonly __persistenceBackend = true as const`. This brand field prevents the SDK from accidentally wrapping a `PersistenceBackend` and stripping metadata (`createdAt`, `provider`, `model`, custom `metadata`).
+:::
+
 ## Built-in stores
 
 ZClaw ships with two session store implementations.
 
-### FileSessionStore
+### FilePersistenceBackend
 
-File-backed storage. Each session is a JSON file in a directory.
+File-backed storage. Each session is a JSON file in a directory. Writes are **atomic** — data is written to a temporary file first, then renamed into place, so a crash mid-write never leaves a corrupt session file.
 
 ```typescript
-import { createSessionStore } from "zclaw-core";
+import { createPersistenceBackend } from "zclaw-core";
 
 // Default: stores in ~/.zclaw/sessions/
-const store = createSessionStore();
+const store = createPersistenceBackend({ type: "file" });
 
 // Custom directory
-const customStore = createSessionStore("./data/my-sessions");
+const customStore = createPersistenceBackend({ type: "file", path: "./data/my-sessions" });
 ```
 
 | Property         | Value                                      |
@@ -69,6 +76,7 @@ const customStore = createSessionStore("./data/my-sessions");
 | Default path     | `~/.zclaw/sessions/`                       |
 | File naming      | `{sessionId}.json`                         |
 | Auto-creates dir | Yes                                        |
+| Write safety     | Atomic (tmp + rename)                      |
 
 Each session file contains a `SessionData` object:
 
@@ -80,6 +88,7 @@ interface SessionData {
   updatedAt: number;
   provider?: ProviderType;
   model?: string;
+  metadata?: Record<string, unknown>;
 }
 ```
 
@@ -87,14 +96,14 @@ interface SessionData {
 Session IDs must contain only alphanumeric characters and dashes (`[a-zA-Z0-9-]+`). Invalid IDs throw an error on save.
 :::
 
-### MemorySessionStore
+### MemoryPersistenceBackend
 
 In-memory storage backed by a `Map`. Sessions are lost when the process exits.
 
 ```typescript
-import { createMemoryStore } from "zclaw-core";
+import { createPersistenceBackend } from "zclaw-core";
 
-const store = createMemoryStore();
+const store = createPersistenceBackend({ type: "memory" });
 
 // Useful for testing
 const agent = await createAgent({
@@ -112,8 +121,8 @@ const agent = await createAgent({
 
 | Use case                      | Recommended store    |
 |-------------------------------|----------------------|
-| Production, long-lived agents | `FileSessionStore`   |
-| Testing                       | `MemorySessionStore` |
+| Production, long-lived agents | `FilePersistenceBackend`   |
+| Testing                       | `MemoryPersistenceBackend` |
 | Distributed deployment        | Custom Redis store   |
 | Serverless functions          | Custom database store|
 
@@ -121,7 +130,7 @@ const agent = await createAgent({
 
 ### File path (string)
 
-Pass a directory path as a string. ZClaw creates a `FileSessionStore` automatically:
+Pass a directory path as a string. ZClaw creates a `FilePersistenceBackend` automatically:
 
 ```typescript
 const agent = await createAgent({
@@ -129,14 +138,14 @@ const agent = await createAgent({
 });
 ```
 
-### SessionStore instance
+### PersistenceBackend instance
 
-Pass any `SessionStore` implementation:
+Pass any `PersistenceBackend` implementation:
 
 ```typescript
-import { createSessionStore } from "zclaw-core";
+import { createPersistenceBackend } from "zclaw-core";
 
-const store = createSessionStore("./data/sessions");
+const store = createPersistenceBackend({ type: "file", path: "./data/sessions" });
 
 const agent = await createAgent({
   persist: store,
@@ -211,15 +220,15 @@ ZClaw enforces the following session limits to prevent resource exhaustion:
 | Auto-cleanup interval  | 5 minutes  | Background cleanup runs every 5 minutes            |
 
 ::: warning
-These limits apply to the Server adapter's `ServerSessionManager`, which manages sessions for API consumers. The core SDK's `FileSessionStore` and `MemorySessionStore` have NO built-in TTL, inactivity timeout, or automatic cleanup. For direct SDK usage, implement your own cleanup logic for production deployments.
+These limits apply to the Server adapter's `ServerSessionManager`, which manages sessions for API consumers. The core SDK's `FilePersistenceBackend` and `MemoryPersistenceBackend` have NO built-in TTL, inactivity timeout, or automatic cleanup. For direct SDK usage, implement your own cleanup logic for production deployments.
 :::
 
 ### Manual cleanup
 
 ```typescript
-import { createSessionStore } from "zclaw-core";
+import { createPersistenceBackend } from "zclaw-core";
 
-const store = createSessionStore("./sessions");
+const store = createPersistenceBackend({ type: "file", path: "./sessions" });
 
 // List all sessions
 const sessions = await store.list();
@@ -227,11 +236,10 @@ const sessions = await store.list();
 // Delete expired sessions manually
 const ONE_DAY = 24 * 60 * 60 * 1000;
 for (const id of sessions) {
-  const messages = await store.load(id);
-  if (!messages) continue;
+  const data = await store.load(id);
+  if (!data) continue;
 
-  const lastMessage = messages[messages.length - 1];
-  if (Date.now() - lastMessage.timestamp > ONE_DAY) {
+  if (Date.now() - data.updatedAt > ONE_DAY) {
     await store.delete(id);
     console.log(`Cleaned up session: ${id}`);
   }
@@ -240,36 +248,31 @@ for (const id of sessions) {
 
 ## Custom session store
 
-Implement the `SessionStore` interface to use any backend.
+Implement the `PersistenceBackend` interface to use any backend.
 
 ### Redis session store
 
 ```typescript
-import { createAgent, type SessionStore, type Message } from "zclaw-core";
+import { createAgent, type PersistenceBackend, type SessionData } from "zclaw-core";
 import { createClient } from "redis";
 
 const redis = createClient({ url: "redis://localhost:6379" });
 await redis.connect();
 
-const redisStore: SessionStore = {
-  async save(sessionId: string, messages: Message[]): Promise<void> {
+const redisStore: PersistenceBackend = {
+  readonly __persistenceBackend: true as const,
+
+  async save(sessionId: string, data: SessionData): Promise<void> {
     const key = `zclaw:session:${sessionId}`;
-    const data = {
-      id: sessionId,
-      messages,
-      createdAt: await this.getCreatedAt(key),
-      updatedAt: Date.now(),
-    };
     await redis.set(key, JSON.stringify(data), {
       EX: 86400, // 24-hour TTL
     });
   },
 
-  async load(sessionId: string): Promise<Message[] | null> {
+  async load(sessionId: string): Promise<SessionData | null> {
     const raw = await redis.get(`zclaw:session:${sessionId}`);
     if (!raw) return null;
-    const data = JSON.parse(raw);
-    return data.messages;
+    return JSON.parse(raw);
   },
 
   async delete(sessionId: string): Promise<void> {
@@ -280,15 +283,6 @@ const redisStore: SessionStore = {
     const keys = await redis.keys("zclaw:session:*");
     return keys.map((k) => k.replace("zclaw:session:", ""));
   },
-
-  async getCreatedAt(key: string): Promise<number> {
-    const existing = await redis.get(key);
-    if (existing) {
-      const data = JSON.parse(existing);
-      return data.createdAt ?? Date.now();
-    }
-    return Date.now();
-  },
 };
 
 const agent = await createAgent({ persist: redisStore });
@@ -297,21 +291,23 @@ const agent = await createAgent({ persist: redisStore });
 ### Database session store
 
 ```typescript
-import { createAgent, type SessionStore, type Message } from "zclaw-core";
+import { createAgent, type PersistenceBackend, type SessionData } from "zclaw-core";
 
 // Example with a generic database client
-const dbStore: SessionStore = {
-  async save(sessionId: string, messages: Message[]): Promise<void> {
+const dbStore: PersistenceBackend = {
+  readonly __persistenceBackend: true as const,
+
+  async save(sessionId: string, data: SessionData): Promise<void> {
     await db.query(
       `INSERT INTO sessions (id, messages, updated_at)
        VALUES ($1, $2, NOW())
        ON CONFLICT (id) DO UPDATE
        SET messages = $2, updated_at = NOW()`,
-      [sessionId, JSON.stringify(messages)],
+      [sessionId, JSON.stringify(data.messages)],
     );
   },
 
-  async load(sessionId: string): Promise<Message[] | null> {
+  async load(sessionId: string): Promise<SessionData | null> {
     const row = await db.query(
       "SELECT messages FROM sessions WHERE id = $1",
       [sessionId],
@@ -337,24 +333,29 @@ const agent = await createAgent({ persist: dbStore });
 For custom stores, implement TTL cleanup in your backend (Redis EX, database cron job, etc.) to prevent unbounded storage growth.
 :::
 
-## SessionStore factories
+## PersistenceBackend factories
 
-| Function               | Signature                           | Returns              |
-|-------------------------|-------------------------------------|----------------------|
-| `createSessionStore()`  | `(path?: string) => SessionStore`   | `FileSessionStore`   |
-| `createMemoryStore()`   | `() => SessionStore`                | `MemorySessionStore` |
+| Function                       | Signature                                        | Returns                     |
+|--------------------------------|--------------------------------------------------|-----------------------------|
+| `createPersistenceBackend()`   | `(config: PersistenceConfig) => PersistenceBackend` | `FilePersistenceBackend` or `MemoryPersistenceBackend` |
+| `createSessionStore()`         | `(path?: string) => PersistenceBackend`          | `FilePersistenceBackend` (legacy, deprecated) |
+| `createMemoryStore()`          | `() => PersistenceBackend`                       | `MemoryPersistenceBackend` (legacy, deprecated) |
 
 ```typescript
-import { createSessionStore, createMemoryStore } from "zclaw-core";
+import { createPersistenceBackend } from "zclaw-core";
 
 // Production: file-based
-const fileStore = createSessionStore("./data/sessions");
+const fileStore = createPersistenceBackend({ type: "file", path: "./data/sessions" });
 
 // Testing: in-memory
-const testStore = createMemoryStore();
+const testStore = createPersistenceBackend({ type: "memory" });
 ```
+
+::: tip
+`createSessionStore()` and `createMemoryStore()` are **deprecated** aliases. Use `createPersistenceBackend()` for new code.
+:::
 
 ## Related APIs
 
 - [createAgent()](/sdk/create-agent) -- Stateful agent with `persist` option
-- [Types](/sdk/types) -- Full TypeScript type reference including `SessionStore` and `SessionData`
+- [Types](/sdk/types) -- Full TypeScript type reference including `PersistenceBackend` and `SessionData`

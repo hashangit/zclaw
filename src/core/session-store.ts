@@ -43,6 +43,7 @@ function defaultSessionPath(): string {
  * at `{basePath}/{sessionId}.json`.
  */
 export class FilePersistenceBackend implements PersistenceBackend {
+  readonly __persistenceBackend = true as const;
   private basePath: string;
 
   constructor(basePath: string) {
@@ -84,7 +85,17 @@ export class FilePersistenceBackend implements PersistenceBackend {
           metadata: data.metadata,
         };
 
-    await fs.writeFile(this.filePath(id), JSON.stringify(full, null, 2), "utf-8");
+    const filePath = this.filePath(id);
+    const tmpPath = filePath + ".tmp." + Date.now();
+
+    try {
+      await fs.writeFile(tmpPath, JSON.stringify(full, null, 2), "utf-8");
+      await fs.rename(tmpPath, filePath);
+    } catch (err) {
+      // Clean up orphaned temp file on rename failure (e.g. cross-device move)
+      try { await fs.unlink(tmpPath); } catch { /* best effort */ }
+      throw err;
+    }
   }
 
   async load(id: string): Promise<SessionData | null> {
@@ -124,6 +135,7 @@ export class FilePersistenceBackend implements PersistenceBackend {
  * In-memory persistence backend backed by a Map. Useful for testing.
  */
 export class MemoryPersistenceBackend implements PersistenceBackend {
+  readonly __persistenceBackend = true as const;
   private store = new Map<string, SessionData>();
 
   async save(id: string, data: SessionData): Promise<void> {

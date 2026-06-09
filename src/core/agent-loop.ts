@@ -144,7 +144,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       },
     };
   } catch (err) {
-    // Middleware threw (e.g., auth rejection, rate limit)
+    // Log the error for audit trail even though middleware chain was interrupted
+    console.error(`[middleware] request ${ctx.requestId} failed after ${Date.now() - ctx.startedAt}ms:`,
+      err instanceof Error ? err.message : String(err));
+
     return {
       messages,
       steps: [],
@@ -217,6 +220,7 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
   let hitMaxSteps = false;
 
   for (let step = 0; step < maxSteps; step++) {
+    try {
     // Check abort
     if (signal?.aborted) {
       finishReason = "aborted";
@@ -409,11 +413,6 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
 
       if (finishReason === "aborted") break;
 
-      // Restore provider after tool execution if factory was used
-      if (providerFactory) {
-        providerFactory.restore();
-      }
-
       // Continue the loop to get the next response
       // Mark if this was the last allowed iteration
       if (step + 1 >= maxSteps) {
@@ -425,6 +424,9 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
     // No tool calls — we're done
     finishReason = "stop";
     break;
+    } finally {
+      if (providerFactory) providerFactory.restore();
+    }
   }
 
   // The loop ran all iterations with tool calls on the last one

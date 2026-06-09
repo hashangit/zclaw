@@ -1,6 +1,6 @@
 # ZClaw Settings Catalog
 
-**Version:** 0.2.1
+**Version:** 0.2.2
 **Last Updated:** 2025-04-15
 **Status:** Authoritative Reference
 

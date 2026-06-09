@@ -21,17 +21,24 @@ function sseLine(event: string, data: unknown): string {
 // ── StreamManager ─────────────────────────────────────────────────────────
 
 export class StreamManager {
-  // Queues
+  // Queues for individual consumers
   private textQueue: string[] = [];
   private stepQueue: StepResult[] = [];
+
+  // Unified event queue preserving interleaved insertion order for SSE
+  private eventQueue: Array<
+    { type: "text"; delta: string } | { type: "step"; step: StepResult }
+  > = [];
 
   // Done flags
   private textDone = false;
   private stepsDone = false;
+  private eventsDone = false;
 
   // Resolvers for backpressure
   private textResolver: (() => void) | null = null;
   private stepResolver: (() => void) | null = null;
+  private eventResolver: (() => void) | null = null;
 
   // Result promises
   private textResolve!: (text: string) => void;
@@ -53,18 +60,28 @@ export class StreamManager {
   /** Enqueue a text delta and wake any waiting consumer. */
   enqueueText(delta: string): void {
     this.textQueue.push(delta);
+    this.eventQueue.push({ type: "text", delta });
     if (this.textResolver) {
       this.textResolver();
       this.textResolver = null;
+    }
+    if (this.eventResolver) {
+      this.eventResolver();
+      this.eventResolver = null;
     }
   }
 
   /** Enqueue a step result and wake any waiting consumer. */
   enqueueStep(step: StepResult): void {
     this.stepQueue.push(step);
+    this.eventQueue.push({ type: "step", step });
     if (this.stepResolver) {
       this.stepResolver();
       this.stepResolver = null;
+    }
+    if (this.eventResolver) {
+      this.eventResolver();
+      this.eventResolver = null;
     }
   }
 
@@ -87,6 +104,7 @@ export class StreamManager {
   complete(): void {
     this.textDone = true;
     this.stepsDone = true;
+    this.eventsDone = true;
     if (this.textResolver) {
       this.textResolver();
       this.textResolver = null;
@@ -94,6 +112,10 @@ export class StreamManager {
     if (this.stepResolver) {
       this.stepResolver();
       this.stepResolver = null;
+    }
+    if (this.eventResolver) {
+      this.eventResolver();
+      this.eventResolver = null;
     }
   }
 
@@ -155,29 +177,31 @@ export class StreamManager {
     return new ReadableStream({
       async start(controller) {
         try {
-          // Pipe text deltas
-          for await (const delta of self.textStream) {
-            controller.enqueue(encoder.encode(sseLine("text", { delta })));
-          }
+          // Drain unified event queue preserving interleaved order
+          while (true) {
+            while (self.eventQueue.length === 0 && !self.eventsDone) {
+              await new Promise<void>((r) => { self.eventResolver = r; });
+            }
+            if (self.eventQueue.length === 0) break;
 
-          // Pipe steps for tool events
-          for await (const step of self.stepsStream) {
-            if (step.type === "tool_call" && step.toolCall) {
+            const event = self.eventQueue.shift()!;
+            if (event.type === "text") {
+              controller.enqueue(encoder.encode(sseLine("text", { delta: event.delta })));
+            } else if (event.type === "step" && event.step.type === "tool_call" && event.step.toolCall) {
               controller.enqueue(
                 encoder.encode(
                   sseLine("tool_call", {
-                    callId: step.toolCall.id,
-                    name: step.toolCall.name,
-                    args: step.toolCall.args,
+                    callId: event.step.toolCall.id,
+                    name: event.step.toolCall.name,
+                    args: event.step.toolCall.args,
                   }),
                 ),
               );
-
               controller.enqueue(
                 encoder.encode(
                   sseLine("tool_result", {
-                    callId: step.toolCall.id,
-                    output: step.toolCall.result,
+                    callId: event.step.toolCall.id,
+                    output: event.step.toolCall.result,
                     success: true,
                   }),
                 ),

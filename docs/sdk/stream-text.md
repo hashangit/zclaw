@@ -172,6 +172,10 @@ export default app;
 
 ::: info
 `toResponse()` sets the standard SSE headers (`Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`) automatically.
+
+::: tip Interleaved events
+As of v0.2.2, the SSE stream emits tool events inline with text deltas in their real execution order, rather than all text first followed by all tool events. This matches what the `textStream` and `steps` async iterables produce when consumed together.
+:::
 :::
 
 ### Raw SSE stream
@@ -205,9 +209,16 @@ data: {"callId":"web_search","name":"web_search","args":{"query":"..."}}
 event: tool_result
 data: {"callId":"web_search","output":"...","success":true}
 
+event: text
+data: {"delta":"Here are the results..."}
+
 event: done
 data: {"usage":{"totalTokens":470,"cost":0},"finishReason":"stop"}
 ```
+
+::: info Interleaved ordering (v0.2.2+)
+Text deltas and tool events are emitted in their **actual execution order**. Previously, `toSSEStream()` drained all text deltas first, then all tool events — even when tools ran between text chunks. As of v0.2.2, the event queue preserves the real interleaved order, so consumers see text and tool events in the sequence they actually occurred.
+:::
 
 ### Abort mid-execution
 

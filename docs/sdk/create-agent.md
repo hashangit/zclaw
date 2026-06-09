@@ -52,8 +52,7 @@ console.log(agent.getUsage());
 | `tools`         | `string[] \| UserToolDefinition[]`       | All built-in               | Tools available to the agent |
 | `skills`        | `string[]`                               | *(none)*                   | Skill names to activate |
 | `maxSteps`      | `number`                                 | `10`                       | Maximum agent loop iterations per call |
-| `permissionMode`| `"auto" \| "confirm"`                    | `"auto"`                   | *(Not yet implemented)* Whether tools execute automatically or require confirmation |
-| `persist`       | `string \| PersistenceBackend \| PersistenceConfig` | *(none)*          | Directory path, backend instance, or config object (e.g. `{ type: "memory" }`) |
+| `persist`       | `string \| PersistenceBackend \| PersistenceConfig` | *(none)*          | Directory path, backend instance, or config object (e.g. `{ type: "memory" }`). File persistence writes are **atomic** (tmp + rename). |
 | `hooks`         | `Hooks`                                  | *(none)*                   | Lifecycle callbacks |
 | `middleware`    | `Middleware[]`                            | *(none)*                   | Request/response pipeline functions (auth, logging, rate limiting, etc.) |
 | `metadata`     | `Record<string, unknown>`                 | `{}`                       | Adapter-specific metadata passed to middleware via `PipelineContext` |
@@ -72,7 +71,7 @@ The object returned by `createAgent()`:
 | `switchProvider` | `(provider: ProviderType, model?: string) => Promise<void>` | Switch the LLM provider (and optionally model) mid-conversation. |
 | `setSystemPrompt` | `(prompt: string) => void` | Update the system prompt. Replaces the existing system message in history. |
 | `setTools` | `(tools: string[]) => void` | Update the tool set available to the agent. |
-| `abort` | `() => void` | Abort the currently running `chat()` or `chatStream()` call. |
+| `abort` | `() => void` | Abort the currently running `chat()` or `chatStream()` call. Works correctly during streaming (v0.2.2+). |
 | `clear` | `() => void` | Clear conversation history. Keeps the system prompt. |
 | `getHistory` | `() => Message[]` | Return a copy of the full conversation history. |
 | `getUsage` | `() => CumulativeUsage` | Return cumulative token usage across all calls. |
@@ -231,8 +230,13 @@ const agent = await createAgent({
 
 #### Pass a backend instance directly
 
+::: warning Breaking change in v0.2.2
+Custom `PersistenceBackend` implementations must include `readonly __persistenceBackend = true as const`. Without this brand field, the SDK will wrap your backend and strip `createdAt`, `provider`, `model`, and `metadata` from saved data.
+:::
+
 ```typescript
 const myBackend: PersistenceBackend = {
+  readonly __persistenceBackend: true as const,
   async save(id, data) { /* custom logic */ },
   async load(id) { return null; },
   async delete(id) {},
@@ -279,6 +283,8 @@ try {
 
 ::: info
 `abort()` cancels the in-flight HTTP request to the LLM provider, not just the agent loop between steps. The `AbortSignal` propagates through to the underlying provider SDK (OpenAI, Anthropic, etc.), so network resources are released immediately.
+
+**Concurrency:** As of v0.2.2, `chat()` and `chatStream()` are serialized — a second call blocks until the first completes. This prevents concurrent mutations of the shared message history.
 :::
 
 ### Inspect history
@@ -304,6 +310,8 @@ console.log(agent.getHistory().length); // 1 (just the system prompt)
 
 ```typescript
 interface PersistenceBackend {
+  /** Brand discriminator — distinguishes from SessionStore */
+  readonly __persistenceBackend: true;
   save(sessionId: string, data: SessionData): Promise<void>;
   load(sessionId: string): Promise<SessionData | null>;
   delete(sessionId: string): Promise<void>;
