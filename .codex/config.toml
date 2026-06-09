@@ -1,0 +1,7 @@
+[mcp_servers.dual-graph]
+command = "/opt/homebrew/bin/mcp-remote"
+args = ["http://127.0.0.1:8080/mcp", "--allow-http"]
+
+[mcp_servers.tavily-remote-mcp]
+command = "/opt/homebrew/bin/mcp-remote"
+args = ["https://mcp.tavily.com/mcp/", "--allow-http"]
