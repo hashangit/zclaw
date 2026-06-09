@@ -1,7 +1,7 @@
 # ZClaw Gateway Integration — Design Spec
 
 **Date:** 2026-06-10
-**Status:** Approved
+**Status:** Approved (post-scrutiny revision)
 **Scope:** Add Universal API Hub to ZClaw as a first-class Infrastructure subsystem
 
 ---
@@ -18,14 +18,14 @@ The Gateway gives ZClaw the ability to act as an MCP (Model Context Protocol) cl
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Architecture layer | Infrastructure (alongside Providers, Tools, Skills) | All adapters get gateway automatically; single wiring point |
-| Credential storage | SettingsManager (no separate vault) | One source of truth for all secrets |
-| Target persistence | Settings-based (`~/.zclaw/setting.json`) | Uses existing config system |
-| Activation | Opt-out (always on unless `gateway.enabled: false`) | Agent can discover and use gateway from first run |
+| Credential storage | Dedicated JSON file via SettingsAdapter | SettingsManager's static SETTINGS_MAP rejects dynamic keys; dedicated adapter avoids schema collision |
+| Target persistence | Dedicated `~/.zclaw/gateway/targets.json` + `credentials.json` | Avoids impedance mismatch between structured target data and flat dot-key settings |
+| Activation | Settings-gated at startup (check `gateway.enabled` before registration) | Tools registered only if enabled. No runtime toggle — restart required |
 | Scoring | Keyword matching | Zero dependencies, fast, deterministic |
 | Injection budget | Top 3 tools per request | Conservative on context window |
 | Agent scope | Can add targets, cannot remove them | Self-service addition, human-gated removal |
 | Rate limiting | Existing `rateLimitMiddleware` | No duplicate implementation |
-| Dynamic tool execution | Metadata lookup bridge in agent-loop | ~15 lines, no architectural change |
+| Dynamic tool execution | Metadata lookup bridge in agent-loop | ~20 lines, no architectural change |
 
 ---
 
@@ -40,6 +40,7 @@ src/gateway/                        # Infrastructure layer subsystem
 ├── semantic-scorer.ts             # Keyword-based tool scoring
 ├── tool-factory.ts                # 10 proxy tools + getInjectableTools()
 ├── openapi-importer.ts            # OpenAPI spec fetch + parse + register
+├── settings-adapter.ts            # Bypass SettingsManager for dynamic key storage
 └── index.ts                       # Barrel: createGateway, initializeGateway, types
 
 src/core/middleware/
@@ -47,25 +48,29 @@ src/core/middleware/
 
 src/adapters/cli/commands/
 └── gateway.ts                     # /gateway slash command handlers
+
+src/adapters/server/
+└── rest-gateway.ts               # Gateway REST routes (extracted from rest.ts)
 ```
 
 ### Modified Files
 
 | File | Change |
 |------|--------|
-| `src/core/agent-loop.ts` | Add `executeToolOrInjected()` helper (~10 lines) + metadata merge in finalHandler (~5 lines) |
-| `src/core/settings-schema.ts` | Add `gateway.*` settings keys (~20 lines) |
-| `src/core/errors.ts` | Add `GatewayError` subclass (~10 lines) |
-| `src/adapters/server/rest.ts` | Add 10 gateway REST routes + handlers (~120 lines) |
-| `src/adapters/server/index.ts` | Initialize gateway at startup (~15 lines) |
+| `src/core/agent-loop.ts` | Rebuild options from `ctx` in finalHandler + add `executeToolOrInjected()` helper (~20 lines) |
+| `src/core/settings-schema.ts` | Add `SettingsCategory: "gateway"` + `gateway.enabled/semanticTopK/rateLimit/maxAuditLogs` keys (~25 lines) |
+| `src/core/errors.ts` | Add `GatewayError` subclass with configurable `retryable` (~12 lines) |
+| `src/adapters/server/rest.ts` | Delegate `/v1/gateway/*` routes to `rest-gateway.ts` (~10 lines) |
+| `src/adapters/server/index.ts` | Initialize gateway at startup + set `config.agentName` (~20 lines) |
 | `src/adapters/cli/repl.ts` | Register `/gateway` command (~5 lines) |
 | `src/adapters/sdk/index.ts` | Export gateway namespace (~10 lines) |
 
-### New Dependency
+### New Dependencies
 
 | Package | Purpose |
 |---------|---------|
 | `@modelcontextprotocol/sdk` | MCP client SDK (stdio + SSE transport, Client, transport classes) |
+| `js-yaml` | YAML parsing for OpenAPI specs (most real-world specs are YAML) |
 
 ---
 
@@ -81,7 +86,7 @@ export interface RestTarget {
   kind: 'rest';
   baseUrl: string;
   description: string;
-  auth: { type: AuthType; name?: string; settingsKey?: string };
+  auth: { type: AuthType; name?: string; credentialRef?: string };
   defaultHeaders: Record<string, string>;
   operations: Array<{ opId: string; method: string; path: string; summary: string }>;
   tags: string[];
@@ -95,7 +100,7 @@ export interface McpTarget {
   args?: string[];
   env?: Record<string, string>;
   url?: string;
-  auth?: { type: AuthType; name?: string; settingsKey?: string };
+  auth?: { type: AuthType; name?: string; credentialRef?: string };
   description: string;
   tags: string[];
   enabled: boolean;
@@ -129,7 +134,26 @@ export interface GatewayConfig {
 
 Gateway reuses ZClaw's existing `ToolModule` and `ToolDefinition` from `src/tools/interface.ts`. No duplicate type definitions.
 
-The `settingsKey` field replaces the proposed `credentialKey`. When the gateway needs a credential, it resolves via `settingsManager.get("gateway.credentials.<settingsKey>")`.
+### Credential References (`credentialRef`)
+
+Targets reference credentials by name via `credentialRef`. The gateway resolves them through `GatewaySettingsAdapter` (see Section 5). Example:
+
+```json
+// Target config
+{ "auth": { "type": "bearer", "credentialRef": "stripe_api_key" } }
+
+// Resolves to: gateway-settings.credentials["stripe_api_key"]
+```
+
+### MCP Target Environment Variables
+
+MCP target `env` values can reference credentials with the `credential:` prefix:
+
+```json
+{ "env": { "DB_PASSWORD": "credential:db_password" } }
+```
+
+Resolution: `gateway-settings.credentials["db_password"]` is looked up and substituted at connection time.
 
 ---
 
@@ -139,14 +163,14 @@ The `settingsKey` field replaces the proposed `credentialKey`. When the gateway 
 
 The `MCPGateway` class manages target lifecycle, MCP client connections, REST proxying, routing, and tool extraction.
 
-**Constructor:** Takes a `SettingsManager` instance (injected, not created internally).
+**Constructor:** Takes a `GatewaySettingsAdapter` instance (injected, not created internally).
 
 **Lifecycle:**
-- `initialize()` — Loads targets from settings, connects enabled MCP targets, discovers capabilities
-- `shutdown()` — Closes all MCP client connections
+- `initialize()` — Loads targets + credentials from storage, connects enabled MCP targets, discovers capabilities
+- `shutdown()` — Closes all MCP client connections, flushes state
 
 **Management plane (called by adapters):**
-- `registerTarget(name, target)` — Add target, persist to settings
+- `registerTarget(name, target)` — Add target, persist via settings adapter
 - `unregisterTarget(name)` — Remove target, close MCP client, admin-only
 - `toggleTarget(name, enabled)` — Enable/disable, admin-only
 - `getTargets()` — List all targets
@@ -154,11 +178,10 @@ The `MCPGateway` class manages target lifecycle, MCP client connections, REST pr
 
 **Credential resolution:**
 ```typescript
-private resolveCredential(settingsKey: string): string | undefined {
-  return this.settingsManager.get(`gateway.credentials.${settingsKey}`) as string | undefined;
+private resolveCredential(credentialRef: string): string | undefined {
+  return this.settings.getCredential(credentialRef);
 }
 ```
-No separate vault. Delegates to SettingsManager.
 
 **Execution plane:**
 - `callMcpTool(agent, target, tool, args)` — Connect to MCP server (cached), call tool, audit
@@ -168,7 +191,7 @@ No separate vault. Delegates to SettingsManager.
 - `getPrompt(agent, target, name, args)` — Get MCP prompt template
 
 **Semantic injection support:**
-- `getInjectableTools()` — Returns `ToolModule[]` for all tools from all enabled targets, with `target__toolName` naming to prevent collisions
+- `getInjectableTools()` — Returns `ToolModule[]` for all tools from all enabled targets. Each module has `risk: "communications"` set explicitly (not undefined). Uses `target__toolName` naming to prevent collisions.
 
 **Observability:**
 - `getAuditLogs(target?, limit?)` — Ring buffer of audit records
@@ -176,23 +199,68 @@ No separate vault. Delegates to SettingsManager.
 
 **MCP Client Lifecycle:**
 - `connectMcpClient(targetName, target)` — Creates `Client` with appropriate transport (stdio/SSE/HTTP)
-- Resolves `vault:` prefixed env vars via SettingsManager
+- Resolves `credential:` prefixed env vars via settings adapter
 - Auto-discovers capabilities on connect: `listTools()`, `listResources()`, `listPrompts()`
 - Caches clients by target name
+- **Reconnection:** On connection error, evicts the cached client. Next call to `callMcpTool` triggers a fresh `connectMcpClient`. No explicit health checking — lazy reconnection on failure.
 - Sampling support: `CreateMessageRequestSchema` handler delegates to `GatewayHooks.onSamplingRequest`
 
 **Removed from proposed design (consolidated):**
-- `GatewayVault` — replaced by SettingsManager
+- `GatewayVault` — replaced by `GatewaySettingsAdapter`
 - Internal rate limiting — replaced by existing `rateLimitMiddleware`
-- Self-managed file persistence — replaced by settings system
+- Self-managed file persistence — replaced by settings adapter
 
 ---
 
-## 5. Settings Schema
+## 5. Settings Adapter (Fixes Blockers 2 & 3)
+
+### `src/gateway/settings-adapter.ts`
+
+The existing `SettingsManager` has a static `SETTINGS_MAP` that rejects unknown dot-keys. Gateway needs dynamic key storage for targets, routes, and credentials. Rather than modifying `SettingsManager` internals, the gateway gets its own thin adapter.
+
+```typescript
+export class GatewaySettingsAdapter {
+  private targetsPath: string;
+  private credentialsPath: string;
+
+  constructor(storageDir: string) {
+    this.targetsPath = path.join(storageDir, 'gateway', 'targets.json');
+    this.credentialsPath = path.join(storageDir, 'gateway', 'credentials.json');
+  }
+
+  // Targets
+  async loadTargets(): Promise<Record<string, Target>>;
+  async saveTarget(name: string, target: Target): Promise<void>;
+  async deleteTarget(name: string): Promise<void>;
+
+  // Credentials
+  async loadCredentials(): Promise<Record<string, string>>;
+  async setCredential(key: string, value: string): Promise<void>;
+  async deleteCredential(key: string): Promise<void>;
+  getCredential(key: string): string | undefined; // in-memory sync access
+
+  // Routes
+  async loadRoutes(): Promise<Array<{ pattern: string; target: string; priority: number }>>;
+  async saveRoutes(routes: Array<{ pattern: string; target: string; priority: number }>): Promise<void>;
+}
+```
+
+**Storage location:** `~/.zclaw/gateway/` (configurable via `ZCLAW_GATEWAY_DIR` env var).
+
+**Atomic writes:** Same temp-file + rename pattern as the existing `SettingsManager` and `FilePersistenceBackend`.
+
+**Credential security:** `credentials.json` written with `mode: 0o600`.
+
+**Why not SettingsManager?** `SettingsManager.get/set` throw `SettingsError` for any key not in the static `SETTINGS_MAP` (verified at `settings-manager.ts:78` and `:119`). Dynamic keys like `gateway.credentials.stripe_key` would require either (a) modifying SettingsManager internals to support wildcard keys, or (b) pre-registering every possible credential name in the schema — impossible. The adapter is the clean boundary: `SettingsManager` handles the 4 known gateway settings (`gateway.enabled`, etc.), while the adapter handles the dynamic subtree.
+
+---
+
+## 6. Settings Schema (Fixes Nit 1)
 
 ### Additions to `src/core/settings-schema.ts`
 
-New **"gateway"** category with 6 top-level keys + dynamic credentials:
+1. **Add `"gateway"` to `SettingsCategory` union** and `SETTINGS_CATEGORIES` array.
+2. **Add 4 static settings keys** (the ones the SettingsManager can validate):
 
 | Key | Type | Default | Secret | Env Var |
 |-----|------|---------|--------|---------|
@@ -200,37 +268,12 @@ New **"gateway"** category with 6 top-level keys + dynamic credentials:
 | `gateway.semanticTopK` | number | 3 | no | — |
 | `gateway.defaultRateLimitPerMin` | number | 60 | no | `ZCLAW_GATEWAY_RATE_LIMIT` |
 | `gateway.maxAuditLogs` | number | 1000 | no | — |
-| `gateway.targets` | object | {} | no | — |
-| `gateway.routes` | object | [] | no | — |
-| `gateway.credentials.*` | string | — | **yes** | — |
 
-`gateway.targets` stores target configurations as a nested JSON object:
-```json
-{
-  "gateway.targets": {
-    "postgres_prod": {
-      "kind": "mcp",
-      "transport": "stdio",
-      "command": "mcp-postgres",
-      "description": "Production PostgreSQL",
-      "tags": ["database", "postgres", "sql"],
-      "enabled": true
-    }
-  }
-}
-```
-
-`gateway.credentials.*` stores individual API keys/tokens with secret masking:
-```json
-{
-  "gateway.credentials.stripe_key": "sk_live_...",
-  "gateway.credentials.db_password": "s3cret"
-}
-```
+Dynamic data (targets, routes, credentials) lives in the `GatewaySettingsAdapter` — not in the settings schema.
 
 ---
 
-## 6. Error Handling
+## 7. Error Handling (Fixes Major 5)
 
 ### New Error Class
 
@@ -238,12 +281,14 @@ New **"gateway"** category with 6 top-level keys + dynamic credentials:
 // src/core/errors.ts
 export class GatewayError extends ZclawError {
   public readonly target?: string;
-  constructor(message: string, target?: string) {
-    super(message, "GATEWAY_ERROR", true); // retryable
+  constructor(message: string, target?: string, retryable: boolean = true) {
+    super(message, "GATEWAY_ERROR", retryable);
     this.target = target;
   }
 }
 ```
+
+`retryable` is a parameter, not hardcoded. Configuration errors (disabled target, missing target) pass `retryable: false`. Transient errors (network failure, MCP server timeout) pass `retryable: true` (default).
 
 ### Error Propagation
 
@@ -266,24 +311,27 @@ The agent can query these via `gateway_audit_log` for self-healing.
 
 ---
 
-## 7. Data Flows
+## 8. Data Flows
 
-### Flow 1: Semantic Injection (Primary)
+### Flow 1: Semantic Injection (Primary) (Fixes Blocker 1)
 
 ```
 User message → Adapter builds AgentLoopOptions
-  → runAgentLoop() creates PipelineContext
+  → runAgentLoop() creates PipelineContext from options
   → compose([semanticToolInjectionMiddleware]) runs
     → Middleware extracts user message
-    → gateway.getInjectableTools() → all tools from all targets
+    → gateway.getInjectableTools() → all tools from all targets (each with risk: "communications")
     → scoreRelevance(message, tool.name + tool.description) for each
     → Top 3 with score > 0 → push definitions to ctx.toolDefs
     → Store handlers in ctx.metadata.injectedTools (Map<string, ToolModule>)
-  → finalHandler merges ctx.metadata.injectedTools into options.config
-  → executeLoop() runs
-    → LLM sees built-in tools + 3 injected tools
+  → finalHandler REBUILDS options from ctx (not the original options):
+      mergedOptions = { ...options, toolDefs: ctx.toolDefs, config: { ...options.config, ...ctx.metadata } }
+  → executeLoop(mergedOptions) runs
+    → LLM sees built-in tools + 3 injected tools (from mergedOptions.toolDefs)
     → LLM calls injected tool (e.g., "postgres_prod__query")
-    → executeToolOrInjected() finds handler in config.injectedTools
+    → executeToolOrInjected() checks permission matrix, then:
+       if found in config.injectedTools → calls injected handler (with risk: "communications")
+       if not → falls through to executeTool()
     → Handler calls gateway.callMcpTool()
     → Result returns to LLM, loop continues
 ```
@@ -306,7 +354,7 @@ Semantic injection finds 0 matches → no tools injected
 Admin: POST /v1/gateway/targets
   → Auth check (admin scope)
   → gateway.registerTarget(name, target)
-  → gateway persists to settingsManager.set("gateway.targets.<name>", ...)
+  → gateway persists via settingsAdapter.saveTarget(name, target)
   → Target available for semantic injection on next request
 ```
 
@@ -314,49 +362,10 @@ Admin: POST /v1/gateway/targets
 
 ```
 Agent: gateway_import_openapi({ name: "stripe", specUrl: "..." })
-  → Fetch spec → parse paths → create RestTarget
+  → Fetch spec → auto-detect JSON/YAML → parse paths → create RestTarget
   → gateway.registerTarget("stripe", { kind: "rest", operations: [...] })
   → Operations immediately available for semantic injection
 ```
-
----
-
-## 8. Tool Surface
-
-### Agent-Facing Tools (10)
-
-Registered in the static tool registry at startup via `registerTool()`.
-
-| # | Name | Risk | Purpose |
-|---|------|------|---------|
-| 1 | `gateway_route` | safe | NL → target routing |
-| 2 | `gateway_call_tool` | communications | Execute MCP tool on downstream server |
-| 3 | `gateway_call_rest` | communications | Proxy REST call with credential injection |
-| 4 | `gateway_capabilities` | safe | List targets + auto-discovered capabilities |
-| 5 | `gateway_read_resource` | safe | Read MCP resource (schemas, file trees) |
-| 6 | `gateway_get_prompt` | safe | Get MCP prompt template |
-| 7 | `gateway_import_openapi` | safe | Import OpenAPI spec → auto-register REST target |
-| 8 | `gateway_register_target` | communications | Register new MCP or REST target (add-only) |
-| 9 | `gateway_audit_log` | safe | Read audit logs (self-healing) |
-| 10 | `gateway_usage_stats` | safe | Check rate limits and error rates |
-
-All proxy tool handlers receive `config.agentName` and pass it to the gateway for audit logging.
-
-### Management Operations (not agent tools)
-
-Accessible via REST API (admin scope), CLI slash commands, and SDK:
-
-| Operation | REST | CLI | SDK |
-|-----------|------|-----|-----|
-| Register target | `POST /v1/gateway/targets` | `/gateway add` | `gateway.registerTarget()` |
-| Unregister target | `DELETE /v1/gateway/targets/:name` | `/gateway remove <name>` | `gateway.unregisterTarget()` |
-| Toggle target | `PATCH /v1/gateway/targets/:name/toggle` | `/gateway toggle <name>` | `gateway.toggleTarget()` |
-| List targets | `GET /v1/gateway/targets` | `/gateway list` | `gateway.listTargets()` |
-| Add route | `POST /v1/gateway/routes` | `/gateway routes add` | `gateway.addRoute()` |
-| Remove route | `DELETE /v1/gateway/routes/:pattern/:target` | `/gateway routes remove` | `gateway.removeRoute()` |
-| Set credential | `PUT /v1/gateway/credentials/:key` | `/gateway credentials set` | via SettingsManager |
-| Audit log | `GET /v1/gateway/audit` | — | — |
-| Usage stats | `GET /v1/gateway/usage` | — | — |
 
 ---
 
@@ -392,7 +401,7 @@ export function semanticToolInjectionMiddleware(
 
     if (selected.length === 0) { await next(); return; }
 
-    // Inject definitions (LLM sees these)
+    // Inject definitions (LLM sees these via ctx.toolDefs)
     ctx.toolDefs.push(...selected.map(t => t.definition));
 
     // Store handlers (agent-loop bridge picks these up)
@@ -407,49 +416,97 @@ export function semanticToolInjectionMiddleware(
 }
 ```
 
-### Agent-Loop Bridge
+### Agent-Loop Bridge (Fixes Blocker 1, Major 1, Major 2)
 
 In `src/core/agent-loop.ts`, two changes:
 
-**1. FinalHandler merges metadata (before calling executeLoop):**
+**1. FinalHandler rebuilds options from `ctx` (fixes Blocker 1):**
+
+The current code passes the original `options` to `executeLoop`, but middleware mutations are on `ctx`. The fix: rebuild `options` from `ctx` fields.
+
 ```typescript
+// Replace the current finalHandler in runAgentLoop:
 await compose(middleware)(ctx, async () => {
-  if (ctx.metadata.injectedTools) {
-    options.config = { ...options.config, injectedTools: ctx.metadata.injectedTools };
-  }
-  const result = await executeLoop(options);
-  ctx.result = { ... };
+  // Rebuild options from ctx to capture middleware mutations
+  const mergedOptions: AgentLoopOptions = {
+    ...options,
+    toolDefs: ctx.toolDefs,  // Middleware may have injected tools here
+    config: {
+      ...options.config,
+      agentName: options.config?.agentName ?? 'zclaw',
+      ...(ctx.metadata.injectedTools ? { injectedTools: ctx.metadata.injectedTools } : {}),
+    },
+  };
+  const result = await executeLoop(mergedOptions);
+  ctx.result = {
+    messages: result.messages,
+    steps: result.steps,
+    toolCalls: result.toolCalls,
+    usage: result.usage,
+    finishReason: result.finishReason,
+  };
 });
 ```
 
-**2. New helper replacing direct `executeTool()` calls:**
+**2. New helper that respects the permission matrix (fixes Major 1, Major 2):**
+
+`executeToolOrInjected` does NOT bypass the permission system. It runs the same `checkToolPermission` → `approveTool` flow as built-in tools. The injected tools have `risk: "communications"` set by `getInjectableTools()` (fixes Major 2 — no defaulting to `destructive`).
+
 ```typescript
 async function executeToolOrInjected(
   name: string,
   args: Record<string, unknown>,
   config: Record<string, unknown>,
+  permissionLevel: PermissionLevel | undefined,
+  approveTool: ApproveToolFn | undefined,
+  autoConfirm: boolean | undefined,
 ): Promise<string> {
+  // Check for dynamically injected tools
   const injected = config?.injectedTools as Map<string, ToolModule> | undefined;
-  if (injected?.has(name)) {
-    return injected.get(name)!.handler(args, config);
+  const injectedModule = injected?.get(name);
+
+  // Permission check (same logic as built-in tools)
+  if (!autoConfirm) {
+    const riskCategory = injectedModule?.risk
+      ?? getToolRiskCategory(name, getAllToolModules());
+    const decision = checkToolPermission(permissionLevel ?? "moderate", riskCategory);
+    if (decision === "ask" && approveTool) {
+      const approved = await approveTool({ name, args }).catch(() => false);
+      if (!approved) return "User denied tool execution.";
+    }
+  }
+
+  // Execute
+  if (injectedModule) {
+    return injectedModule.handler(args, config);
   }
   return executeTool(name, args, config);
 }
 ```
 
-All `executeTool(tc.name, parsedArgs, config)` calls in `executeLoop` are replaced with `executeToolOrInjected(tc.name, parsedArgs, config)`.
+All `executeTool(tc.name, parsedArgs, config)` calls in `executeLoop` are replaced with `executeToolOrInjected(tc.name, parsedArgs, config, permissionLevel, approveTool, autoConfirm)`.
 
-**AgentName flow:** Injected tool handlers receive `config` and look for `config.agentName`. Adapters must include `agentName` in the `config` object they pass to `runAgentLoop`. The server adapter sets `config.agentName` from the session or API key. The CLI adapter sets it from the REPL agent name. The SDK lets the caller provide it via `config.agentName`.
+**AgentName flow (fixes Major 3):**
+
+Each adapter sets `config.agentName` explicitly:
+
+| Adapter | AgentName Source |
+|---------|-----------------|
+| Server | Derived from API key identity or session ID in `serverGenerateText` / `serverStreamText` |
+| CLI | `"cli"` (constant — single user) |
+| SDK | `opts.config?.agentName ?? "sdk"` — caller can provide custom name |
 
 ---
 
-## 10. OpenAPI Auto-Coder
+## 10. OpenAPI Auto-Coder (Fixes Nit 3)
 
 ### `src/gateway/openapi-importer.ts`
 
-Fetches an OpenAPI spec (JSON only for v1), parses its paths, and registers all operations as a `RestTarget`.
+Fetches an OpenAPI spec (JSON or YAML), parses its paths, and registers all operations as a `RestTarget`.
 
 ```typescript
+import * as yaml from 'js-yaml';
+
 export async function importOpenApiSpec(
   gateway: MCPGateway,
   name: string,
@@ -459,98 +516,197 @@ export async function importOpenApiSpec(
 ```
 
 **Steps:**
-1. `fetch(specUrl)` → get spec JSON
-2. Extract `servers[0].url` as baseUrl (overridable via options)
-3. Parse `paths` → extract method, operationId, summary for each operation
-4. Create `RestTarget` with all operations
-5. Call `gateway.registerTarget(name, target)`
-6. Return count and list of imported operations
+1. `fetch(specUrl)` → get raw text
+2. Auto-detect format: try `JSON.parse` first, fall back to `yaml.load`
+3. Extract `servers[0].url` as baseUrl (overridable via options)
+4. Parse `paths` → extract method, operationId, summary for each operation
+5. Create `RestTarget` with all operations
+6. Call `gateway.registerTarget(name, target)`
+7. Return count and list of imported operations
 
 Exposed as the `gateway_import_openapi` agent tool and `POST /v1/gateway/import-openapi` REST endpoint.
 
 ---
 
-## 11. Harmonization with Existing Systems
+## 11. Tool Surface
+
+### Agent-Facing Tools (10)
+
+Registered in the static tool registry at startup via `registerTool()` — **only if `gateway.enabled` is true in settings**.
+
+| # | Name | Risk | Purpose |
+|---|------|------|---------|
+| 1 | `gateway_route` | safe | NL → target routing |
+| 2 | `gateway_call_tool` | communications | Execute MCP tool on downstream server |
+| 3 | `gateway_call_rest` | communications | Proxy REST call with credential injection |
+| 4 | `gateway_capabilities` | safe | List targets + auto-discovered capabilities |
+| 5 | `gateway_read_resource` | safe | Read MCP resource (schemas, file trees) |
+| 6 | `gateway_get_prompt` | safe | Get MCP prompt template |
+| 7 | `gateway_import_openapi` | safe | Import OpenAPI spec → auto-register REST target |
+| 8 | `gateway_register_target` | communications | Register new MCP or REST target (add-only) |
+| 9 | `gateway_audit_log` | safe | Read audit logs (self-healing) |
+| 10 | `gateway_usage_stats` | safe | Check rate limits and error rates |
+
+All proxy tool handlers receive `config.agentName` and pass it to the gateway for audit logging.
+
+### Management Operations (not agent tools)
+
+Accessible via REST API (admin scope), CLI slash commands, and SDK:
+
+| Operation | REST | CLI | SDK |
+|-----------|------|-----|-----|
+| Register target | `POST /v1/gateway/targets` | `/gateway add` | `gateway.registerTarget()` |
+| Unregister target | `DELETE /v1/gateway/targets/:name` | `/gateway remove <name>` | `gateway.unregisterTarget()` |
+| Toggle target | `PATCH /v1/gateway/targets/:name/toggle` | `/gateway toggle <name>` | `gateway.toggleTarget()` |
+| List targets | `GET /v1/gateway/targets` | `/gateway list` | `gateway.listTargets()` |
+| Add route | `POST /v1/gateway/routes` | `/gateway routes add` | `gateway.addRoute()` |
+| Remove route | `DELETE /v1/gateway/routes/:pattern/:target` | `/gateway routes remove` | `gateway.removeRoute()` |
+| Set credential | `PUT /v1/gateway/credentials/:key` | `/gateway credentials set` | `gateway.setCredential()` |
+| List credential keys | `GET /v1/gateway/credentials` | `/gateway credentials list` | `gateway.listCredentials()` |
+| Audit log | `GET /v1/gateway/audit` | — | — |
+| Usage stats | `GET /v1/gateway/usage` | — | — |
+
+---
+
+## 12. REST Routes (Fixes Major 4)
+
+### Extracted to `src/adapters/server/rest-gateway.ts`
+
+To keep `rest.ts` under the 400-line budget, gateway REST routes live in their own module. The main `rest.ts` delegates `/v1/gateway/*` paths to the gateway handler.
+
+**In `rest.ts` `matchRoute()`:**
+```typescript
+// Gateway routes — delegate to rest-gateway.ts
+if (path.startsWith('/v1/gateway')) {
+  return { handler: 'gateway', params: { path, method } };
+}
+```
+
+**`rest-gateway.ts`** exports a single handler function:
+```typescript
+export function createGatewayRestHandler(gateway: MCPGateway): RequestHandler;
+```
+
+This handler has its own internal routing for the 10 gateway endpoints. Keeps `rest.ts` lean and gateway routes isolated.
+
+---
+
+## 13. Harmonization with Existing Systems
 
 | Concern | Resolution |
 |---------|------------|
 | Tool name collisions | Injected tools use `target__toolName` prefix; proxy tools use `gateway_` prefix |
-| Permission matrix | Gateway tools have explicit risk categories; injected tools are `communications`; existing matrix applies |
-| Tool approval flow | Injected tools go through the same `approveTool` callback |
+| Permission matrix | Gateway tools have explicit risk categories; injected tools always set `risk: "communications"`; existing matrix applies unchanged |
+| Tool approval flow | Both built-in and injected tools go through the same permission check + `approveTool` callback via `executeToolOrInjected` |
 | Existing tools | Unaffected — gateway tools are purely additive |
 | Skill compatibility | Skills can scope gateway access via `allowedTools: ["gateway_call_tool"]` |
 | Streaming | Gateway tool results flow through existing `onStep` / `StreamManager` pipeline |
 | Rate limiting | Uses existing `rateLimitMiddleware`, no duplicate implementation |
-| Session persistence | Gateway state is in settings, not sessions. Stateless across sessions. |
+| Session persistence | Gateway state is in settings adapter, not sessions. Stateless across sessions. |
 | Provider switching | Gateway has no provider dependency. MCP client SDK is independent. |
+| Target mutations | Gateway mutations are serialized. In the server adapter, the existing async mutex pattern from `settings-handlers.ts` is reused. |
 
 ---
 
-## 12. Edge Cases
+## 14. Edge Cases
 
 | Scenario | Behavior |
 |----------|----------|
 | No targets registered | Gateway tools return "No targets registered." Zero context overhead. |
 | Semantic injection finds 0 matches | Falls through to proxy pattern. LLM uses `gateway_route` to discover. |
-| MCP server goes offline | `callMcpTool` catches error, returns to LLM via audit log. |
+| MCP server goes offline | `callMcpTool` catches error, **evicts cached client**, returns error to LLM. Next call triggers fresh reconnection. |
 | Target registered twice | Second registration overwrites. |
 | Large OpenAPI spec (1000+ ops) | Operations stored but not in context. Only top-3 per request. |
-| Gateway disabled in settings | Tools not registered. Middleware is no-op. Zero overhead. |
-| Concurrent calls to same target | MCP client cached per target. SDK handles multiplexing. |
-| `settingsKey` references missing credential | Credential resolves to `undefined`. Auth headers omitted. API returns 401, LLM sees it. |
+| Gateway disabled in settings | Gateway tools not registered at startup. Semantic middleware returns early. Zero overhead. Restart required to toggle. |
+| Concurrent calls to same target | MCP client cached per target. MCP SDK handles multiplexing. |
+| `credentialRef` references missing credential | Credential resolves to `undefined`. Auth headers omitted. API returns 401, LLM sees it. |
+| Concurrent target mutations via REST | Serialized via async mutex (same pattern as settings-handlers.ts). |
 
 ---
 
-## 13. Dependency
+## 15. MCP Client Reconnection (Fixes Major 6)
+
+The gateway uses lazy reconnection:
+
+```typescript
+async callMcpTool(agent: string, targetName: string, toolName: string, args: any): Promise<string> {
+  const target = this.targets.get(targetName);
+  if (!target || target.kind !== 'mcp') throw new GatewayError(`Target ${targetName} not found`, targetName, false);
+  if (!target.enabled) throw new GatewayError(`Target ${targetName} is disabled`, targetName, false);
+
+  try {
+    const client = await this.connectMcpClient(targetName, target);
+    const result = await client.callTool({ name: toolName, arguments: args });
+    await this.audit(agent, targetName, `callTool:${toolName}`, 'ok', ...);
+    return result.content.map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('\n');
+  } catch (e: any) {
+    // Evict dead client — next call will reconnect
+    this.mcpClients.delete(targetName);
+    await this.audit(agent, targetName, `callTool:${toolName}`, 'error', ...);
+    throw new GatewayError(e.message, targetName, true); // retryable — connection may work on retry
+  }
+}
+```
+
+Key behavior: on any connection error, the cached MCP client is evicted. The next `callMcpTool` call creates a fresh connection. No background health checks — simpler and sufficient.
+
+---
+
+## 16. Dependencies
 
 | Package | Version | Purpose |
 |---------|---------|---------|
 | `@modelcontextprotocol/sdk` | latest | MCP client: `Client`, `StdioClientTransport`, `SSEClientTransport`, `CreateMessageRequestSchema` |
-
-No other new dependencies. OpenAPI parsing uses `JSON.parse` (JSON-only for v1).
+| `js-yaml` | latest | YAML parsing for OpenAPI specs |
 
 ---
 
-## 14. Testing Strategy
+## 17. Testing Strategy
 
 ### Unit Tests
 
 | File | Tests |
 |------|-------|
-| `gateway.ts` | Target registration, toggle, unregister, routing, MCP mock calls, REST mock calls |
+| `gateway.ts` | Target registration, toggle, unregister, routing, MCP mock calls, REST mock calls, client eviction on error |
 | `semantic-scorer.ts` | Score relevance with various inputs |
-| `tool-factory.ts` | Tool definitions match expected schema, handlers call gateway correctly |
-| `openapi-importer.ts` | Parse spec JSON, register target, handle invalid specs |
-| `semantic-tools.ts` | Middleware injects correct tools, respects topK, handles no-match |
+| `tool-factory.ts` | Tool definitions match expected schema, handlers call gateway correctly, `risk` field set correctly |
+| `openapi-importer.ts` | Parse JSON spec, parse YAML spec, register target, handle invalid specs |
+| `semantic-tools.ts` | Middleware injects correct tools, respects topK, handles no-match, `risk` field propagated |
+| `settings-adapter.ts` | Load/save targets, load/save credentials, atomic writes, missing directory |
+| `rest-gateway.ts` | Route matching, auth checks, CRUD operations |
 
 ### Integration Tests
 
 | Scenario | Test |
 |----------|------|
-| Full semantic flow | User message → middleware → tool injection → agent-loop → tool execution → result |
+| Full semantic flow | User message → middleware → tool injection → agent-loop → permission check → tool execution → result |
 | Proxy fallback | No semantic match → agent uses proxy tools → discovers target → calls tool |
 | Management REST | Register target → list targets → toggle → unregister → verify 404 |
 | OpenAPI import | POST spec URL → target registered → tools available for injection |
 | Gateway disabled | `gateway.enabled: false` → no tools registered → middleware is no-op |
 | Error self-healing | Failed tool call → agent reads audit log → retries with corrected args |
+| MCP reconnection | Mock MCP server disconnect → callMcpTool fails → client evicted → next call reconnects |
+| Permission enforcement | `strict` mode + injected `communications` tool → requires approval |
 
 ---
 
-## 15. Implementation Order
+## 18. Implementation Order
 
 1. `src/gateway/types.ts` — Types first
-2. `src/core/errors.ts` — Add `GatewayError`
-3. `src/core/settings-schema.ts` — Add gateway settings keys
-4. `src/gateway/gateway.ts` — Core engine
-5. `src/gateway/semantic-scorer.ts` — Scoring logic
-6. `src/gateway/tool-factory.ts` — Proxy tools
-7. `src/gateway/openapi-importer.ts` — OpenAPI importer
-8. `src/gateway/index.ts` — Barrel
-9. `src/core/middleware/semantic-tools.ts` — Semantic middleware
-10. `src/core/agent-loop.ts` — Bridge (executeToolOrInjected + metadata merge)
-11. `src/adapters/server/rest.ts` — Gateway REST routes
-12. `src/adapters/server/index.ts` — Gateway initialization
-13. `src/adapters/cli/commands/gateway.ts` — CLI commands
-14. `src/adapters/cli/repl.ts` — Command registration
-15. `src/adapters/sdk/index.ts` — SDK exports
-16. Tests
+2. `src/core/errors.ts` — Add `GatewayError` with configurable `retryable`
+3. `src/core/settings-schema.ts` — Add `"gateway"` category + 4 static keys
+4. `src/gateway/settings-adapter.ts` — Dedicated storage for targets/credentials/routes
+5. `src/gateway/gateway.ts` — Core engine
+6. `src/gateway/semantic-scorer.ts` — Scoring logic
+7. `src/gateway/tool-factory.ts` — Proxy tools (with `risk` fields set)
+8. `src/gateway/openapi-importer.ts` — OpenAPI importer (JSON + YAML)
+9. `src/gateway/index.ts` — Barrel
+10. `src/core/middleware/semantic-tools.ts` — Semantic middleware
+11. `src/core/agent-loop.ts` — Bridge: rebuild options from `ctx` + `executeToolOrInjected` with permission checks
+12. `src/adapters/server/rest-gateway.ts` — Gateway REST routes (extracted)
+13. `src/adapters/server/rest.ts` — Delegate `/v1/gateway/*` to rest-gateway
+14. `src/adapters/server/index.ts` — Gateway initialization + `config.agentName` wiring
+15. `src/adapters/cli/commands/gateway.ts` — CLI commands
+16. `src/adapters/cli/repl.ts` — Command registration
+17. `src/adapters/sdk/index.ts` — SDK exports
+18. Tests
