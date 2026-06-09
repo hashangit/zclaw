@@ -57,13 +57,23 @@ src/adapters/server/
 
 | File | Change |
 |------|--------|
-| `src/core/agent-loop.ts` | Rebuild options from `ctx` in finalHandler + add `executeToolOrInjected()` helper (~20 lines) |
+| `src/core/agent-loop.ts` | Rebuild options from `ctx` in finalHandler + inline injected-tools lookup (~21 lines) |
 | `src/core/settings-schema.ts` | Add `SettingsCategory: "gateway"` + `gateway.enabled/semanticTopK/rateLimit/maxAuditLogs` keys (~25 lines) |
 | `src/core/errors.ts` | Add `GatewayError` subclass with configurable `retryable` (~12 lines) |
-| `src/adapters/server/rest.ts` | Delegate `/v1/gateway/*` routes to `rest-gateway.ts` (~10 lines) |
-| `src/adapters/server/index.ts` | Initialize gateway at startup + set `config.agentName` (~20 lines) |
+| `src/adapters/server/rest.ts` | Extract settings handler wrappers to `rest-settings.ts` + delegate `/v1/gateway/*` to `rest-gateway.ts` (net reduction) |
+| `src/adapters/server/index.ts` | Extract `serverGenerateText`/`serverStreamText` to `server-core.ts` + initialize gateway + set `config.agentName` (net reduction) |
 | `src/adapters/cli/repl.ts` | Register `/gateway` command (~5 lines) |
 | `src/adapters/sdk/index.ts` | Export gateway namespace (~10 lines) |
+
+### Prerequisite Extractions (NEW-2)
+
+`rest.ts` (445 lines) and `server/index.ts` (447 lines) are already over the 400-line budget. Before adding gateway code, extract existing code:
+
+1. **`rest.ts` → `rest-settings.ts`**: Move settings handler wrappers (lines 349-445, ~97 lines) to a new file. Rest.ts drops to ~348 lines, well under budget.
+
+2. **`server/index.ts` → `server-core.ts`**: Move `serverGenerateText` (lines 84-138) and `serverStreamText` (lines 337-428) to a new file. Server/index.ts drops to ~260 lines, leaving room for gateway initialization.
+
+These extractions happen before any gateway code is added. They are a separate commit.
 
 ### New Dependencies
 
@@ -154,6 +164,8 @@ MCP target `env` values can reference credentials with the `credential:` prefix:
 ```
 
 Resolution: `gateway-settings.credentials["db_password"]` is looked up and substituted at connection time.
+
+**Trust boundary:** The `credential:` prefix is ONLY resolved in targets registered by an admin (via REST API with `admin` scope, CLI commands, or SDK). Targets registered by the agent via `gateway_register_target` have `credential:` prefixes treated as literal strings — no resolution. This prevents a crafted target config from leaking stored credentials into untrusted MCP server environments.
 
 ---
 
@@ -252,6 +264,8 @@ export class GatewaySettingsAdapter {
 **Credential security:** `credentials.json` written with `mode: 0o600`.
 
 **Why not SettingsManager?** `SettingsManager.get/set` throw `SettingsError` for any key not in the static `SETTINGS_MAP` (verified at `settings-manager.ts:78` and `:119`). Dynamic keys like `gateway.credentials.stripe_key` would require either (a) modifying SettingsManager internals to support wildcard keys, or (b) pre-registering every possible credential name in the schema — impossible. The adapter is the clean boundary: `SettingsManager` handles the 4 known gateway settings (`gateway.enabled`, etc.), while the adapter handles the dynamic subtree.
+
+**Guideline exception (CLAUDE.md compliance):** CLAUDE.md states "Configuration: user settings use one settings mechanism; build-time config uses build config and env vars. No third system." The `GatewaySettingsAdapter` is a conscious exception, justified by the same reasoning as `FilePersistenceBackend` (`session-store.ts`): the data shape (structured target objects, secret credential blobs) does not fit the flat dot-key settings model. Like the session store, it has its own storage path, atomic writes, and permissions. The 4 typed gateway settings (`gateway.enabled`, etc.) DO go through `SettingsManager`. Only the dynamic subtree (targets, credentials, routes) uses the adapter. This exception is documented here and should not set a precedent for other subsystems.
 
 ---
 
@@ -416,9 +430,11 @@ export function semanticToolInjectionMiddleware(
 }
 ```
 
-### Agent-Loop Bridge (Fixes Blocker 1, Major 1, Major 2)
+### Agent-Loop Bridge (Fixes Blocker 1, M1, M2, NEW-1, NEW-5, NEW-6)
 
-In `src/core/agent-loop.ts`, two changes:
+In `src/core/agent-loop.ts`, **one structural change** and **one inline addition** — no separate helper function.
+
+**Design principle:** Rather than creating a standalone `executeToolOrInjected` function that duplicates the permission logic (risk of drift), we inline the injected-tools lookup directly into `executeLoop`'s existing tool-execution block. This keeps a single code path for all permission checks.
 
 **1. FinalHandler rebuilds options from `ctx` (fixes Blocker 1):**
 
@@ -448,53 +464,52 @@ await compose(middleware)(ctx, async () => {
 });
 ```
 
-**2. New helper that respects the permission matrix (fixes Major 1, Major 2):**
+**2. Inline injected-tools lookup in `executeLoop` (fixes NEW-1, NEW-6):**
 
-`executeToolOrInjected` does NOT bypass the permission system. It runs the same `checkToolPermission` → `approveTool` flow as built-in tools. The injected tools have `risk: "communications"` set by `getInjectableTools()` (fixes Major 2 — no defaulting to `destructive`).
+Instead of a separate function, add ~5 lines at the top of the tool-execution block inside `executeLoop`. This reuses the existing permission check, approval callback, and error handling — zero duplication, zero drift risk.
+
+In `executeLoop`, before the existing permission check block (before `const riskCategory = getToolRiskCategory(...)` at current line ~352), add:
 
 ```typescript
-async function executeToolOrInjected(
-  name: string,
-  args: Record<string, unknown>,
-  config: Record<string, unknown>,
-  permissionLevel: PermissionLevel | undefined,
-  approveTool: ApproveToolFn | undefined,
-  autoConfirm: boolean | undefined,
-): Promise<string> {
-  // Check for dynamically injected tools
-  const injected = config?.injectedTools as Map<string, ToolModule> | undefined;
-  const injectedModule = injected?.get(name);
-
-  // Permission check (same logic as built-in tools)
-  if (!autoConfirm) {
-    const riskCategory = injectedModule?.risk
-      ?? getToolRiskCategory(name, getAllToolModules());
-    const decision = checkToolPermission(permissionLevel ?? "moderate", riskCategory);
-    if (decision === "ask" && approveTool) {
-      const approved = await approveTool({ name, args }).catch(() => false);
-      if (!approved) return "User denied tool execution.";
-    }
-  }
-
-  // Execute
-  if (injectedModule) {
-    return injectedModule.handler(args, config);
-  }
-  return executeTool(name, args, config);
-}
+// Check for dynamically injected tools (from semantic middleware)
+const injectedTools = config?.injectedTools;
+const injectedModule = injectedTools instanceof Map ? injectedTools.get(tc.name) : undefined;
 ```
 
-All `executeTool(tc.name, parsedArgs, config)` calls in `executeLoop` are replaced with `executeToolOrInjected(tc.name, parsedArgs, config, permissionLevel, approveTool, autoConfirm)`.
+Then, after the existing permission check and approval logic (which already handles both `autoConfirm` bypass and `approveTool` callback), replace the `executeTool` call:
+
+```typescript
+// Current:
+output = await executeTool(tc.name, parsedArgs, config);
+
+// Becomes:
+output = injectedModule
+  ? await injectedModule.handler(parsedArgs, config)
+  : await executeTool(tc.name, parsedArgs, config);
+```
+
+The injected tools have `risk: "communications"` set by `getInjectableTools()`, so the existing `getToolRiskCategory(name, getAllToolModules())` call finds them via the module lookup. When `injectedModule` is found, its `risk` field is used directly. When not found, the existing `getAllToolModules()` registry lookup works unchanged.
+
+**This approach adds ~6 lines total** (vs. ~30 for a standalone function). Net impact on `agent-loop.ts`: ~21 lines (15 for finalHandler rebuild + 6 inline), bringing it to ~476 lines. Over the 400-line budget but contained to a single tightly-cohesive module (a state machine loop). If needed later, `executeLoop` can be extracted to its own file.
+
+**Type safety (fixes NEW-5):**
+
+The `injectedTools` field flows through `config: Record<string, unknown>`. Rather than using `as` casts, we add a runtime guard: `injectedTools instanceof Map`. This is explicit, safe, and requires no changes to the `PipelineContext` interface.
 
 **AgentName flow (fixes Major 3):**
 
-Each adapter sets `config.agentName` explicitly:
+Each adapter sets `config.agentName` explicitly in the `AgentLoopOptions.config` they construct:
 
-| Adapter | AgentName Source |
-|---------|-----------------|
-| Server | Derived from API key identity or session ID in `serverGenerateText` / `serverStreamText` |
-| CLI | `"cli"` (constant — single user) |
-| SDK | `opts.config?.agentName ?? "sdk"` — caller can provide custom name |
+```typescript
+// Server adapter (server/index.ts) — in serverGenerateText and serverStreamText:
+config: { agentName: `server:${apiKeyPrefix ?? 'anon'}` }
+
+// CLI adapter (cli/agent.ts) — constant:
+config: { agentName: 'cli' }
+
+// SDK adapter (sdk/index.ts and sdk/agent.ts) — from caller or default:
+config: { ...opts.config, agentName: opts.config?.agentName ?? 'sdk' }
+```
 
 ---
 
@@ -692,21 +707,37 @@ Key behavior: on any connection error, the cached MCP client is evicted. The nex
 
 ## 18. Implementation Order
 
+### Phase 0: Prerequisite Extractions (separate commit)
+
+0a. `src/adapters/server/rest-settings.ts` — Extract settings handler wrappers from rest.ts
+0b. `src/adapters/server/server-core.ts` — Extract serverGenerateText/serverStreamText from index.ts
+
+### Phase 1: Gateway Core
+
 1. `src/gateway/types.ts` — Types first
 2. `src/core/errors.ts` — Add `GatewayError` with configurable `retryable`
 3. `src/core/settings-schema.ts` — Add `"gateway"` category + 4 static keys
 4. `src/gateway/settings-adapter.ts` — Dedicated storage for targets/credentials/routes
-5. `src/gateway/gateway.ts` — Core engine
+5. `src/gateway/gateway.ts` — Core engine (with credential: trust guard)
 6. `src/gateway/semantic-scorer.ts` — Scoring logic
-7. `src/gateway/tool-factory.ts` — Proxy tools (with `risk` fields set)
+7. `src/gateway/tool-factory.ts` — Proxy tools (with risk: "communications" set)
 8. `src/gateway/openapi-importer.ts` — OpenAPI importer (JSON + YAML)
 9. `src/gateway/index.ts` — Barrel
+
+### Phase 2: Core Integration
+
 10. `src/core/middleware/semantic-tools.ts` — Semantic middleware
-11. `src/core/agent-loop.ts` — Bridge: rebuild options from `ctx` + `executeToolOrInjected` with permission checks
+11. `src/core/agent-loop.ts` — Inline injected-tools lookup + finalHandler rebuild (~21 lines)
+
+### Phase 3: Adapter Wiring
+
 12. `src/adapters/server/rest-gateway.ts` — Gateway REST routes (extracted)
 13. `src/adapters/server/rest.ts` — Delegate `/v1/gateway/*` to rest-gateway
-14. `src/adapters/server/index.ts` — Gateway initialization + `config.agentName` wiring
+14. `src/adapters/server/index.ts` — Gateway initialization + config.agentName wiring
 15. `src/adapters/cli/commands/gateway.ts` — CLI commands
 16. `src/adapters/cli/repl.ts` — Command registration
 17. `src/adapters/sdk/index.ts` — SDK exports
+
+### Phase 4: Tests
+
 18. Tests
