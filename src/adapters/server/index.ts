@@ -10,6 +10,7 @@
 import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
+import { homedir } from "os";
 
 import type { ProviderType, PermissionLevel } from "../../core/types.js";
 import { configureProviders, resolveFromEnv } from "../../core/provider-resolver.js";
@@ -191,6 +192,34 @@ export async function createServer(options?: ServerOptions): Promise<http.Server
     getOtherClients,
   };
 
+  // Initialize gateway (if enabled)
+  let gatewayHandler: ((req: any, res: any, path: string, method: string) => Promise<void>) | undefined;
+  try {
+    const gwEnabled = settingsManager.get("gateway.enabled").value as boolean;
+    if (gwEnabled) {
+      const gatewayConfig = {
+        enabled: true,
+        semanticTopK: settingsManager.get("gateway.semanticTopK").value as number,
+        defaultRateLimitPerMin: settingsManager.get("gateway.defaultRateLimitPerMin").value as number,
+        maxAuditLogsInMemory: settingsManager.get("gateway.maxAuditLogs").value as number,
+      };
+
+      const { GatewaySettingsAdapter } = await import("../../gateway/settings-adapter.js");
+      const gatewayStorageDir = process.env.ZCLAW_GATEWAY_DIR ?? path.join(homedir(), ".zclaw");
+      const gwSettingsAdapter = new GatewaySettingsAdapter(gatewayStorageDir);
+      await gwSettingsAdapter.initialize();
+
+      const { MCPGateway } = await import("../../gateway/gateway.js");
+      const gatewayInstance = new MCPGateway(gwSettingsAdapter, gatewayConfig);
+      await gatewayInstance.initialize();
+
+      const { createGatewayRestHandler } = await import("./rest-gateway.js");
+      gatewayHandler = createGatewayRestHandler({ gateway: gatewayInstance, settingsAdapter: gwSettingsAdapter });
+    }
+  } catch (e) {
+    console.error("[server] Gateway initialization failed:", e instanceof Error ? e.message : String(e));
+  }
+
   // Create REST handler context
   const restCtx: RestHandlerContext = {
     version,
@@ -200,6 +229,7 @@ export async function createServer(options?: ServerOptions): Promise<http.Server
     listModels,
     listSkills,
     settingsHandlerContext,
+    gatewayHandler,
   };
 
   const restHandler = createRestHandler(restCtx);

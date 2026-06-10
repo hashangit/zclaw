@@ -220,6 +220,17 @@ function buildCommandRegistry(agent: Agent, config: any, activeProviderType: str
     description: 'Run the setup wizard',
   });
 
+  // Gateway management
+  registry.register('gateway', async (ctx) => {
+    const { createGatewayCommandHandler } = await import('./commands/gateway.js');
+    const handler = createGatewayCommandHandler();
+    const output = await handler(ctx.args);
+    console.log(output);
+  }, {
+    description: 'Gateway management (targets, routes, credentials)',
+    aliases: ['gw'],
+  });
+
   return registry;
 }
 

@@ -28,6 +28,8 @@ import {
   toZclawError,
 } from "../../core/message-convert.js";
 import type { Middleware } from "../../core/middleware.js";
+import { homedir } from 'os';
+import * as path from 'path';
 
 // ── Re-exports ───────────────────────────────────────────────────────────
 
@@ -47,6 +49,19 @@ export {
   rateLimitMiddleware,
   authMiddleware,
 } from "../../core/index.js";
+
+// Gateway (lazy — only loaded when used)
+export const gateway = {
+  async createGateway(config: any, settingsAdapter?: any) {
+    const { createGateway } = await import('../../gateway/index.js');
+    const { GatewaySettingsAdapter } = await import('../../gateway/settings-adapter.js');
+    const adapter = settingsAdapter ?? new GatewaySettingsAdapter(
+      process.env.ZCLAW_GATEWAY_DIR ?? path.join(homedir(), '.zclaw')
+    );
+    if (!settingsAdapter) await adapter.initialize();
+    return createGateway(config, adapter);
+  },
+};
 
 // Re-export all types
 export type {

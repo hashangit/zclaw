@@ -44,6 +44,8 @@ export interface RestHandlerContext {
   listSkills: () => SkillMetadata[];
   /** Settings handler context — required for settings/provider routes */
   settingsHandlerContext?: SettingsHandlerContext;
+  /** Gateway REST handler — delegated for all /v1/gateway/* routes */
+  gatewayHandler?: (req: IncomingMessage, res: ServerResponse, path: string, method: string) => Promise<void>;
 }
 
 interface ChatRequest {
@@ -140,6 +142,11 @@ function matchRoute(
     return { handler: "session", params: { id: sessionMatch[1] } };
   }
 
+  // Gateway routes — delegate to gateway handler
+  if (path.startsWith("/v1/gateway")) {
+    return { handler: "gateway", params: { path, method } };
+  }
+
   return null;
 }
 
@@ -195,6 +202,13 @@ export function createRestHandler(ctx: RestHandlerContext) {
           break;
         case "provider_delete":
           await handleProviderDelete(req, res, ctx, route.params.type);
+          break;
+        case "gateway":
+          if (!ctx.gatewayHandler) {
+            sendError(res, 503, "SERVICE_UNAVAILABLE", "Gateway not configured");
+            break;
+          }
+          await ctx.gatewayHandler(req, res, route.params.path as string, route.params.method as string);
           break;
         default:
           sendError(res, 404, "NOT_FOUND", "Unknown endpoint");
