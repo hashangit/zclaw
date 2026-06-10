@@ -8,7 +8,7 @@
       "import": "./dist/adapters/sdk/index.js",
       "types": "./dist/adapters/sdk/index.d.ts"
     },
-"./server": {
+    "./server": {
       "import": "./dist/adapters/server/index.js",
       "types": "./dist/adapters/server/index.d.ts"
     }
@@ -73,6 +73,7 @@
   "description": "A headless AI agent framework with CLI, SDK, and server adapters — skills, multi-provider LLM support, and Docker-native deployment.",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@mozilla/readability": "^0.6.0",
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
