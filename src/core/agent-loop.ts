@@ -1,6 +1,6 @@
 /** ZClaw Core — THE Agent Loop (single implementation) */
 
-import type { Message, StepResult, ToolCall, Usage, ZclawError, ApproveToolFn, PermissionLevel } from "./types.js";
+import type { Message, StepResult, ToolCall, Usage, ZclawError, ApproveToolFn, PermissionLevel, ToolRiskCategory } from "./types.js";
 import type { LLMProvider, ProviderMessage, ProviderToolCall } from "../providers/types.js";
 import type { ToolDefinition } from "../tools/interface.js";
 import { generateId, now, toZclawError, messageToProviderMessage, providerToolCallToToolCall } from "./message-convert.js";
@@ -109,7 +109,17 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
   try {
     await compose(middleware)(ctx, async () => {
-      const result = await executeLoop(options);
+      // Rebuild options from ctx to capture middleware mutations (e.g., injected tools)
+      const mergedOptions: AgentLoopOptions = {
+        ...options,
+        toolDefs: ctx.toolDefs,
+        config: {
+          ...options.config,
+          agentName: options.config?.agentName ?? 'zclaw',
+          ...(ctx.metadata.injectedTools ? { injectedTools: ctx.metadata.injectedTools } : {}),
+        },
+      };
+      const result = await executeLoop(mergedOptions);
       ctx.result = {
         messages: result.messages,
         steps: result.steps,
@@ -335,6 +345,10 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
 
         await hooks.beforeToolCall({ name: tc.name, args: parsedArgs });
 
+        // Check for dynamically injected tools (from semantic middleware)
+        const injectedTools = config?.injectedTools;
+        const injectedModule = injectedTools instanceof Map ? injectedTools.get(tc.name) : undefined;
+
         const start = now();
         let output: string;
 
@@ -344,17 +358,22 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
         if (autoConfirm) {
           // --headless mode: bypass permission matrix, auto-approve everything
           try {
-            output = await executeTool(tc.name, parsedArgs, config);
+            output = injectedModule
+              ? await injectedModule.handler(parsedArgs, config)
+              : await executeTool(tc.name, parsedArgs, config);
           } catch (err) {
             output = `Error: ${err instanceof Error ? err.message : String(err)}`;
           }
         } else {
-          const riskCategory = getToolRiskCategory(tc.name, getAllToolModules());
+          const riskCategory: ToolRiskCategory = injectedModule?.risk
+            ?? getToolRiskCategory(tc.name, getAllToolModules());
           const decision = checkToolPermission(effectiveLevel, riskCategory);
 
           if (decision === "auto") {
             try {
-              output = await executeTool(tc.name, parsedArgs, config);
+              output = injectedModule
+                ? await injectedModule.handler(parsedArgs, config)
+                : await executeTool(tc.name, parsedArgs, config);
             } catch (err) {
               output = `Error: ${err instanceof Error ? err.message : String(err)}`;
             }
@@ -369,7 +388,9 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
               output = "User denied tool execution.";
             } else {
               try {
-                output = await executeTool(tc.name, parsedArgs, config);
+                output = injectedModule
+                  ? await injectedModule.handler(parsedArgs, config)
+                  : await executeTool(tc.name, parsedArgs, config);
               } catch (err) {
                 output = `Error: ${err instanceof Error ? err.message : String(err)}`;
               }
