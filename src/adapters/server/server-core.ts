@@ -4,6 +4,7 @@ import { createHookExecutor } from "../../core/hooks.js";
 import { resolveTools, getAllToolDefinitions } from "../../core/tool-executor.js";
 import { generateId, now } from "../../core/message-convert.js";
 import { getProvider } from "../../core/provider-resolver.js";
+import type { Middleware } from "../../core/middleware.js";
 
 /**
  * Server-side generateText using core agent loop directly.
@@ -18,6 +19,7 @@ export async function serverGenerateText(
     skills?: string[];
   },
   permissionLevel: PermissionLevel,
+  middleware?: Middleware[],
 ): Promise<GenerateTextResult> {
   // Resolve provider
   const { provider: llmProvider, model } = await getProvider(options.provider);
@@ -46,6 +48,8 @@ export async function serverGenerateText(
     maxSteps: options.maxSteps ?? 5,
     hooks,
     permissionLevel,
+    middleware,
+    config: { agentName: "server" },
   });
 
   // Extract final text from last assistant message
@@ -87,6 +91,7 @@ export async function serverStreamText(
     signal?: AbortSignal;
   },
   serverPermissionLevel: PermissionLevel,
+  middleware?: Middleware[],
 ): Promise<void> {
   try {
     // Resolve provider
@@ -121,6 +126,8 @@ export async function serverStreamText(
       permissionLevel: opts.permissionLevel ?? serverPermissionLevel,
       approveTool: opts.approveTool,
       signal: opts.signal,
+      middleware,
+      config: { agentName: "server" },
       onStep: (step) => {
         if (step.type === "text" && step.content) {
           accumulatedText += step.content;

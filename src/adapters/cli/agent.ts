@@ -12,6 +12,7 @@ import { createHookExecutor } from '../../core/hooks.js';
 import { buildSkillCatalog } from '../../core/skill-catalog.js';
 import { DEFAULT_MODELS } from '../../models-catalog.js';
 import type { Message, StepResult, Usage, ToolCall, ApproveToolFn, PermissionLevel } from '../../core/types.js';
+import type { Middleware } from '../../core/middleware.js';
 
 export class Agent {
   private provider: LLMProvider;
@@ -22,6 +23,7 @@ export class Agent {
   private skillRegistry: SkillRegistry | null = null;
   private skillCatalog: string = '';
   private abortController: AbortController | null = null;
+  private _middleware: Middleware[] = [];
 
   constructor(provider: LLMProvider, model: string = DEFAULT_MODELS['openai-compatible'], config: any = {}) {
     this.provider = provider;
@@ -59,6 +61,11 @@ export class Agent {
     return this.skillRegistry;
   }
 
+  /** Set middleware pipeline (e.g., gateway semantic injection). */
+  setMiddleware(middleware: Middleware[]): void {
+    this._middleware = middleware;
+  }
+
   async chat(userInput: string, signal?: AbortSignal, approveTool?: ApproveToolFn, permissionLevel?: PermissionLevel): Promise<void> {
     // Resolve @path references
     let resolvedInput = userInput;
@@ -94,11 +101,12 @@ export class Agent {
         skillCatalog: this.skillCatalog || undefined,
         maxSteps: 30,
         hooks: createHookExecutor(),
-        config: this.config,
+        config: { ...this.config, agentName: 'cli' },
         signal,
         approveTool: wrappedApproveTool,
         permissionLevel,
         autoConfirm: this.autoConfirm,
+        middleware: this._middleware.length > 0 ? this._middleware : undefined,
         onStep: (step) => {
           if (step.type === "text" && step.content) {
             spinner.stop();

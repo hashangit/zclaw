@@ -19,7 +19,7 @@ export function createGatewayTools(gateway: MCPGateway): ToolModule[] {
         function: {
           name: 'gateway_route',
           description:
-            'Route a natural-language request to the best-matching gateway target. Returns the target name or null.',
+            'Given a natural-language description of what you want to do, finds the best-matching external tool or API operation available through connected services (MCP servers or REST APIs). Returns which service and tool to use, or tells you what services are available if nothing matches. Use this when you need to interact with an external service but are not sure which tool to call.',
           parameters: {
             type: 'object',
             properties: {
@@ -33,9 +33,7 @@ export function createGatewayTools(gateway: MCPGateway): ToolModule[] {
         },
       },
       handler: async (args: any) => {
-        const result = gateway.routeRequest(args.request);
-        if (!result) return 'No matching target found.';
-        return result;
+        return gateway.routeRequest(args.request);
       },
     },
 

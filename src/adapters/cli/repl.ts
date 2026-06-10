@@ -36,6 +36,8 @@ import { modelsHandler } from './commands/models.js';
 import { settingsHandler } from './commands/settings.js';
 import type { ApproveToolFn, PermissionLevel } from '../../core/types.js';
 import { resolvePermissionLevel } from '../../core/permission.js';
+import { SettingsManager } from '../../core/settings-manager.js';
+import { loadMergedConfig } from './config-loader.js';
 
 // ── Interrupt handling ───────────────────────────────────────────────
 
@@ -182,7 +184,7 @@ export async function chatWithInterrupt(agent: Agent, input: string, config?: an
 
 // ── Command registry builder ─────────────────────────────────────────
 
-function buildCommandRegistry(agent: Agent, config: any, activeProviderType: string): CommandRegistry {
+function buildCommandRegistry(agent: Agent, config: any, activeProviderType: string, gatewayInstance?: any): CommandRegistry {
   const registry = new CommandRegistry();
   const skillRegistry = agent.getSkillRegistry();
 
@@ -223,7 +225,7 @@ function buildCommandRegistry(agent: Agent, config: any, activeProviderType: str
   // Gateway management
   registry.register('gateway', async (ctx) => {
     const { createGatewayCommandHandler } = await import('./commands/gateway.js');
-    const handler = createGatewayCommandHandler();
+    const handler = createGatewayCommandHandler(gatewayInstance);
     const output = await handler(ctx.args);
     console.log(output);
   }, {
@@ -344,6 +346,42 @@ export async function runChat(queryParts: string[], options: any) {
   // Initialize skills system
   await agent.initializeSkills();
 
+  // Initialize gateway (if enabled)
+  let gatewayInstance: any = null;
+  try {
+    const settingsManager = new SettingsManager({
+      config: applyEnvOverrides(loadMergedConfig()),
+      projectConfigPath: LOCAL_CONFIG_FILE,
+      globalConfigPath: GLOBAL_CONFIG_FILE,
+    });
+    const gwEnabled = settingsManager.get('gateway.enabled').value as boolean;
+    if (gwEnabled) {
+      const gatewayConfig = {
+        enabled: true,
+        semanticTopK: settingsManager.get('gateway.semanticTopK').value as number,
+        defaultRateLimitPerMin: settingsManager.get('gateway.defaultRateLimitPerMin').value as number,
+        maxAuditLogsInMemory: settingsManager.get('gateway.maxAuditLogs').value as number,
+      };
+      const { GatewaySettingsAdapter } = await import('../../gateway/settings-adapter.js');
+      const gwStorageDir = process.env.ZCLAW_GATEWAY_DIR ?? path.join(os.homedir(), '.zclaw');
+      const gwSettingsAdapter = new GatewaySettingsAdapter(gwStorageDir);
+      await gwSettingsAdapter.initialize();
+
+      const { createGateway } = await import('../../gateway/index.js');
+      gatewayInstance = await createGateway(gatewayConfig, gwSettingsAdapter);
+
+      if (gatewayInstance) {
+        const { semanticToolInjectionMiddleware } = await import('../../core/middleware/semantic-tools.js');
+        agent.setMiddleware([semanticToolInjectionMiddleware(gatewayInstance, gatewayConfig.semanticTopK)]);
+        if (options.interactive) {
+          console.log(chalk.green('Gateway initialized'));
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(chalk.yellow(`Gateway initialization skipped: ${e instanceof Error ? e.message : String(e)}`));
+  }
+
   // Ensure ~/zclaw_documents exists
   const docsDir = path.join(os.homedir(), 'zclaw_documents');
   if (!fs.existsSync(docsDir)) {
@@ -379,7 +417,7 @@ export async function runChat(queryParts: string[], options: any) {
   });
 
   // Build command registry
-  const cmdRegistry = buildCommandRegistry(agent, fullConfig, activeProviderType);
+  const cmdRegistry = buildCommandRegistry(agent, fullConfig, activeProviderType, gatewayInstance);
 
   // Lazy-loaded modules (hoisted outside the loop to avoid repeated import overhead)
   const { invokeSkill, createSkillProviderSwitcher } = await import('../../core/skill-invoker.js');

@@ -50,12 +50,15 @@ export {
   authMiddleware,
 } from "../../core/index.js";
 
+import type { GatewayConfig } from "../../gateway/types.js";
+import type { GatewaySettingsAdapter } from "../../gateway/settings-adapter.js";
+
 // Gateway (lazy — only loaded when used)
 export const gateway = {
-  async createGateway(config: any, settingsAdapter?: any) {
+  async createGateway(config: GatewayConfig, settingsAdapter?: GatewaySettingsAdapter) {
     const { createGateway } = await import('../../gateway/index.js');
-    const { GatewaySettingsAdapter } = await import('../../gateway/settings-adapter.js');
-    const adapter = settingsAdapter ?? new GatewaySettingsAdapter(
+    const { GatewaySettingsAdapter: Adapter } = await import('../../gateway/settings-adapter.js');
+    const adapter = settingsAdapter ?? new Adapter(
       process.env.ZCLAW_GATEWAY_DIR ?? path.join(homedir(), '.zclaw')
     );
     if (!settingsAdapter) await adapter.initialize();

@@ -170,10 +170,11 @@ export class MCPGateway {
     return deleted;
   }
 
-  toggleTarget(name: string, enabled: boolean): boolean {
+  async toggleTarget(name: string, enabled: boolean): Promise<boolean> {
     const target = this.targets.get(name);
     if (!target) return false;
     target.enabled = enabled;
+    await this.settings.saveTarget(name, target);
     return true;
   }
 
@@ -201,12 +202,12 @@ export class MCPGateway {
     await this.settings.saveRoutes(this.routes);
   }
 
-  routeRequest(request: string): string | null {
+  routeRequest(request: string): string {
     const lower = request.toLowerCase();
 
     for (const route of this.routes) {
       if (lower.includes(route.pattern.toLowerCase())) {
-        return route.target;
+        return `-> ${route.target} (route: '${route.pattern}')`;
       }
     }
 
@@ -222,9 +223,14 @@ export class MCPGateway {
       }
     }
 
-    if (bestTarget && bestScore > 0) return bestTarget;
+    if (bestTarget && bestScore > 0) {
+      return `-> ${bestTarget} (tag match)`;
+    }
 
-    return null;
+    const available = Array.from(this.targets.keys());
+    return available.length > 0
+      ? `No route matched. Available: ${available.join(', ')}`
+      : 'No targets registered.';
   }
 
   // ── MCP client connection ────────────────────────────────────────────
@@ -407,7 +413,7 @@ export class MCPGateway {
             url.searchParams.set(target.auth.name ?? 'api_key', cred);
             break;
           case 'basic':
-            headers['Authorization'] = `Basic ${cred}`;
+            headers['Authorization'] = `Basic ${Buffer.from(cred).toString('base64')}`;
             break;
         }
       }
@@ -417,7 +423,7 @@ export class MCPGateway {
     try {
       const response = await fetch(url.toString(), {
         method,
-        headers: { 'Content-Type': 'application/json', ...headers },
+        headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
         body: body ? JSON.stringify(body) : undefined,
       });
 

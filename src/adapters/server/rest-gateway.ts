@@ -16,7 +16,7 @@ interface GatewayLike {
   getUsageSummary(): Record<string, { calls: number; errors: number }>;
   registerTarget(name: string, target: unknown, isAdmin?: boolean): Promise<void>;
   unregisterTarget(name: string): Promise<boolean>;
-  toggleTarget(name: string, enabled: boolean): boolean;
+  toggleTarget(name: string, enabled: boolean): Promise<boolean>;
   addRoute(pattern: string, target: string, priority: number): Promise<void>;
 }
 
@@ -185,7 +185,7 @@ export function createGatewayRestHandler(ctx: {
             sendError(res, 400, "BAD_REQUEST", "Field 'enabled' must be a boolean");
             return;
           }
-          const ok = gateway.toggleTarget(route.name, body.enabled);
+          const ok = await gateway.toggleTarget(route.name, body.enabled);
           if (!ok) {
             sendError(res, 404, "NOT_FOUND", `Target '${route.name}' not found`);
             return;
