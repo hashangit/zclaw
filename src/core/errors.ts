@@ -91,3 +91,19 @@ export class AbortedError extends ZclawError {
     this.name = "AbortedError";
   }
 }
+
+// ── Gateway errors ──────────────────────────────────────────────────────
+
+/**
+ * Error from gateway operations (MCP client, REST proxy, target management).
+ */
+export class GatewayError extends ZclawError {
+  /** The target name that produced the error, if known. */
+  target?: string;
+
+  constructor(message: string, target?: string, retryable: boolean = true) {
+    super(message, "GATEWAY_ERROR", retryable);
+    this.name = "GatewayError";
+    this.target = target;
+  }
+}

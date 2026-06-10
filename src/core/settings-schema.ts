@@ -14,7 +14,8 @@ export type SettingsCategory =
   | 'permissions'
   | 'tools'
   | 'notifications'
-  | 'skills';
+  | 'skills'
+  | 'gateway';
 
 export interface SettingsMapEntry {
   dotKey: string;
@@ -66,6 +67,11 @@ export const SETTINGS_CATEGORIES: {
     label: 'Skills',
     description: 'Skill system configuration (reserved for future use)',
   },
+  {
+    key: 'gateway',
+    label: 'Gateway',
+    description: 'MCP gateway, REST proxy, and OpenAPI adapter settings',
+  },
 ];
 
 // ── Settings Map ───────────────────────────────────────────────────────
@@ -113,6 +119,12 @@ const entries: [string, SettingsMapEntry][] = [
   // Permissions
   ['agent.permissionLevel', { dotKey: 'agent.permissionLevel', configPath: ['permissionLevel'], category: 'permissions', label: 'Permission Level' }],
   ['agent.autoConfirm', { dotKey: 'agent.autoConfirm', configPath: ['autoConfirm'], category: 'permissions', label: 'Auto-Confirm All Tools' }],
+
+  // Gateway
+  ['gateway.enabled', { dotKey: 'gateway.enabled', configPath: ['gatewayEnabled'], category: 'gateway', label: 'Gateway Enabled' }],
+  ['gateway.semanticTopK', { dotKey: 'gateway.semanticTopK', configPath: ['gatewaySemanticTopK'], category: 'gateway', label: 'Semantic Injection Top-K' }],
+  ['gateway.defaultRateLimitPerMin', { dotKey: 'gateway.defaultRateLimitPerMin', configPath: ['gatewayRateLimit'], category: 'gateway', label: 'Gateway Rate Limit (per min)' }],
+  ['gateway.maxAuditLogs', { dotKey: 'gateway.maxAuditLogs', configPath: ['gatewayMaxAuditLogs'], category: 'gateway', label: 'Max Audit Log Records' }],
 ];
 
 export const SETTINGS_MAP: Map<string, SettingsMapEntry> = new Map(entries);
@@ -168,6 +180,12 @@ const schemaEntries: [string, SettingsSchemaEntry][] = [
   // Agent
   ['agent.permissionLevel', { type: 'enum', secret: false, enumValues: ['strict', 'moderate', 'permissive'], default: 'moderate', restartRequired: false, envVar: 'ZCLAW_PERMISSION' }],
   ['agent.autoConfirm', { type: 'boolean', secret: false, default: false, restartRequired: false }],
+
+  // Gateway
+  ['gateway.enabled', { type: 'boolean', secret: false, default: true, restartRequired: true, envVar: 'ZCLAW_GATEWAY_ENABLED' }],
+  ['gateway.semanticTopK', { type: 'number', secret: false, default: 3, min: 1, max: 10, restartRequired: false }],
+  ['gateway.defaultRateLimitPerMin', { type: 'number', secret: false, default: 60, min: 0, restartRequired: false, envVar: 'ZCLAW_GATEWAY_RATE_LIMIT' }],
+  ['gateway.maxAuditLogs', { type: 'number', secret: false, default: 1000, min: 10, max: 10000, restartRequired: false }],
 ];
 
 export const SETTINGS_SCHEMA: Map<string, SettingsSchemaEntry> = new Map(schemaEntries);
