@@ -8,8 +8,8 @@
 class Zclaw < Formula
   desc "Headless AI agent framework — LLM-powered automation for your terminal"
   homepage "https://github.com/hashangit/zclaw"
-  url "https://registry.npmjs.org/zclaw-core/-/zclaw-core-0.1.0.tgz"
-  sha256 "TODO: replace with actual sha256 after first npm publish"
+  url "https://registry.npmjs.org/zclaw-core/-/zclaw-core-0.3.0.tgz"
+  sha256 "REPLACE_WITH_ACTUAL_SHA256"
   license "MIT"
 
   depends_on "node@20"

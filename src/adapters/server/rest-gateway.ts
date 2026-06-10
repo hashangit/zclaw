@@ -8,22 +8,8 @@
 import type { IncomingMessage, ServerResponse } from "http";
 import { authMiddleware, hasScope } from "./auth.js";
 
-// ── Types ──────────────────────────────────────────────────────────────
-
-interface GatewayLike {
-  getTargets(): Record<string, unknown>;
-  getAuditLogs(targetFilter?: string, limit?: number): unknown[];
-  getUsageSummary(): Record<string, { calls: number; errors: number }>;
-  registerTarget(name: string, target: unknown, isAdmin?: boolean): Promise<void>;
-  unregisterTarget(name: string): Promise<boolean>;
-  toggleTarget(name: string, enabled: boolean): Promise<boolean>;
-  addRoute(pattern: string, target: string, priority: number): Promise<void>;
-}
-
-interface SettingsAdapterLike {
-  setCredential(key: string, value: string): Promise<void>;
-  listCredentialKeys(): string[];
-}
+import type { MCPGateway } from "../../gateway/gateway.js";
+import type { GatewaySettingsAdapter } from "../../gateway/settings-adapter.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -52,6 +38,17 @@ function parseBody(req: IncomingMessage): Promise<string> {
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
     req.on("error", reject);
   });
+}
+
+async function parseJsonBody<T>(req: IncomingMessage, res: ServerResponse): Promise<T | null> {
+  let body: T;
+  try {
+    body = JSON.parse(await parseBody(req));
+  } catch {
+    sendError(res, 400, "BAD_REQUEST", "Invalid JSON in request body");
+    return null;
+  }
+  return body;
 }
 
 function requireAuth(
@@ -129,8 +126,8 @@ function matchGatewayRoute(
 // ── Main handler factory ───────────────────────────────────────────────
 
 export function createGatewayRestHandler(ctx: {
-  gateway: GatewayLike;
-  settingsAdapter: SettingsAdapterLike;
+  gateway: MCPGateway;
+  settingsAdapter: GatewaySettingsAdapter;
 }): (req: IncomingMessage, res: ServerResponse, path: string, method: string) => Promise<void> {
   const { gateway, settingsAdapter } = ctx;
 
@@ -166,10 +163,8 @@ export function createGatewayRestHandler(ctx: {
         }
         case "register_target": {
           if (!requireAuth(req, res, "admin")) return;
-          const body = JSON.parse(await parseBody(req)) as {
-            name: string;
-            target: unknown;
-          };
+          const body = await parseJsonBody<{ name: string; target: import("../../gateway/types.js").Target }>(req, res);
+          if (!body) return;
           if (!body.name || !body.target) {
             sendError(res, 400, "BAD_REQUEST", "Fields 'name' and 'target' are required");
             return;
@@ -180,7 +175,8 @@ export function createGatewayRestHandler(ctx: {
         }
         case "toggle_target": {
           if (!requireAuth(req, res, "admin")) return;
-          const body = JSON.parse(await parseBody(req)) as { enabled: boolean };
+          const body = await parseJsonBody<{ enabled: boolean }>(req, res);
+          if (!body) return;
           if (typeof body.enabled !== "boolean") {
             sendError(res, 400, "BAD_REQUEST", "Field 'enabled' must be a boolean");
             return;
@@ -210,7 +206,8 @@ export function createGatewayRestHandler(ctx: {
         }
         case "put_credential": {
           if (!requireAuth(req, res, "admin")) return;
-          const body = JSON.parse(await parseBody(req)) as { value: string };
+          const body = await parseJsonBody<{ value: string }>(req, res);
+          if (!body) return;
           if (!body.value) {
             sendError(res, 400, "BAD_REQUEST", "Field 'value' is required");
             return;
@@ -221,11 +218,8 @@ export function createGatewayRestHandler(ctx: {
         }
         case "add_route": {
           if (!requireAuth(req, res, "admin")) return;
-          const body = JSON.parse(await parseBody(req)) as {
-            pattern: string;
-            target: string;
-            priority?: number;
-          };
+          const body = await parseJsonBody<{ pattern: string; target: string; priority?: number }>(req, res);
+          if (!body) return;
           if (!body.pattern || !body.target) {
             sendError(res, 400, "BAD_REQUEST", "Fields 'pattern' and 'target' are required");
             return;
@@ -236,23 +230,20 @@ export function createGatewayRestHandler(ctx: {
         }
         case "import_openapi": {
           if (!requireAuth(req, res, "admin")) return;
-          const body = JSON.parse(await parseBody(req)) as {
-            name: string;
-            specUrl: string;
-            baseUrl?: string;
-          };
+          const body = await parseJsonBody<{ name: string; specUrl: string; baseUrl?: string }>(req, res);
+          if (!body) return;
           if (!body.name || !body.specUrl) {
             sendError(res, 400, "BAD_REQUEST", "Fields 'name' and 'specUrl' are required");
             return;
           }
           const { importOpenApiSpec } = await import("../../gateway/openapi-importer.js");
           const result = await importOpenApiSpec(
-            gateway as any,
+            gateway,
             body.name,
             body.specUrl,
-            { baseUrl: body.baseUrl },
+            { baseUrl: body.baseUrl, isAdmin: true },
           );
-          sendJSON(res, 200, { imported: result });
+          sendJSON(res, 201, result);
           break;
         }
         default:

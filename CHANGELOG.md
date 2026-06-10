@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-06-10
+
+Major release adding the **Gateway subsystem** — a universal API hub that makes ZClaw act as an MCP client, secure REST proxy, and OpenAPI auto-adapter. This release also includes two security fixes found during code scrutiny, a new middleware pipeline, and 10 new agent-facing gateway tools.
+
+### Added
+
+- **Gateway Engine** (`src/gateway/gateway.ts`): `MCPGateway` class managing target lifecycle, MCP client connections (stdio/SSE/HTTP), REST proxying with credential injection, pattern-based + semantic routing, and lazy reconnect on failure.
+- **Semantic Tool Injection** (`src/core/middleware/semantic-tools.ts`): Middleware scores the user's last message against all discovered gateway tools using keyword relevance scoring and injects the top-K most relevant tools directly into the agent's tool context. Falls through to proxy pattern when no matches found.
+- **Agent-Loop Bridge** (`src/core/agent-loop.ts`): FinalHandler rebuilds options from `ctx` to capture middleware mutations; inline injected-tools lookup dispatches to injected handlers or falls through to static tool registry. ~21 lines total.
+- **10 Gateway Proxy Tools** (`src/gateway/tool-factory.ts`): `gateway_route`, `gateway_call_tool`, `gateway_call_rest`, `gateway_capabilities`, `gateway_read_resource`, `gateway_get_prompt`, `gateway_import_openapi`, `gateway_register_target`, `gateway_audit_log`, `gateway_usage_stats`.
+- **OpenAPI Spec Importer** (`src/gateway/openapi-importer.ts`): Fetches OpenAPI specs (JSON/YAML), parses paths/operations, and auto-registers as a REST target. Supports tag filtering and base URL override.
+- **Gateway Settings Adapter** (`src/gateway/settings-adapter.ts`): Dedicated file-based storage (`~/.zclaw/gateway/`) for targets, credentials, routes, and admin-target registry. Atomic writes with temp-file+rename pattern. Credential files written with `mode: 0o600`.
+- **Gateway Settings Schema** (`src/core/settings-schema.ts`): 4 typed settings (`gateway.enabled`, `gateway.semanticTopK`, `gateway.defaultRateLimitPerMin`, `gateway.maxAuditLogs`) in a new "Gateway" category. Env vars: `ZCLAW_GATEWAY_ENABLED`, `ZCLAW_GATEWAY_RATE_LIMIT`.
+- **Semantic Scorer** (`src/gateway/semantic-scorer.ts`): Zero-dependency keyword-based relevance scoring with 80+ stop words for filtering noise.
+- **Gateway REST Routes** (`src/adapters/server/rest-gateway.ts`): 11 REST endpoints under `/v1/gateway/*` for target CRUD, credentials, routes, OpenAPI import, audit logs, and usage stats. Proper auth scoping (`agent:read` for reads, `admin` for mutations).
+- **Server-Core Extraction** (`src/adapters/server/server-core.ts`): Extracted `serverGenerateText`/`serverStreamText` from `server/index.ts`. Both accept optional `middleware` parameter for gateway semantic injection.
+- **CLI `/gateway` Command** (`src/adapters/cli/commands/gateway.ts`): Full management: list, add, remove, toggle, routes, credentials, audit, usage. Wired into REPL with `gw` alias.
+- **SDK Gateway Namespace** (`src/adapters/sdk/index.ts`): Lazy-loaded `gateway.createGateway()` for programmatic gateway creation.
+- **GatewayError** (`src/core/errors.ts`): New error class with configurable `retryable` flag and `target` metadata. Configuration errors are non-retryable; transient errors are retryable.
+- **Credential Trust Guard** (`src/gateway/gateway.ts`): Agent-registered targets cannot resolve `credential:` env vars or `auth.credentialRef` — only admin-registered targets can. Prevents crafted targets from exfiltrating stored credentials.
+- **Injectable Tools Cache** (`src/gateway/gateway.ts`): `getInjectableTools()` caches its result and invalidates on target mutations for performance.
+- 14 new unit tests across gateway, settings-adapter, semantic-scorer, tool-factory, and middleware modules.
+
+### Fixed
+
+- **B3 Security: Trust guard gap in credential resolution** (`src/gateway/gateway.ts`): `callRest()` and `connectMcpClient()` SSE/HTTP auth headers resolved `credentialRef` for ALL targets regardless of admin status. A non-admin target could register with `auth.credentialRef` pointing to a stored credential and exfiltrate it via REST calls. Now gated behind `adminTargets.has(targetName)` check.
+- **B3 Security: OpenAPI import bypassed trust guard** (`src/gateway/openapi-importer.ts`, `src/gateway/tool-factory.ts`): `importOpenApiSpec()` registered all imported targets with `isAdmin=true`, but the agent-facing `gateway_import_openapi` tool called it directly — letting the agent create admin-registered targets with full credential access. Added `isAdmin` parameter; agent tool now passes `isAdmin: false`.
+- **JSON parsing returned 500 instead of 400** (`src/adapters/server/rest-gateway.ts`): All `JSON.parse()` calls in gateway REST handlers were unwrapped — malformed request bodies threw exceptions caught by the outer handler as 500 INTERNAL_ERROR. Extracted `parseJsonBody<T>()` helper that returns 400 BAD_REQUEST on parse failure.
+- **TypeScript compilation errors in test files** (`src/core/__tests__/semantic-tools.test.ts`, `src/gateway/__tests__/gateway.test.ts`): Message objects missing required `id`/`timestamp` fields (TS2739); `getAdminTargets` mock returned `string[]` instead of `Set<string>` (TS2322); credential injection tests registered targets without `isAdmin=true`, now correctly aligned with trust guard.
+
+### Changed
+
+- **Tool count**: 12 → 22 built-in tools (10 gateway proxy tools added).
+- **Settings count**: 31 → 35 typed settings (4 gateway settings added).
+- **Settings categories**: 5 → 6 ("Gateway" category added).
+- **Dependencies**: Added `@modelcontextprotocol/sdk` (^1.29.0) and `js-yaml` (^4.2.0).
+- Agent loop `finalHandler` now rebuilds options from middleware context (`ctx`) before calling `executeLoop`, capturing injected tool definitions.
+- Server `createServer()` initializes gateway at startup when `gateway.enabled` is true, wiring semantic middleware into both REST and WebSocket paths.
+- CLI `runChat()` initializes gateway at startup, wires middleware into Agent, and passes gateway instance to command registry.
+- `MCPGateway.registerTarget()` validates `kind` field (must be `mcp` or `rest`).
+- `MCPGateway.toggleTarget()` now persists the toggled state via settings adapter.
+- `MCPGateway.unregisterTarget()` cleans up routes, MCP clients, admin tracking, and injectable tools cache.
+
+### Security
+
+- **Critical**: B3 credential trust guard extended to REST proxy auth headers — agent-registered targets can no longer resolve `credentialRef` to exfiltrate stored credentials.
+- **Critical**: OpenAPI import from agent tools now creates non-admin targets; only REST API (admin scope) and CLI create admin targets with full credential access.
+- **Medium**: All gateway REST endpoints return 400 (not 500) for malformed JSON request bodies.
+- **Low**: Credential files written with `mode: 0o600` on Unix systems.
+
 ## [v0.2.2] - 2026-06-10
 
 This release fixes five bugs found during a holistic system audit — two that could silently lose data under real workloads, one that broke SSE streaming order, one that left provider state corrupted after skill execution, and one that made `agent.abort()` a no-op during streaming. Session files are now written atomically, and a brand discriminator on `PersistenceBackend` stops metadata from being stripped when custom backends are passed to `createAgent()`.
@@ -103,5 +153,6 @@ This release fixes five bugs found during a holistic system audit — two that c
 
 - Monolithic `src/index.ts` entry point (replaced by modular architecture).
 
+[v0.3.0]: https://github.com/hashangit/zclaw/compare/v0.2.2...v0.3.0
 [v0.2.2]: https://github.com/hashangit/zclaw/compare/v0.2.1...v0.2.2
 [v0.2.0]: https://github.com/hashangit/zclaw/compare/v0.1.0...v0.2.0

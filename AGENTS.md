@@ -225,6 +225,7 @@ Live dashboard URL is printed at startup next to "Token usage".
 - `max_supplementary_greps` and `max_supplementary_files` are hard caps - never exceed them.
 - Do NOT dump full chat history.
 - Do NOT call `graph_retrieve` more than once per turn.
+- Do NOT use npm to install dependencies. Use pnpm instead.
 - After edits, call `graph_register_edit` with the changed files. Use `file::symbol` notation (e.g. `src/auth.ts::handleLogin`) when the edit targets a specific function, class, or hook.
 
 ## Context Store

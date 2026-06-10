@@ -8,7 +8,7 @@
 
 ## Overview
 
-ZClaw is an engineering-first headless AI agent framework designed for scalable automation in containerized environments. It combines LLM-powered decision making with 11 specialized tools to automate system administration, web operations, communications, and media generation tasks.
+ZClaw is an engineering-first headless AI agent framework designed for scalable automation in containerized environments. It combines LLM-powered decision making with 22 specialized tools to automate system administration, web operations, communications, media generation, and external API integration tasks.
 
 ---
 
@@ -169,29 +169,44 @@ ZClaw is an engineering-first headless AI agent framework designed for scalable 
 | 137 | Log Analysis | File Reading + AI | AI analyzes log files and summarizes | Quick Debugging | Understand logs without reading all |
 | 138 | Container Automation | Docker-Optimized Design | Runs in containers for automated workflows | DevOps Automation | Automate deployments, monitoring, scaling |
 | 139 | CI/CD Integration | Headless + Auto-Confirm | Integrates with CI/CD pipelines | Automated Testing | AI can run tests, analyze results, fix issues |
+| **GATEWAY & API INTEGRATION** |
+| 140 | Gateway Engine | MCPGateway Core Engine | MCP client management, REST proxying, routing, tool extraction, audit logging | Universal API Hub | Connect to any MCP server or REST API through a single gateway |
+| 141 | MCP Client | MCP Client SDK Integration | Connect to MCP servers via stdio, SSE, or HTTP transports with auto-discovery | MCP Protocol Support | Use any Model Context Protocol server as a tool provider |
+| 142 | REST Proxy | Secure REST API Proxying | Proxy REST calls with automatic credential injection (bearer, header, basic, query) | Secure API Access | API keys stored once, injected automatically on every call |
+| 143 | OpenAPI Import | OpenAPI Spec Auto-Adapter | Fetch and parse OpenAPI specs (JSON/YAML), auto-register all operations as a REST target | One-Click API Setup | Import any OpenAPI spec and immediately use its endpoints as tools |
+| 144 | Semantic Injection | Semantic Tool Injection Middleware | Keyword-based relevance scoring injects top-K most relevant gateway tools per request | Zero Context Pollution | Only the tools relevant to the user's request are visible to the LLM |
+| 145 | Proxy Tools | 10 Gateway Proxy Tools | Generic tools (gateway_route, gateway_call_tool, etc.) for agent-facing gateway operations | Agent Self-Service | LLM discovers and navigates gateway targets autonomously |
+| 146 | Credential Trust Guard | Admin vs Agent Target Trust | Agent-registered targets cannot resolve credential: prefixes; only admin targets can | Security Isolation | Prevents crafted targets from leaking stored credentials |
+| 147 | Gateway Audit Log | Audit Trail & Usage Stats | Ring-buffer audit logs with per-target call/error counts, self-healing via agent tools | Observability | Debug failed API calls and monitor usage without external tools |
+| 148 | Gateway Settings | Gateway Settings Category | 4 typed settings (enabled, semanticTopK, rateLimit, maxAuditLogs) + dedicated storage adapter | Configurable Gateway | Tune injection budget, rate limits, and audit retention |
+| 149 | Gateway CLI | /gateway Slash Command | Full management: list, add, remove, toggle targets; manage routes, credentials, view audit logs | CLI Management | Manage the gateway without leaving the interactive session |
+| 150 | Gateway REST API | Gateway REST Endpoints | 11 REST endpoints under /v1/gateway/* for target CRUD, credentials, routes, imports, audit | API Management | Manage the gateway via REST API for automation and scripts |
+| 151 | Gateway SDK | SDK Gateway Namespace | Lazy-loaded gateway.createGateway() for programmatic gateway creation | Programmatic Access | Integrate gateway into custom applications and workflows |
 | **INTERACTION PATTERNS** |
-| 140 | Natural Language | Query-Based Commands | Users type requests in plain English/Chinese | No Learning Curve | Just ask like you would a human |
-| 141 | Multi-Turn Dialogue | Conversation History | Back-and-forth conversation for complex tasks | Iterative Refinement | Can clarify and refine requests |
-| 142 | Tool Suggestion | AI Proposes Tools | AI explains which tool it will use and why | Transparency | Users understand AI's approach |
-| 143 | Context Awareness | System Info in Prompts | AI knows OS, directory, time, user | Relevant Responses | Solutions are tailored to user's environment |
-| 144 | Exit Commands | `exit` / `quit` | Natural language commands to end session | Intuitive Control | End session naturally |
+| 152 | Natural Language | Query-Based Commands | Users type requests in plain English/Chinese | No Learning Curve | Just ask like you would a human |
+| 153 | Multi-Turn Dialogue | Conversation History | Back-and-forth conversation for complex tasks | Iterative Refinement | Can clarify and refine requests |
+| 154 | Tool Suggestion | AI Proposes Tools | AI explains which tool it will use and why | Transparency | Users understand AI's approach |
+| 155 | Context Awareness | System Info in Prompts | AI knows OS, directory, time, user | Relevant Responses | Solutions are tailored to user's environment |
+| 156 | Exit Commands | `exit` / `quit` | Natural language commands to end session | Intuitive Control | End session naturally |
 | **TECHNICAL SPECIFICATIONS** |
-| 145 | Node.js Runtime | Node.js v18+ | Requires Node.js 18 or higher | Modern Platform | Benefits from latest Node.js features |
-| 146 | TypeScript | TypeScript 5.9+ | Written in TypeScript with full type safety | IDE Support | Great autocomplete and error detection |
-| 147 | Commander.js | Commander.js 14.x | CLI framework for command parsing | Standard CLI | Familiar interface for Node.js users |
-| 148 | Inquirer | Inquirer 13.x | Interactive prompt system | Beautiful Prompts | Professional-looking setup wizard |
-| 149 | Chalk | Chalk 5.x | Terminal string styling | Colorful Output | Easy to read terminal output |
-| 150 | Ora | Ora 9.x | Terminal spinner | Visual Feedback | Animated spinners for async operations |
-| 151 | OpenAI SDK | OpenAI 6.x | Official OpenAI SDK | Reliable Integration | Official support and latest features |
-| 152 | Playwright | Playwright 1.58+ | Browser automation library | Robust Automation | Industry-standard browser control |
-| 153 | Nodemailer | Nodemailer 8.x | Email sending library | Universal Email | Works with any SMTP server |
-| 154 | Dotenv | Dotenv 16.x | Environment variable loading | Easy Configuration | Load secrets from `.env` file |
+| 157 | Node.js Runtime | Node.js v18+ | Requires Node.js 18 or higher | Modern Platform | Benefits from latest Node.js features |
+| 158 | TypeScript | TypeScript 5.9+ | Written in TypeScript with full type safety | IDE Support | Great autocomplete and error detection |
+| 159 | Commander.js | Commander.js 14.x | CLI framework for command parsing | Standard CLI | Familiar interface for Node.js users |
+| 160 | Inquirer | Inquirer 13.x | Interactive prompt system | Beautiful Prompts | Professional-looking setup wizard |
+| 161 | Chalk | Chalk 5.x | Terminal string styling | Colorful Output | Easy to read terminal output |
+| 162 | Ora | Ora 9.x | Terminal spinner | Visual Feedback | Animated spinners for async operations |
+| 163 | OpenAI SDK | OpenAI 6.x | Official OpenAI SDK | Reliable Integration | Official support and latest features |
+| 164 | Playwright | Playwright 1.58+ | Browser automation library | Robust Automation | Industry-standard browser control |
+| 165 | Nodemailer | Nodemailer 8.x | Email sending library | Universal Email | Works with any SMTP server |
+| 166 | Dotenv | Dotenv 16.x | Environment variable loading | Easy Configuration | Load secrets from `.env` file |
+| 167 | MCP SDK | `@modelcontextprotocol/sdk` | MCP client for connecting to downstream MCP servers | Protocol Standard | Industry-standard protocol for tool and resource sharing |
+| 168 | js-yaml | js-yaml | YAML parsing for OpenAPI spec import | YAML Support | Most real-world OpenAPI specs use YAML format |
 | **PACKAGE INFORMATION** |
-| 155 | Version | 1.0.40 | Current release version | Stable Release | Production-ready software |
-| 156 | License | MIT License | Open source MIT license | Free to Use | Can use commercially, modify, distribute |
-| 157 | NPM Package | `zclaw-core` | Published on NPM registry | Easy Installation | `npm install -g zclaw-core-core` |
-| 158 | GitHub Repo | hashangit/zclaw | Source code on GitHub | Open Development | Can contribute, report issues, fork |
-| 159 | Keywords | ai, cli, agent, automation, openai, docker, headless, devops, llm, typescript, orchestration, infrastructure, terminal | Package keywords | Discoverable | Easy to find via search |
+| 169 | Version | 1.0.40 | Current release version | Stable Release | Production-ready software |
+| 170 | License | MIT License | Open source MIT license | Free to Use | Can use commercially, modify, distribute |
+| 171 | NPM Package | `zclaw-core` | Published on NPM registry | Easy Installation | `npm install -g zclaw-core-core` |
+| 172 | GitHub Repo | hashangit/zclaw | Source code on GitHub | Open Development | Can contribute, report issues, fork |
+| 173 | Keywords | ai, cli, agent, automation, openai, docker, headless, devops, llm, typescript, orchestration, infrastructure, terminal | Package keywords | Discoverable | Easy to find via search |
 
 ---
 
@@ -213,10 +228,11 @@ ZClaw is an engineering-first headless AI agent framework designed for scalable 
 | **Security Features** | 8 |
 | **Integrations** | 12 |
 | **Use Cases** | 12 |
+| **Gateway & API Integration** | 12 |
 | **Interaction Patterns** | 5 |
-| **Technical Specifications** | 10 |
+| **Technical Specifications** | 12 |
 | **Package Information** | 5 |
-| **TOTAL FEATURES** | **159** |
+| **TOTAL FEATURES** | **173** |
 
 ---
 
@@ -235,6 +251,17 @@ ZClaw is an engineering-first headless AI agent framework designed for scalable 
 | `take_screenshot` | Web/Browser | No | No |
 | `generate_image` | Media | No | Yes (Image API) |
 | `optimize_prompt` | Media | No | No (uses chat API) |
+| `use_skill` | Skills | No | No |
+| `gateway_route` | Gateway | No | No |
+| `gateway_call_tool` | Gateway | No | No |
+| `gateway_call_rest` | Gateway | No | No |
+| `gateway_capabilities` | Gateway | No | No |
+| `gateway_read_resource` | Gateway | No | No |
+| `gateway_get_prompt` | Gateway | No | No |
+| `gateway_import_openapi` | Gateway | No | No |
+| `gateway_register_target` | Gateway | No | No |
+| `gateway_audit_log` | Gateway | No | No |
+| `gateway_usage_stats` | Gateway | No | No |
 
 ---
 
@@ -265,6 +292,10 @@ ZClaw is an engineering-first headless AI agent framework designed for scalable 
 | `wecomWebhook` | String | - | WeCom webhook URL |
 | `wecomKeyword` | String | - | WeCom security keyword |
 | `autoConfirm` | Boolean | false | Auto-confirm tool executions |
+| `gateway.enabled` | Boolean | true | Enable the MCP gateway subsystem (restart required) |
+| `gateway.semanticTopK` | Number | 3 | Number of most relevant gateway tools to inject per request (1-10) |
+| `gateway.defaultRateLimitPerMin` | Number | 60 | Default rate limit for gateway API calls per minute |
+| `gateway.maxAuditLogs` | Number | 1000 | Maximum audit log records retained in memory (10-10000) |
 
 ---
 

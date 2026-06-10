@@ -105,9 +105,7 @@ export function createGatewayCommandHandler(gatewayInstance: any): (args: string
           return `Route removed: "${pattern}" -> ${target}.`;
         }
         // List routes
-        const { GatewaySettingsAdapter } = await import('../../../gateway/settings-adapter.js');
-        const adapter = gatewayInstance['settings'] as InstanceType<typeof GatewaySettingsAdapter> | undefined;
-        const routes = adapter?.getRoutes() ?? [];
+        const routes = gatewayInstance.getRoutes();
         if (routes.length === 0) return 'No routing rules configured.';
         return routes.map((r: any) => `  "${r.pattern}" -> ${r.target} (priority ${r.priority})`).join('\n');
       }
@@ -118,15 +116,11 @@ export function createGatewayCommandHandler(gatewayInstance: any): (args: string
           const key = parts[2];
           const value = parts.slice(3).join(' ');
           if (!key || !value) return 'Usage: /gateway credentials set <key> <value>';
-          const { GatewaySettingsAdapter } = await import('../../../gateway/settings-adapter.js');
-          const adapter = gatewayInstance['settings'] as InstanceType<typeof GatewaySettingsAdapter>;
-          await adapter.setCredential(key, value);
+          await gatewayInstance.setCredential(key, value);
           return `Credential "${key}" set.`;
         }
         // List credential keys
-        const { GatewaySettingsAdapter: GSA } = await import('../../../gateway/settings-adapter.js');
-        const adapter = gatewayInstance['settings'] as InstanceType<typeof GSA>;
-        const keys = adapter.listCredentialKeys();
+        const keys = gatewayInstance.listCredentialKeys();
         if (keys.length === 0) return 'No credentials stored.';
         return `Stored credential keys:\n  ${keys.join('\n  ')}`;
       }

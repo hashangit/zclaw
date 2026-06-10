@@ -282,6 +282,7 @@ export function createGatewayTools(gateway: MCPGateway): ToolModule[] {
         const { importOpenApiSpec } = await import('./openapi-importer.js');
         const result = await importOpenApiSpec(gateway, args.name, args.specUrl, {
           baseUrl: args.baseUrl,
+          isAdmin: false, // Agent tool — NOT admin-registered (B3 trust guard)
         });
         return `Imported ${result.imported} operations: ${result.operations.join(', ')}`;
       },

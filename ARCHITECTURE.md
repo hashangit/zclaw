@@ -25,8 +25,12 @@ Headless AI agent framework with CLI, SDK, and Server adapters. Multi-provider L
 │  Infrastructure                                         │
 │  ┌────────────┐  ┌────────────┐  ┌──────────────────┐  │
 │  │ Providers  │  │   Tools    │  │     Skills       │  │
-│  │  (4 LLMs)  │  │ (12 tools) │  │ (Plugin system)  │  │
+│  │  (4 LLMs)  │  │ (22 tools) │  │ (Plugin system)  │  │
 │  └────────────┘  └────────────┘  └──────────────────┘  │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │                  Gateway                         │   │
+│  │  (MCP client · REST proxy · OpenAPI · Semantic)  │   │
+│  └──────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -57,13 +61,23 @@ src/
 │   ├── middleware/           # Built-in middleware
 │   │   ├── logging.ts       # Request/response logging
 │   │   ├── rate-limit.ts    # Token bucket rate limiting
-│   │   └── auth.ts          # Auth validation
+│   │   ├── auth.ts          # Auth validation
+│   │   └── semantic-tools.ts # Semantic tool injection middleware
 │   └── index.ts             # Core barrel export
 ├── providers/               # LLM provider implementations
 │   ├── types.ts             # LLMProvider interface
 │   ├── factory.ts           # Provider creation (dynamic imports)
 │   ├── openai.ts            # OpenAI + OpenAI-compatible
 │   └── anthropic.ts         # Anthropic + GLM (via Anthropic SDK)
+├── gateway/                  # MCP gateway, REST proxy, OpenAPI adapter
+│   ├── types.ts             # Target, AuditRecord, GatewayConfig, GatewayHooks
+│   ├── gateway.ts           # MCPGateway class (engine)
+│   ├── semantic-scorer.ts   # Keyword-based tool relevance scoring
+│   ├── tool-factory.ts      # 10 proxy tools + getInjectableTools()
+│   ├── openapi-importer.ts  # OpenAPI spec fetch + parse + register
+│   ├── settings-adapter.ts  # Dedicated storage for targets/credentials/routes
+│   ├── index.ts             # Barrel: createGateway, types, factory exports
+│   └── __tests__/           # Unit tests (scorer, tool-factory, settings-adapter)
 ├── skills/                  # Skill plugin system
 │   ├── types.ts             # Skill, SkillFrontmatter interfaces
 │   ├── registry.ts          # DefaultSkillRegistry with LRU body cache (lazy loading)
@@ -91,7 +105,7 @@ src/
 │   │   ├── setup.ts         # Interactive setup wizard
 │   │   ├── config-loader.ts # Multi-source config loading
 │   │   ├── docker-utils.ts  # Docker/non-interactive detection
-│   │   └── commands/        # Slash commands (/help, /clear, /exit, /compact, /skills, /models, /settings)
+│   │   └── commands/        # Slash commands (/help, /clear, /exit, /compact, /skills, /models, /settings, /gateway)
 │   ├── sdk/                 # Programmatic library (npm package)
 │   │   ├── index.ts         # generateText, streamText, createAgent, settings
 │   │   ├── settings.ts      # SDK settings facade (get/set/reset/list/onChange)
@@ -102,9 +116,10 @@ src/
 │       ├── index.ts         # HTTP server creation, core agent loop delegation
 │       ├── websocket.ts     # WS re-export hub (setup + teardown)
 │       ├── ws-types.ts      # WS type shims and protocol message interfaces
-│       ├── ws-handlers.ts   # WS connection handlers and safe send
-│       ├── rest.ts          # REST endpoints (includes /v1/settings and /v1/providers routes)
-│       ├── settings-handlers.ts # Settings REST + WS handlers with async mutex
+│       ├── ws-handlers.ts   # WS connection handlers and safe send│   ├── rest.ts          # REST endpoints (includes /v1/settings, /v1/providers, /v1/gateway routes)
+│   ├── rest-gateway.ts  # Gateway REST route handlers (target CRUD, credentials, audit)
+│   ├── server-core.ts   # Extracted serverGenerateText/serverStreamText
+│   ├── settings-handlers.ts # Settings REST + WS handlers with async mutex
 │       ├── auth.ts          # API key auth with scopes
 │       ├── session-store.ts # Server sessions with TTL + concurrency, delegates to PersistenceBackend
 │       └── standalone.ts    # Docker/production entry point
@@ -155,6 +170,7 @@ Three built-in middleware in `src/core/middleware/`:
 | `loggingMiddleware` | Logs request start + response with duration, model, steps, tokens | `logRequest`, `logResponse`, `logger` |
 | `rateLimitMiddleware` | Token bucket per key, throws on limit exceeded | `maxRequests`, `windowMs`, `keyExtractor` |
 | `authMiddleware` | Calls `validate(ctx)`, throws on failure | `validate`, `errorMessage` |
+| `semanticToolInjectionMiddleware` | Scores user message against gateway-discovered tools, injects top-K into `ctx.toolDefs` | `gateway`, `topK` |
 
 Usage via SDK:
 
@@ -192,15 +208,16 @@ Key exports: `configureProviders()`, `getProvider()`, `getProviderConfig()`, `re
 
 ### Tool Executor (`tool-executor.ts`)
 
-Tools organized in three tiers:
+Tools organized in four tiers:
 
 | Tier | Tools |
 |------|-------|
 | **Core** | `execute_shell_command`, `read_file`, `write_file`, `get_current_datetime` |
 | **Comm** | `send_email`, `web_search`, `send_notification` |
 | **Advanced** | `read_website`, `take_screenshot`, `generate_image`, `optimize_prompt`, `use_skill` |
+| **Gateway** | `gateway_route`, `gateway_call_tool`, `gateway_call_rest`, `gateway_capabilities`, `gateway_read_resource`, `gateway_get_prompt`, `gateway_import_openapi`, `gateway_register_target`, `gateway_audit_log`, `gateway_usage_stats` |
 
-Resolution accepts: group names (`"all"`, `"core"`), built-in tool names, or `UserToolDefinition` objects (via `tool()` factory). Deduplicates by name.
+Resolution accepts: group names (`"all"`, `"core"`), built-in tool names, or `UserToolDefinition` objects (via `tool()` factory). Deduplicates by name. Gateway proxy tools are registered in the static tool registry at startup (only when `gateway.enabled` is true). Additionally, semantic middleware can dynamically inject gateway-discovered tools into the agent's tool context per request (see [Gateway System](#gateway-system)).
 
 ### Permission Pre-Filter (`permission.ts`)
 
@@ -225,7 +242,7 @@ Applied in `runAgentLoop` as a pre-filter before tool execution. CLI uses `--str
 
 Schema-driven settings management with unified get/set/reset across CLI, SDK, and Server adapters.
 
-**Schema** (`settings-schema.ts`): Static data mapping 31 dot-key settings to `AppConfig` paths, with validation metadata (type, secret, restart-required, enum values, min/max), env var overrides (20 mappings), and category grouping (5 categories: providers, permissions, tools, notifications, skills).
+**Schema** (`settings-schema.ts`): Static data mapping 35 dot-key settings to `AppConfig` paths, with validation metadata (type, secret, restart-required, enum values, min/max), env var overrides (22 mappings), and category grouping (6 categories: providers, permissions, tools, notifications, skills, gateway).
 
 **Manager** (`settings-manager.ts`): `SettingsManager` class providing:
 
@@ -257,10 +274,11 @@ ZclawError (base: message, code, retryable)
 ├── ProviderError  (provider field)
 ├── ToolError      (tool field)
 ├── MaxStepsError  (steps field)
-└── AbortedError
+├── AbortedError
+└── GatewayError   (target field, retryable is configurable)
 ```
 
-Each error carries a machine-readable `code` and `retryable` flag for intelligent retry logic.
+Each error carries a machine-readable `code` and `retryable` flag for intelligent retry logic. `GatewayError` supports a configurable `retryable` parameter — configuration errors (disabled target, missing target) pass `retryable: false`, while transient errors (network failure, MCP server timeout) pass `retryable: true` (default).
 
 ## Provider Layer
 
@@ -443,6 +461,76 @@ GitHub Actions: tag-triggered NPM publish + GitHub release, plus docs deployment
 
 VitePress site in `docs/` with sections: getting-started, guides, SDK reference, server, examples, superpowers (design specs).
 
+## Gateway System
+
+The Gateway is an Infrastructure-layer subsystem (alongside Providers, Tools, Skills) that acts as a universal API hub — MCP client, secure REST proxy, and OpenAPI auto-adapter.
+
+### Architecture
+
+```
+src/gateway/
+├── types.ts             # Target, AuditRecord, GatewayConfig, GatewayHooks
+├── gateway.ts           # MCPGateway class — engine
+├── semantic-scorer.ts   # Keyword-based tool relevance scoring
+├── tool-factory.ts      # 10 proxy tools + getInjectableTools()
+├── openapi-importer.ts  # OpenAPI spec fetch + parse + register
+├── settings-adapter.ts  # Dedicated storage for targets/credentials/routes
+├── index.ts             # Barrel: createGateway factory + exports
+└── __tests__/           # Unit tests
+```
+
+### Two Complementary Patterns
+
+1. **Semantic Injection (primary):** A middleware scores the user's message against all discovered gateway tools and injects the top-K most relevant directly into `ctx.toolDefs` before the agent loop runs. Zero context pollution — only relevant tools are visible to the LLM.
+
+2. **Proxy Pattern (fallback):** When semantic injection finds no match, the LLM uses generic proxy tools (`gateway_route`, `gateway_call_tool`, etc.) to navigate targets, discover capabilities, and execute operations.
+
+### Key Types
+
+| Type | Purpose |
+|------|---------|
+| `Target` = `RestTarget` \| `McpTarget` | Union of MCP and REST target configurations |
+| `GatewayConfig` | Settings: `enabled`, `semanticTopK`, `defaultRateLimitPerMin`, `maxAuditLogsInMemory` |
+| `AuditRecord` | Audit trail entry (timestamp, agent, target, operation, status, duration) |
+| `GatewayHooks` | Extension points: `onAudit`, `onSamplingRequest` |
+
+### MCPGateway Engine
+
+The `MCPGateway` class manages the full lifecycle:
+
+- **Target management:** Register/unregister/toggle MCP and REST targets
+- **MCP client connections:** Auto-connect on first use, cache by target name, lazy reconnection on failure
+- **REST proxying:** Credential injection (bearer, header, basic, query), auth header construction
+- **Routing:** Pattern-based + tag-based NL routing via `routeRequest()`
+- **Semantic injection support:** `getInjectableTools()` returns `ToolModule[]` with `risk: "communications"` and `target__toolName` naming
+- **Observability:** Ring-buffer audit logs, per-target usage summaries
+
+### Credential Trust Guard
+
+Targets registered by agents (via `gateway_register_target`) cannot resolve `credential:` prefixed environment variables — only admin-registered targets can. This prevents crafted targets from leaking stored credentials into untrusted MCP server environments.
+
+### Settings Adapter
+
+The `GatewaySettingsAdapter` provides dedicated storage for dynamic gateway data (targets, credentials, routes) in `~/.zclaw/gateway/`. This bypasses the static `SettingsManager` which rejects unknown dot-keys. The 4 typed gateway settings (`gateway.enabled`, `gateway.semanticTopK`, `gateway.defaultRateLimitPerMin`, `gateway.maxAuditLogs`) go through `SettingsManager`; only the dynamic subtree uses the adapter.
+
+### Gateway Adapter Wiring
+
+All three adapters initialize the gateway at startup (when `gateway.enabled` is true in settings):
+
+| Adapter | Gateway Init | Middleware | REST Routes |
+|---------|-------------|-----------|-------------|
+| **Server** | `createServer()` creates `GatewaySettingsAdapter` + `createGateway()` | `semanticToolInjectionMiddleware` passed to `serverGenerateText`/`serverStreamText` | `/v1/gateway/*` delegated to `rest-gateway.ts` |
+| **CLI** | `runChat()` creates adapter + gateway, passes to `Agent` | `agent.setMiddleware([semanticToolInjectionMiddleware(...)])` | N/A (uses `/gateway` slash command) |
+| **SDK** | `gateway.createGateway()` lazy-loaded on demand | Via `generateText`/`streamText` `middleware` option | N/A |
+
+### Agent-Loop Bridge
+
+The agent loop has two gateway-specific modifications (both inline, ~21 lines total):
+
+1. **FinalHandler rebuilds options from `ctx`:** Captures middleware mutations (injected tools) so `executeLoop` sees the updated `toolDefs` and `injectedTools` map.
+
+2. **Inline injected-tools lookup:** Before executing a tool, checks `config.injectedTools` for a dynamically injected module. If found, calls the injected handler directly (with `risk: "communications"`); otherwise falls through to `executeTool()`. Permission checks read risk from the injected module when available.
+
 ## Design Decisions
 
 | Decision | Rationale |
@@ -454,3 +542,10 @@ VitePress site in `docs/` with sections: getting-started, guides, SDK reference,
 | `@path` reference resolution with allowlist | Convenience without compromising security |
 | Hook errors are non-fatal | Observability hooks must never crash the agent loop |
 | Token estimation (char-based) | Avoids extra API calls; sufficient for usage tracking |
+| Gateway as Infrastructure layer | All adapters get gateway automatically; single wiring point |
+| Dedicated `GatewaySettingsAdapter` | SettingsManager's static SETTINGS_MAP rejects dynamic keys; dedicated adapter avoids schema collision |
+| Keyword-based semantic scoring | Zero dependencies, fast, deterministic |
+| Semantic injection top-3 budget | Conservative on context window |
+| Agent scope: can add targets, not remove | Self-service addition, human-gated removal |
+| Credential trust guard (admin vs agent) | Prevents crafted targets from leaking stored credentials |
+| Lazy MCP client reconnection | Simpler than health checks; sufficient for most scenarios |

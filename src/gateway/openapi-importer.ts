@@ -13,7 +13,7 @@ export async function importOpenApiSpec(
   gateway: MCPGateway,
   name: string,
   specUrl: string,
-  options?: { baseUrl?: string; tagFilter?: string[] },
+  options?: { baseUrl?: string; tagFilter?: string[]; isAdmin?: boolean },
 ): Promise<{ imported: number; operations: string[] }> {
   const response = await fetch(specUrl);
   if (!response.ok) throw new Error(`Failed to fetch spec: HTTP ${response.status}`);
@@ -66,6 +66,8 @@ export async function importOpenApiSpec(
     enabled: true,
   };
 
-  await gateway.registerTarget(name, target, true);
+  // Register as admin only when called from REST/CLI (isAdmin param).
+  // Agent tool calls pass isAdmin=false to prevent trust guard bypass.
+  await gateway.registerTarget(name, target, options?.isAdmin ?? true);
   return { imported: filtered.length, operations: filtered.map(o => o.opId) };
 }

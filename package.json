@@ -1,6 +1,6 @@
 {
   "name": "zclaw-core",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "type": "module",
   "main": "dist/adapters/cli/index.js",
   "exports": {
@@ -35,6 +35,7 @@
     "dist/providers",
     "dist/tools",
     "dist/skills",
+    "dist/gateway",
     "dist/models-catalog.js",
     "dist/agent.js",
     "skills",
@@ -58,7 +59,11 @@
     "multi-provider-llm",
     "devops-automation",
     "docker-agent",
-    "chatgpt-cli"
+    "chatgpt-cli",
+    "mcp-gateway",
+    "mcp-client",
+    "openapi-adapter",
+    "rest-proxy"
   ],
   "author": "Hashan Wickramasinghe",
   "license": "MIT",

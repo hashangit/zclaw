@@ -30,6 +30,11 @@ export class MCPGateway {
   private auditLogs: AuditRecord[] = [];
   private routes: Route[] = [];
   private adminTargets = new Set<string>();
+  private injectableToolsCache: ToolModule[] | null = null;
+
+  private invalidateToolsCache(): void {
+    this.injectableToolsCache = null;
+  }
 
   private settings: GatewaySettingsAdapter;
   private config: GatewayConfig;
@@ -51,6 +56,18 @@ export class MCPGateway {
     const stored = this.settings.getTargets();
     for (const [name, target] of Object.entries(stored)) {
       this.targets.set(name, target);
+    }
+
+    // Restore admin target status from persistence
+    const adminNames = this.settings.getAdminTargets();
+    let pruned = false;
+    for (const name of adminNames) {
+      if (this.targets.has(name)) {
+        this.adminTargets.add(name);
+      } else {
+        await this.settings.removeAdminTarget(name);
+        pruned = true;
+      }
     }
 
     this.routes = this.settings.getRoutes();
@@ -126,6 +143,9 @@ export class MCPGateway {
 
   getUsageSummary(): Record<string, { calls: number; errors: number }> {
     const summary: Record<string, { calls: number; errors: number }> = {};
+    for (const [name] of this.targets) {
+      summary[name] = { calls: 0, errors: 0 };
+    }
     for (const log of this.auditLogs) {
       if (!summary[log.target]) {
         summary[log.target] = { calls: 0, errors: 0 };
@@ -141,11 +161,20 @@ export class MCPGateway {
   // ── Target management ────────────────────────────────────────────────
 
   async registerTarget(name: string, target: Target, isAdmin = false): Promise<void> {
+    if (!target || !['mcp', 'rest'].includes(target.kind)) {
+      throw new GatewayError(
+        `Invalid target: kind must be 'mcp' or 'rest'`,
+        name,
+        false,
+      );
+    }
     if (isAdmin) {
       this.adminTargets.add(name);
+      await this.settings.addAdminTarget(name);
     }
     this.targets.set(name, target);
     await this.settings.saveTarget(name, target);
+    this.invalidateToolsCache();
   }
 
   async unregisterTarget(name: string): Promise<boolean> {
@@ -165,8 +194,10 @@ export class MCPGateway {
     const deleted = this.targets.delete(name);
     if (deleted) {
       await this.settings.deleteTarget(name);
+      this.invalidateToolsCache();
     }
     this.adminTargets.delete(name);
+    await this.settings.removeAdminTarget(name);
     return deleted;
   }
 
@@ -175,6 +206,7 @@ export class MCPGateway {
     if (!target) return false;
     target.enabled = enabled;
     await this.settings.saveTarget(name, target);
+    this.invalidateToolsCache();
     return true;
   }
 
@@ -288,7 +320,20 @@ export class MCPGateway {
           false,
         );
       }
-      const transport = new SSEClientTransport(new URL(target.url));
+
+      // Resolve auth headers for SSE/HTTP transport
+      // B3 trust guard: only resolve credentialRef for admin-registered targets
+      const headers: Record<string, string> = {};
+      if (target.auth?.credentialRef) {
+        const cred = this.adminTargets.has(targetName) ? this.settings.getCredential(target.auth.credentialRef) : undefined;
+        if (cred) {
+          if (target.auth.type === 'bearer') headers['Authorization'] = `Bearer ${cred}`;
+          else if (target.auth.type === 'header' && target.auth.name) headers[target.auth.name] = cred;
+          else if (target.auth.type === 'basic') headers['Authorization'] = `Basic ${Buffer.from(cred).toString('base64')}`;
+        }
+      }
+
+      const transport = new SSEClientTransport(new URL(target.url), { requestInit: { headers } });
       await client.connect(transport);
     } else {
       throw new GatewayError(
@@ -357,6 +402,7 @@ export class MCPGateway {
       // Evict cached client for lazy reconnect
       this.mcpClients.delete(targetName);
       this.audit(agent, targetName, `tool:${toolName}`, 'error', Date.now() - start, false);
+      if (err instanceof GatewayError) throw err;
       throw new GatewayError(
         err instanceof Error ? err.message : String(err),
         targetName,
@@ -399,8 +445,9 @@ export class MCPGateway {
 
     const headers: Record<string, string> = { ...target.defaultHeaders };
 
+    // B3 trust guard: only resolve credentialRef for admin-registered targets
     if (target.auth.type !== 'none' && target.auth.credentialRef) {
-      const cred = this.settings.getCredential(target.auth.credentialRef);
+      const cred = this.adminTargets.has(targetName) ? this.settings.getCredential(target.auth.credentialRef) : undefined;
       if (cred) {
         switch (target.auth.type) {
           case 'bearer':
@@ -491,6 +538,7 @@ export class MCPGateway {
     } catch (err) {
       this.mcpClients.delete(targetName);
       this.audit(agent, targetName, `resource:${uri}`, 'error', Date.now() - start, false);
+      if (err instanceof GatewayError) throw err;
       throw new GatewayError(
         err instanceof Error ? err.message : String(err),
         targetName,
@@ -531,6 +579,7 @@ export class MCPGateway {
     } catch (err) {
       this.mcpClients.delete(targetName);
       this.audit(agent, targetName, `prompt:${name}`, 'error', Date.now() - start, false);
+      if (err instanceof GatewayError) throw err;
       throw new GatewayError(
         err instanceof Error ? err.message : String(err),
         targetName,
@@ -541,7 +590,30 @@ export class MCPGateway {
 
   // ── Injectable tools ─────────────────────────────────────────────────
 
+  getRoutes(): Array<{ pattern: string; target: string; priority: number }> {
+    return [...this.routes];
+  }
+
+  listCredentialKeys(): string[] {
+    return this.settings.listCredentialKeys();
+  }
+
+  async setCredential(key: string, value: string): Promise<void> {
+    return this.settings.setCredential(key, value);
+  }
+
+  async deleteCredential(key: string): Promise<void> {
+    return this.settings.deleteCredential(key);
+  }
+
   getInjectableTools(): ToolModule[] {
+    if (this.injectableToolsCache) return this.injectableToolsCache;
+    const tools = this.buildInjectableTools();
+    this.injectableToolsCache = tools;
+    return tools;
+  }
+
+  private buildInjectableTools(): ToolModule[] {
     const tools: ToolModule[] = [];
     for (const [targetName, target] of this.targets) {
       if (!target.enabled) continue;

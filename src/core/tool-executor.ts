@@ -165,6 +165,10 @@ export function tool(definition: UserToolDefinition): ToolModule {
  * @param module  A `ToolModule` to add to the registry
  */
 export function registerTool(module: ToolModule): void {
+  if (registry.some(t => t.definition.function.name === module.definition.function.name)) {
+    console.warn(`[tool-executor] Duplicate tool registration ignored: ${module.definition.function.name}`);
+    return;
+  }
   registry.push(module);
 }
 

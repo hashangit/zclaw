@@ -14,16 +14,19 @@ export class GatewaySettingsAdapter {
   private targetsPath: string;
   private credentialsPath: string;
   private routesPath: string;
+  private adminTargetsPath: string;
 
   private cachedTargets: Record<string, Target> = {};
   private cachedCredentials: Record<string, string> = {};
   private cachedRoutes: Array<{ pattern: string; target: string; priority: number }> = [];
+  private cachedAdminTargets: Set<string> = new Set();
 
   constructor(storageDir: string) {
     const base = process.env.ZCLAW_GATEWAY_DIR ?? path.join(storageDir, 'gateway');
     this.targetsPath = path.join(base, 'targets.json');
     this.credentialsPath = path.join(base, 'credentials.json');
     this.routesPath = path.join(base, 'routes.json');
+    this.adminTargetsPath = path.join(base, 'admin-targets.json');
   }
 
   async initialize(): Promise<void> {
@@ -31,6 +34,7 @@ export class GatewaySettingsAdapter {
       this.loadTargets(),
       this.loadCredentials(),
       this.loadRoutes(),
+      this.loadAdminTargets(),
     ]);
   }
 
@@ -112,6 +116,34 @@ export class GatewaySettingsAdapter {
 
   getRoutes(): Array<{ pattern: string; target: string; priority: number }> {
     return this.cachedRoutes;
+  }
+
+  // ── Admin targets ────────────────────────────────────────────────────
+
+  async loadAdminTargets(): Promise<Set<string>> {
+    try {
+      const data = await fs.readFile(this.adminTargetsPath, 'utf-8');
+      const arr = JSON.parse(data) as string[];
+      this.cachedAdminTargets = new Set(arr);
+    } catch (e: any) {
+      if (e.code !== 'ENOENT') throw e;
+      this.cachedAdminTargets = new Set();
+    }
+    return this.cachedAdminTargets;
+  }
+
+  getAdminTargets(): Set<string> {
+    return this.cachedAdminTargets;
+  }
+
+  async addAdminTarget(name: string): Promise<void> {
+    this.cachedAdminTargets.add(name);
+    await this.atomicWrite(this.adminTargetsPath, JSON.stringify([...this.cachedAdminTargets], null, 2));
+  }
+
+  async removeAdminTarget(name: string): Promise<void> {
+    this.cachedAdminTargets.delete(name);
+    await this.atomicWrite(this.adminTargetsPath, JSON.stringify([...this.cachedAdminTargets], null, 2));
   }
 
   // ── Atomic write ──────────────────────────────────────────────────────

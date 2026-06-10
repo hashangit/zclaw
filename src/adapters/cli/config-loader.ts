@@ -5,8 +5,8 @@
  */
 
 import chalk from 'chalk';
+import type { AppConfig } from '../../core/config.js';
 import {
-  AppConfig,
   loadJsonConfig as coreLoadJsonConfig,
   loadMergedConfig as coreLoadMergedConfig,
   applyEnvOverrides,

@@ -237,6 +237,36 @@ Create a file at `.zclaw/setting.json`:
 
 ## Integrations
 
+### Gateway (MCP Client + REST Proxy + OpenAPI Adapter)
+
+ZClaw v0.3.0 introduces a universal API gateway that connects to downstream MCP servers and REST APIs:
+
+- **Semantic Injection**: Middleware scores your message against all discovered tools and injects the top-K most relevant directly into the agent's tool context. Zero context pollution.
+- **Proxy Pattern**: Generic tools (`gateway_route`, `gateway_call_tool`, etc.) let the agent navigate targets when semantic injection finds no match.
+- **OpenAPI Import**: Import any OpenAPI spec (JSON/YAML) and auto-register all operations as a REST target.
+- **Credential Trust Guard**: Admin-registered targets can resolve stored credentials; agent-registered targets cannot — preventing credential exfiltration.
+- **Audit Logging**: Ring-buffer audit logs with per-target usage summaries for debugging and self-healing.
+
+**Configuration** (`~/.zclaw/setting.json` or env vars):
+```json
+{
+  "gatewayEnabled": true,
+  "gatewaySemanticTopK": 3,
+  "gatewayRateLimit": 60,
+  "gatewayMaxAuditLogs": 1000
+}
+```
+
+**CLI Commands**: `/gateway list|add|remove|toggle|routes|credentials|audit|usage`
+
+**REST API**: `GET/POST/PATCH/DELETE /v1/gateway/*` (admin scope required for mutations)
+
+**SDK**:
+```ts
+import { gateway } from 'zclaw-core';
+const gw = await gateway.createGateway({ enabled: true, semanticTopK: 3, defaultRateLimitPerMin: 60, maxAuditLogsInMemory: 1000 });
+```
+
 ### Multi-Provider LLM Support
 ZClaw supports multiple AI providers with seamless switching:
 - **OpenAI**: GPT-4, GPT-3.5-turbo, and latest models
