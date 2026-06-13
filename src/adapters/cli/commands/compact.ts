@@ -14,7 +14,7 @@ import { runAgentLoop } from '../../../core/agent-loop.js';
 import { generateId, now } from '../../../core/message-convert.js';
 import { createHookExecutor } from '../../../core/hooks.js';
 import type { Message } from '../../../core/types.js';
-import { buildSystemPrompt } from '../agent.js';
+import { buildSystemPrompt } from '../system-prompts.js';
 
 export const compactHandler: CommandHandler = async (ctx) => {
   const { agent, args } = ctx;

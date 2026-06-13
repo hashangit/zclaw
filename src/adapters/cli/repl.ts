@@ -13,6 +13,7 @@ import * as readline from 'node:readline/promises';
 import inquirer from 'inquirer';
 
 import { Agent } from './agent.js';
+import { resolveLaunchMode, selectSystemPrompt } from './system-prompts.js';
 import { ProviderType } from '../../providers/types.js';
 import { createProvider } from '../../providers/factory.js';
 import { resolveProviderConfigFromApp } from '../../core/provider-resolver.js';
@@ -341,7 +342,12 @@ export async function runChat(queryParts: string[], options: any) {
   }
 
   const provider = await createProvider(providerConfig);
-  const agent = new Agent(provider, providerConfig.model, fullConfig);
+  // Select system prompt by launch mode: interactive (TUI/readline in a TTY)
+  // gets the interactive coding-agent prompt; headless/docker/piped keep
+  // the Docker-native prompt unchanged.
+  const launchMode = resolveLaunchMode(options);
+  const systemPrompt = selectSystemPrompt(launchMode);
+  const agent = new Agent(provider, providerConfig.model, fullConfig, systemPrompt);
 
   // Initialize skills system
   await agent.initializeSkills();

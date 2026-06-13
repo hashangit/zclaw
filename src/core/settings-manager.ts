@@ -78,10 +78,24 @@ export class SettingsManager {
       throw new SettingsError(`Unknown setting: ${dotKey}. Use /settings list to see available keys.`, 'SETTINGS_INVALID_KEY');
     }
 
-    const raw = this.getValueByPath(this.config, entry.configPath);
+    const schema = SETTINGS_SCHEMA.get(dotKey);
     const secret = isSecretField(dotKey);
-    const value = secret && raw != null ? this.maskValue(String(raw)) : raw;
-    const origin = this.resolveOrigin(dotKey, entry.configPath);
+
+    // Check env var first (empty string = not explicitly set → fall through to default)
+    const envVar = ENV_VAR_MAP.get(dotKey);
+    if (envVar && process.env[envVar]) {
+      const raw = this.parseEnvValue(process.env[envVar], schema);
+      const value = secret && raw != null ? this.maskValue(String(raw)) : raw;
+      return { value, origin: `env: ${envVar}`, masked: secret };
+    }
+
+    // Check config, falling back to schema default
+    const raw = this.getValueByPath(this.config, entry.configPath);
+    const effectiveValue = raw ?? schema?.default;
+    const value = secret && effectiveValue != null ? this.maskValue(String(effectiveValue)) : effectiveValue;
+    const origin = raw !== undefined && raw !== null
+      ? this.resolveConfigOrigin(entry.configPath)
+      : schema?.default !== undefined ? 'default' : 'default';
 
     return { value, origin, masked: secret };
   }
@@ -270,12 +284,23 @@ export class SettingsManager {
     }
   }
 
-  private resolveOrigin(dotKey: string, configPath: string[]): string {
-    const envVar = ENV_VAR_MAP.get(dotKey);
-    if (envVar && process.env[envVar]) return `env: ${envVar}`;
+  private resolveConfigOrigin(configPath: string[]): string {
     if (this.hasPath(this.projectConfig, configPath)) return 'project config';
     if (this.hasPath(this.globalConfig, configPath)) return 'global config';
     return 'default';
+  }
+
+  private parseEnvValue(raw: string | undefined, schema?: SettingsSchemaEntry): unknown {
+    const val = raw ?? '';
+    if (!schema) return val;
+    switch (schema.type) {
+      case 'boolean':
+        return val.toLowerCase() === 'true' || val === '1';
+      case 'number':
+        return Number(val);
+      default:
+        return val;
+    }
   }
 
   private resolveWriteTarget(dotKey: string): string | undefined {

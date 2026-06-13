@@ -1,8 +1,8 @@
 import chalk from 'chalk';
 import ora from 'ora';
-import * as os from 'os';
 import * as path from 'path';
 import { getAllToolDefinitions } from '../../core/tool-executor.js';
+import { buildSystemPrompt } from './system-prompts.js';
 import { LLMProvider, ProviderMessage } from '../../providers/types.js';
 import { initializeSkillRegistry, getSkillRegistry } from '../../skills/index.js';
 import type { SkillRegistry } from '../../skills/types.js';
@@ -24,17 +24,22 @@ export class Agent {
   private skillCatalog: string = '';
   private abortController: AbortController | null = null;
   private _middleware: Middleware[] = [];
+  private readonly systemPrompt: string;
 
-  constructor(provider: LLMProvider, model: string = DEFAULT_MODELS['openai-compatible'], config: any = {}) {
+  constructor(provider: LLMProvider, model: string = DEFAULT_MODELS['openai-compatible'], config: any = {}, systemPrompt?: string) {
     this.provider = provider;
     this.model = model;
     this.config = config;
     this.autoConfirm = !!config?.autoConfirm;
+    // Default to the headless/Docker prompt; the caller (repl.ts) selects the
+    // interactive prompt when launching in a TTY. Kept mode-agnostic here so
+    // Core's runAgentLoop never needs to know about launch mode.
+    this.systemPrompt = systemPrompt ?? buildSystemPrompt();
 
     this.messages = [{
       id: generateId(),
       role: "system",
-      content: buildSystemPrompt(),
+      content: this.systemPrompt,
       timestamp: now(),
     }];
   }
@@ -143,7 +148,7 @@ export class Agent {
     const systemPrompt = this.messages.find(m => m.role === 'system');
     this.messages = systemPrompt
       ? [systemPrompt]
-      : [{ id: generateId(), role: 'system', content: buildSystemPrompt(), timestamp: now() }];
+      : [{ id: generateId(), role: 'system', content: this.systemPrompt, timestamp: now() }];
   }
 
   /** Public accessor for the current message history. */
@@ -185,37 +190,4 @@ export class Agent {
   }
 }
 
-/**
- * Build the system prompt for ZClaw.
- * This is extracted as a standalone function for testability and reuse.
- */
-export function buildSystemPrompt(): string {
-  const systemInfo = `
-System Information:
-- OS: ${os.type()} ${os.release()} (${os.platform()})
-- Architecture: ${os.arch()}
-- Node.js Version: ${process.version}
-- Current Working Directory: ${process.cwd()}
-- User: ${os.userInfo().username}
-- Home Directory: ${os.homedir()}
-- Current Date: ${new Date().toLocaleString()}
-`;
 
-  return `You are ZClaw, a Docker-Native Autonomous Agent designed for massive scale automation.
-You are likely running inside a container or headless server, possibly as one of thousands of parallel units in a swarm.
-
-CONTEXT:
-${systemInfo}
-
-ENVIRONMENT CONSTRAINTS:
-1. HEADLESS: No GUI available. Do not try to open browsers or apps.
-2. CONTAINER-OPTIMIZED: Assume you are in a sandbox. You can be aggressive with file creation but robust with errors.
-3. NON-INTERACTIVE: Always use flags to suppress prompts (e.g., 'apt-get -y', 'rm -rf').
-
-GUIDELINES:
-1. EFFICIENCY: Your goal is speed and success. Write scripts that just work.
-2. ROBUSTNESS: Use standard Linux/Unix tools found in minimal images (Alpine/Debian).
-3. TOOLS: Use 'execute_shell_command' for actions, 'write_file' for code generation.
-4. CLARITY: Output concise logs. You are a worker unit, not a chat bot.
-5. OPTIMIZATION: When asked to generate creative content (images, stories, complex code), use 'optimize_prompt' first to ensure the best possible output quality.`;
-}

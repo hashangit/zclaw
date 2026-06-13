@@ -270,4 +270,35 @@ describe('SettingsManager', () => {
     const result = mgr.get('smtp.host');
     expect(result.origin).toBe('default');
   });
+
+  it('get() returns schema default when config has no value', () => {
+    const mgr = createTestManager();
+    const result = mgr.get('gateway.enabled');
+    expect(result.value).toBe(true);
+    expect(result.origin).toBe('default');
+  });
+
+  it('get() ignores empty-string env var and falls back to default', () => {
+    process.env.ZCLAW_GATEWAY_ENABLED = '';
+    try {
+      const mgr = createTestManager();
+      const result = mgr.get('gateway.enabled');
+      expect(result.value).toBe(true);
+      expect(result.origin).toBe('default');
+    } finally {
+      delete process.env.ZCLAW_GATEWAY_ENABLED;
+    }
+  });
+
+  it('get() respects explicit false env var', () => {
+    process.env.ZCLAW_GATEWAY_ENABLED = 'false';
+    try {
+      const mgr = createTestManager();
+      const result = mgr.get('gateway.enabled');
+      expect(result.value).toBe(false);
+      expect(result.origin).toBe('env: ZCLAW_GATEWAY_ENABLED');
+    } finally {
+      delete process.env.ZCLAW_GATEWAY_ENABLED;
+    }
+  });
 });
