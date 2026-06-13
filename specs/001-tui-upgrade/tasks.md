@@ -53,10 +53,10 @@ regression gate (V).
 
 **Purpose**: Bring the Ink/React toolchain and TUI skeleton into the repo.
 
-- [ ] T001 Add `"jsx": "react-jsx"` to the `compilerOptions` of tsconfig.json (enables `.tsx` compilation under `tsc`; no bundler)
-- [ ] T002 [P] Run `pnpm add ink@6.6.0 react@^19.1.7` to add Ink + React 19 to package.json
-- [ ] T003 [P] Remove `marked` from package.json dependencies (grep confirms no import in `src/`; re-add when markdown rendering lands in US3)
-- [ ] T004 Create the `src/adapters/cli/tui/` directory tree with empty subdirectories `components/`, `overlays/`, `hooks/`
+- [X] T001 Add `"jsx": "react-jsx"` to the `compilerOptions` of tsconfig.json (enables `.tsx` compilation under `tsc`; no bundler)
+- [X] T002 [P] Run `pnpm add ink@6.6.0 react@^19.1.7` to add Ink + React 19 to package.json
+- [X] T003 [P] Remove `marked` from package.json dependencies (grep confirms no import in `src/`; re-add when markdown rendering lands in US3)
+- [X] T004 Create the `src/adapters/cli/tui/` directory tree with empty subdirectories `components/`, `overlays/`, `hooks/`
 
 ---
 
@@ -70,11 +70,11 @@ tsconfig JSX change (T001) must not break the existing tests; the companion
 packages must render under React 19 before components depend on them; the shared
 `bootstrapCliSession()` must exist before the TUI and readline diverge.
 
-- [ ] T005 Run `pnpm test` and confirm all pre-existing tests pass after the tsconfig `"jsx"` change (regression gate — fix any JSX-resolution failure before proceeding)
-- [ ] T006 Smoke-test Ink 6 + React 19: write a throwaway script that `render()`s `<TextInput/>` and `<SelectInput/>` (from `ink-text-input`, `ink-select-input`) plus `ink-spinner` and `terminal-link` against `ink@6.6.0` + `react@^19`. Keep the packages that render cleanly; for any that crash at runtime, plan ~50-line custom replacements and drop the package. Record the keep/replace decision
-- [ ] T007 Run `pnpm install` and confirm zero peer-dependency warnings (resolve any warning before proceeding — this is the PRD Phase-0 gate)
-- [ ] T008 Extract the shared session-setup phase from `runChat()` in src/adapters/cli/repl.ts into a new `bootstrapCliSession()` in src/adapters/cli/bootstrap.ts (config loading, provider resolution, skills init, gateway init, permissions — ~175 lines of setup in `runChat`). Both `runChat` (readline) and `startTui` call it. Do not duplicate setup across the two dispatch paths. Verify `zclaw -n` is byte-identical immediately after this extraction, before any TUI wiring
-- [ ] T009 [P] Create src/adapters/cli/tui/theme.ts exporting the Tokyo Night Moon color tokens as a typed palette: `bg #222436`, `bgHighlight #2f334d`, `fg #c8d3f5`, `fgDim #828bb8`, `fgGutter #3b4261`, `blue #82aaff`, `cyan #86e1fc`, `green #c3e88d`, `yellow #ffc777`, `red #ff757f`, `purple #c099ff`, `orange #ff966c`
+- [X] T005 Run `pnpm test` and confirm all pre-existing tests pass after the tsconfig `"jsx"` change (regression gate — fix any JSX-resolution failure before proceeding)
+- [X] T006 Smoke-test Ink 6 + React 19: write a throwaway script that `render()`s `<TextInput/>` and `<SelectInput/>` (from `ink-text-input`, `ink-select-input`) plus `ink-spinner` and `terminal-link` against `ink@6.6.0` + `react@^19`. Keep the packages that render cleanly; for any that crash at runtime, plan ~50-line custom replacements and drop the package. Record the keep/replace decision
+- [X] T007 Run `pnpm install` and confirm zero peer-dependency warnings (resolve any warning before proceeding — this is the PRD Phase-0 gate)
+- [X] T008 Extract the shared session-setup phase from `runChat()` in src/adapters/cli/repl.ts into a new `bootstrapCliSession()` in src/adapters/cli/bootstrap.ts (config loading, provider resolution, skills init, gateway init, permissions — ~175 lines of setup in `runChat`). Both `runChat` (readline) and `startTui` call it. Do not duplicate setup across the two dispatch paths. Verify `zclaw -n` is byte-identical immediately after this extraction, before any TUI wiring
+- [X] T009 [P] Create src/adapters/cli/tui/theme.ts exporting the Tokyo Night Moon color tokens as a typed palette: `bg #222436`, `bgHighlight #2f334d`, `fg #c8d3f5`, `fgDim #828bb8`, `fgGutter #3b4261`, `blue #82aaff`, `cyan #86e1fc`, `green #c3e88d`, `yellow #ffc777`, `red #ff757f`, `purple #c099ff`, `orange #ff966c`
 
 **Checkpoint**: Foundation ready — JSX compiles, companions validated, shared
 bootstrap extracted, theme tokens defined. User story implementation can begin.
@@ -99,19 +99,19 @@ drives the existing `Agent.chat({ onStep, approveTool, signal })`. The dedicated
 
 ### Implementation for User Story 1
 
-- [ ] T010 [P] [US1] Create src/adapters/cli/tui/hooks/use-feed.ts — manages the feed array (append immutable entries on completion, update streaming entries by id)
-- [ ] T011 [P] [US1] Create src/adapters/cli/tui/hooks/use-agent.ts — agent state + `submit(input)` driving the existing `Agent.chat({ onStep, approveTool, signal })` (`onStep` → feed updates; interrupt via `agent.abort()`). Creates a `PromiseWithResolvers<boolean>` to bridge `approveTool` to the permission component. (US2 swaps `chat()` for `chatStream()` when token streaming lands.)
-- [ ] T012 [P] [US1] Create src/adapters/cli/tui/components/user-message.tsx — renders a user input entry (green token)
-- [ ] T013 [P] [US1] Create src/adapters/cli/tui/components/assistant-message.tsx — renders an LLM text response entry (blue token)
-- [ ] T014 [P] [US1] Create src/adapters/cli/tui/components/tool-call-block.tsx — bordered block: name/args header, status glyph (✓ ✗ ⏳), output buffer. Basic rendering here; expand/collapse + live output added in US2
-- [ ] T015 [P] [US1] Create src/adapters/cli/tui/components/permission-prompt.tsx — inline approval (tool name, args); calls the pending promise's `resolve(true/false)` on keypress. Stays within Ink input handling (no stdin mode switch)
-- [ ] T016 [P] [US1] Create src/adapters/cli/tui/components/error-message.tsx — renders error entries (red token)
-- [ ] T017 [US1] Create src/adapters/cli/tui/components/prompt-area.tsx — multi-line input, submit on Enter (depends on T011 use-agent)
-- [ ] T018 [US1] Create src/adapters/cli/tui/components/message-area.tsx — scrollable feed using Ink `Static` for immutable history + live components for streaming entries (depends on T010 use-feed, T012-T016)
-- [ ] T019 [US1] Create src/adapters/cli/tui/app.tsx — `TuiApp` root: `<Box flexDirection="column">` layout (`MessageArea` flex-grow + `PromptArea`); wires `use-agent` + `use-feed`; maps ESC/Ctrl+C → `agent.abort()` via Ink `useInput` (depends on T017, T018)
-- [ ] T020 [US1] Create src/adapters/cli/tui/index.ts — public entry `renderApp()` / `startTui({ agent, options, config, queryParts })` that calls Ink `render(<TuiApp .../>)`
-- [ ] T021 [US1] Add TUI/REPL dispatch to src/adapters/cli/index.ts — dispatch on `resolveLaunchMode(options) === 'interactive'` (the SAME function that selects the system prompt, so `--docker` / `ZCLAW_NO_INTERACTIVE` / piped stdin never mis-launch the TUI); when interactive, dynamic `import('./tui/index.js')` and call `startTui`, otherwise call `runChat` (readline). Do NOT call `setupInterrupt()` in TUI mode (Ink owns raw stdin). Ship the "no React in headless" CI assertion (T055) with this commit, not later
-- [ ] T022 [US1] Consolidate `@path` reference resolution to one call site — resolve at the caller (`use-agent.ts` / `repl.ts`) and remove the duplicate `resolveReferences` call from `Agent.chat()` in src/adapters/cli/agent.ts (currently at `agent.ts:79-80` and `repl.ts:497`)
+- [X] T010 [P] [US1] Create src/adapters/cli/tui/hooks/use-feed.ts — manages the feed array (append immutable entries on completion, update streaming entries by id)
+- [X] T011 [P] [US1] Create src/adapters/cli/tui/hooks/use-agent.ts — agent state + `submit(input)` driving the existing `Agent.chat({ onStep, approveTool, signal })` (`onStep` → feed updates; interrupt via `agent.abort()`). Creates a `PromiseWithResolvers<boolean>` to bridge `approveTool` to the permission component. (US2 swaps `chat()` for `chatStream()` when token streaming lands.)
+- [X] T012 [P] [US1] Create src/adapters/cli/tui/components/user-message.tsx — renders a user input entry (green token)
+- [X] T013 [P] [US1] Create src/adapters/cli/tui/components/assistant-message.tsx — renders an LLM text response entry (blue token)
+- [X] T014 [P] [US1] Create src/adapters/cli/tui/components/tool-call-block.tsx — bordered block: name/args header, status glyph (✓ ✗ ⏳), output buffer. Basic rendering here; expand/collapse + live output added in US2
+- [X] T015 [P] [US1] Create src/adapters/cli/tui/components/permission-prompt.tsx — inline approval (tool name, args); calls the pending promise's `resolve(true/false)` on keypress. Stays within Ink input handling (no stdin mode switch)
+- [X] T016 [P] [US1] Create src/adapters/cli/tui/components/error-message.tsx — renders error entries (red token)
+- [X] T017 [US1] Create src/adapters/cli/tui/components/prompt-area.tsx — multi-line input, submit on Enter (depends on T011 use-agent)
+- [X] T018 [US1] Create src/adapters/cli/tui/components/message-area.tsx — scrollable feed using Ink `Static` for immutable history + live components for streaming entries (depends on T010 use-feed, T012-T016)
+- [X] T019 [US1] Create src/adapters/cli/tui/app.tsx — `TuiApp` root: `<Box flexDirection="column">` layout (`MessageArea` flex-grow + `PromptArea`); wires `use-agent` + `use-feed`; maps ESC/Ctrl+C → `agent.abort()` via Ink `useInput` (depends on T017, T018)
+- [X] T020 [US1] Create src/adapters/cli/tui/index.ts — public entry `renderApp()` / `startTui({ agent, options, config, queryParts })` that calls Ink `render(<TuiApp .../>)`
+- [X] T021 [US1] Add TUI/REPL dispatch to src/adapters/cli/index.ts — dispatch on `resolveLaunchMode(options) === 'interactive'` (the SAME function that selects the system prompt, so `--docker` / `ZCLAW_NO_INTERACTIVE` / piped stdin never mis-launch the TUI); when interactive, dynamic `import('./tui/index.js')` and call `startTui`, otherwise call `runChat` (readline). Do NOT call `setupInterrupt()` in TUI mode (Ink owns raw stdin). Ship the "no React in headless" CI assertion (T055) with this commit, not later
+- [X] T022 [US1] Consolidate `@path` reference resolution to one call site — resolve at the caller (`use-agent.ts` / `repl.ts`) and remove the duplicate `resolveReferences` call from `Agent.chat()` in src/adapters/cli/agent.ts (currently at `agent.ts:79-80` and `repl.ts:497`)
 - [ ] T023 [US1] Verify (manual gate): `zclaw` in a TTY renders the Ink TUI; `pnpm dev` (tsx) resolves the lazy `./tui/index.js` import against the `.tsx` source and renders identically; a shell-tool prompt renders the tool block with output; a custom-model skill switches provider and runs; `--moderate` destructive tool prompts inline; ESC/Ctrl+C aborts; `zclaw --docker` and `zclaw -n` keep the readline path; `pnpm test` passes
 
 **Checkpoint**: US1 fully functional and testable independently — this is the MVP.
@@ -210,7 +210,7 @@ externally → footer notifies.
 
 **Purpose**: Hardening that spans all user stories.
 
-- [ ] T055 [P] Add a CI assertion that React/JSX does not leak into headless builds — assert `dist/adapters/cli/repl.js` (and server/SDK outputs) contain no `jsx-runtime` reference. Add to the GitHub Actions workflow file. (Note: this assertion MUST accompany T021 — the first TUI/dispatch commit — not wait until Polish; T055 is the workflow-file landing only.)
+- [X] T055 [P] Add a CI assertion that React/JSX does not leak into headless builds — assert `dist/adapters/cli/repl.js` (and server/SDK outputs) contain no `jsx-runtime` reference. Add to the GitHub Actions workflow file. (Note: this assertion MUST accompany T021 — the first TUI/dispatch commit — not wait until Polish; T055 is the workflow-file landing only.)
 - [ ] T056 [P] Add Ink `render()` tests for core components in src/adapters/cli/tui/__tests__/ (message-area, tool-call-block, prompt-area) using Ink's testing helpers
 - [ ] T057 Run the full `pnpm test` suite; confirm all pre-existing (243) plus new TUI tests pass
 - [ ] T058 [P] Update the docs/ VitePress CLI section to document interactive-TUI launch behavior (auto-detect via `resolveLaunchMode`), keybindings, and the `-n`/`--no-interactive`/`--docker` fallback

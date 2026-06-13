@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import { isNonInteractive } from './docker-utils.js';
 import { runSetup } from './setup.js';
 import { runChat } from './repl.js';
+import { resolveLaunchMode } from './system-prompts.js';
 
 // Handle Ctrl+C gracefully
 function handleExit() {
@@ -75,7 +76,15 @@ program
   .description('Start the AI agent (default)')
   .action(async (queryParts) => {
     const options = program.opts();
-    await runChat(queryParts, options);
+    // Dispatch on the SAME predicate that selects the system prompt, so launch
+    // mode and UI mode can never diverge (FR-001). The TUI is lazy-imported
+    // only in interactive mode; headless / piped / --docker never load React.
+    if (resolveLaunchMode(options) === 'interactive') {
+      const { startTui } = await import('./tui/index.js');
+      await startTui({ queryParts, options });
+    } else {
+      await runChat(queryParts, options);
+    }
   });
 
 // Apply --docker flag effects early from raw argv (before Commander parses)

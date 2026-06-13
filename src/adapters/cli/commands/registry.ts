@@ -1,12 +1,20 @@
 /**
  * Slash Command Registry for ZClaw CLI.
  *
- * Provides a flat namespace of `/command` handlers with alias support.
- * Lookup order: exact match → alias match → skill invocation → unknown.
+ * Flat namespace of `/command` handlers with alias support.
+ *
+ * Consistent contract: every handler returns a `CommandResult` describing what
+ * to render (`output`) and whether to terminate (`exit`). Handlers never write
+ * to stdout directly — the adapter renders the result (readline prints it; the
+ * TUI appends it to the feed). Lookup order: exact match → alias → skill
+ * invocation → unknown.
+ *
+ * `interactive` marks handlers that take over stdin/stdout themselves (inquirer
+ * wizards, ora spinners). They keep working in the readline REPL but cannot run
+ * under the TUI's stdin ownership — the TUI defers them.
  */
 
 import chalk from 'chalk';
-import type { Interface } from 'node:readline/promises';
 import type { Agent } from '../agent.js';
 import type { SkillRegistry } from '../../../skills/types.js';
 
@@ -15,12 +23,17 @@ import type { SkillRegistry } from '../../../skills/types.js';
 export interface CommandContext {
   agent: Agent;
   args: string;
-  rl: Interface;
   config: any;
 }
 
-/** Return true to signal the chat loop should break (e.g., /exit). */
-export type CommandResult = void | boolean;
+/**
+ * A handler's outcome. `output` is the text the adapter renders (undefined if
+ * the handler produced none). `exit` signals the session should terminate.
+ */
+export interface CommandResult {
+  output?: string;
+  exit?: boolean;
+}
 
 export type CommandHandler = (ctx: CommandContext) => Promise<CommandResult>;
 
@@ -30,6 +43,15 @@ export interface CommandEntry {
   description: string;
   aliases: string[];
   hidden?: boolean; // hidden from /help unless --all
+  /** Handler owns stdin/stdout (inquirer/ora) — TUI-deferred, readline-only. */
+  interactive?: boolean;
+}
+
+export type DispatchStatus = 'handled' | 'fallthrough' | 'exit';
+
+export interface DispatchResult {
+  status: DispatchStatus;
+  output?: string;
 }
 
 // ── Registry ───────────────────────────────────────────────────────────
@@ -41,7 +63,7 @@ export class CommandRegistry {
   register(
     name: string,
     handler: CommandHandler,
-    options: { description: string; aliases?: string[]; hidden?: boolean },
+    options: { description: string; aliases?: string[]; hidden?: boolean; interactive?: boolean },
   ): void {
     const entry: CommandEntry = {
       name,
@@ -49,6 +71,7 @@ export class CommandRegistry {
       description: options.description,
       aliases: options.aliases ?? [],
       hidden: options.hidden,
+      interactive: options.interactive,
     };
     this.commands.set(name, entry);
     for (const alias of entry.aliases) {
@@ -56,52 +79,49 @@ export class CommandRegistry {
     }
   }
 
+  /** Resolve a raw input string to its command entry (exact or alias), or null. */
+  resolveCommand(input: string): CommandEntry | null {
+    const trimmed = input.trim();
+    if (!trimmed.startsWith('/')) return null;
+    const withoutSlash = trimmed.slice(1);
+    const spaceIdx = withoutSlash.indexOf(' ');
+    const cmdName = (spaceIdx === -1 ? withoutSlash : withoutSlash.slice(0, spaceIdx)).toLowerCase();
+    return this.commands.get(cmdName) ?? this.commands.get(this.aliasMap.get(cmdName) ?? '') ?? null;
+  }
+
   /**
-   * Dispatch a raw user input string.
-   * Returns `true` if the input was handled (including unknown-command feedback).
-   * Returns `false` if input should fall through to normal chat.
-   * Returns `'exit'` if the chat loop should terminate.
+   * Dispatch a raw user input string. Handlers return their output; the caller
+   * renders it. Returns `fallthrough` for non-commands and unmatched skills.
    */
   async dispatch(
     input: string,
     ctx: CommandContext,
     skillRegistry: SkillRegistry | null,
-  ): Promise<'handled' | 'fallthrough' | 'exit'> {
-    const trimmed = input.trim();
-    if (!trimmed.startsWith('/')) return 'fallthrough';
-
-    // Parse command and args (strip leading /)
-    const withoutSlash = trimmed.slice(1);
-    const spaceIdx = withoutSlash.indexOf(' ');
-    const cmdName = (spaceIdx === -1 ? withoutSlash : withoutSlash.slice(0, spaceIdx)).toLowerCase();
-    const args = spaceIdx === -1 ? '' : withoutSlash.slice(spaceIdx + 1);
-
-    // 1. Exact match
-    const entry = this.commands.get(cmdName);
+  ): Promise<DispatchResult> {
+    const entry = this.resolveCommand(input);
     if (entry) {
+      const withoutSlash = input.trim().slice(1);
+      const spaceIdx = withoutSlash.indexOf(' ');
+      const args = spaceIdx === -1 ? '' : withoutSlash.slice(spaceIdx + 1);
       const result = await entry.handler({ ...ctx, args });
-      return result === true ? 'exit' : 'handled';
+      return { status: result.exit ? 'exit' : 'handled', output: result.output };
     }
 
-    // 2. Alias match
-    const canonical = this.aliasMap.get(cmdName);
-    if (canonical) {
-      const aliasedEntry = this.commands.get(canonical);
-      if (aliasedEntry) {
-        const result = await aliasedEntry.handler({ ...ctx, args });
-        return result === true ? 'exit' : 'handled';
+    // Skill invocation — delegate to caller (skill name with no matching command)
+    const trimmed = input.trim();
+    if (trimmed.startsWith('/')) {
+      const cmdName = trimmed.slice(1).split(/\s+/)[0]?.toLowerCase() ?? '';
+      if (skillRegistry && cmdName.length > 1) {
+        return { status: 'fallthrough' };
       }
     }
 
-    // 3. Skill invocation — delegate to caller
-    if (skillRegistry && cmdName.length > 1) {
-      return 'fallthrough'; // let index.ts handle skill invocation
-    }
-
-    // 4. Unknown command
-    console.log(chalk.yellow(`Unknown command: ${cmdName}`));
-    console.log(chalk.dim('Type /help for available commands.'));
-    return 'handled';
+    // Unknown command
+    const unknownName = trimmed.slice(1).split(/\s+/)[0] ?? '';
+    return {
+      status: 'handled',
+      output: `${chalk.yellow(`Unknown command: ${unknownName}`)}\n${chalk.dim('Type /help for available commands.')}`,
+    };
   }
 
   /**

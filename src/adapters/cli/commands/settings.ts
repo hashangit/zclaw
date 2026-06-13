@@ -1,8 +1,9 @@
 /**
  * ZClaw CLI — /settings Command Handler
  *
- * 3-level drill-down wizard (categories → settings list → mini-form)
- * plus subcommand router for direct operations.
+ * Read subcommands (list/get/reset/export/help) return their output for the
+ * adapter to render. The interactive wizard and `set` use inquirer (own stdin)
+ * and self-print — the TUI defers those. Subcommand router accepts direct ops.
  */
 
 import chalk from 'chalk';
@@ -71,18 +72,23 @@ export function settingsHandler(): CommandHandler {
     const manager = createManager();
 
     if (sub === 'list' || (sub === null && isNonInteractive())) {
-      return handleList(manager);
+      return { output: handleList(manager) };
     }
-    if (sub === 'get') return handleGet(manager, rest);
-    if (sub === 'set') return handleSet(manager, rest);
-    if (sub === 'reset') return handleReset(manager, rest);
-    if (sub === 'export') return handleExport(manager);
-    if (sub === 'help') return handleHelp();
-    if (sub === null && !isNonInteractive()) return handleWizard(manager);
+    if (sub === 'get') return { output: handleGet(manager, rest) };
+    if (sub === 'set') {
+      await handleSet(manager, rest);
+      return {};
+    }
+    if (sub === 'reset') return { output: await handleReset(manager, rest) };
+    if (sub === 'export') return { output: handleExport(manager) };
+    if (sub === 'help') return { output: handleHelp() };
+    // sub === null && interactive → wizard (owns stdin)
+    await handleWizard(manager);
+    return {};
   };
 }
 
-// ── Level 1: Category Menu ────────────────────────────────────────────────
+// ── Level 1: Category Menu (interactive — self-prints) ────────────────────
 
 async function handleWizard(manager: SettingsManager): Promise<void> {
   while (true) {
@@ -115,7 +121,10 @@ async function handleWizard(manager: SettingsManager): Promise<void> {
     }
 
     if (selected === '__done') return;
-    if (selected === '__export') return handleExport(manager);
+    if (selected === '__export') {
+      console.log(handleExport(manager));
+      return;
+    }
     if (selected === '__reset') {
       try {
         const { confirm } = await inquirer.prompt([{
@@ -138,7 +147,7 @@ async function handleWizard(manager: SettingsManager): Promise<void> {
   }
 }
 
-// ── Level 2: Settings List ────────────────────────────────────────────────
+// ── Level 2: Settings List (interactive — self-prints) ────────────────────
 
 async function handleCategoryDrilldown(manager: SettingsManager, category: string): Promise<void> {
   const catEntry = SETTINGS_CATEGORIES.find(c => c.key === category);
@@ -183,7 +192,7 @@ async function handleCategoryDrilldown(manager: SettingsManager, category: strin
   }
 }
 
-// ── Level 3: Bordered Mini-Form ───────────────────────────────────────────
+// ── Level 3: Bordered Mini-Form (interactive — self-prints) ───────────────
 
 async function handleSettingEdit(manager: SettingsManager, dotKey: string): Promise<void> {
   const entry = SETTINGS_MAP.get(dotKey);
@@ -290,9 +299,9 @@ async function handleSettingEdit(manager: SettingsManager, dotKey: string): Prom
   }
 }
 
-// ── Subcommand implementations ────────────────────────────────────────────
+// ── Read subcommands (return output for the adapter to render) ────────────
 
-function handleList(manager: SettingsManager): void {
+function handleList(manager: SettingsManager): string {
   const settings = manager.list();
   const rows: SettingRow[] = settings.map(s => ({
     dotKey: s.dotKey,
@@ -301,29 +310,29 @@ function handleList(manager: SettingsManager): void {
     category: s.category,
     restartRequired: s.restartRequired,
   }));
-  console.log(formatSettingTable(rows));
+  return formatSettingTable(rows);
 }
 
-function handleGet(manager: SettingsManager, args: string): void {
+function handleGet(manager: SettingsManager, args: string): string {
   const dotKey = args.trim();
   if (!dotKey) {
-    console.log(chalk.yellow('Usage: /settings get <dot.key>'));
-    return;
+    return chalk.yellow('Usage: /settings get <dot.key>');
   }
 
   try {
     const result = manager.get(dotKey);
     const schema = SETTINGS_SCHEMA.get(dotKey);
-    console.log(`${chalk.cyan(dotKey)} = ${formatSettingValue(result.value, result.masked)}`);
+    const lines = [`${chalk.cyan(dotKey)} = ${formatSettingValue(result.value, result.masked)}`];
     if (schema?.default !== undefined && result.value !== schema.default) {
-      console.log(chalk.dim(`  Default: ${schema.default}`));
+      lines.push(chalk.dim(`  Default: ${schema.default}`));
     }
-    console.log(chalk.dim(`  Source: ${result.origin}`));
+    lines.push(chalk.dim(`  Source: ${result.origin}`));
     if (isRestartRequired(dotKey)) {
-      console.log(chalk.yellow('  [restart required]'));
+      lines.push(chalk.yellow('  [restart required]'));
     }
+    return lines.join('\n');
   } catch (e: any) {
-    console.log(chalk.red(e.message));
+    return chalk.red(e.message);
   }
 }
 
@@ -376,40 +385,44 @@ async function handleSet(manager: SettingsManager, args: string): Promise<void> 
   }
 }
 
-async function handleReset(manager: SettingsManager, args: string): Promise<void> {
+async function handleReset(manager: SettingsManager, args: string): Promise<string> {
   const dotKey = args.trim();
   if (!dotKey) {
-    console.log(chalk.yellow('Usage: /settings reset <dot.key>'));
-    return;
+    return chalk.yellow('Usage: /settings reset <dot.key>');
   }
 
   try {
     await manager.reset(dotKey);
-    console.log(chalk.green(`Reset ${dotKey} to default.`));
+    return chalk.green(`Reset ${dotKey} to default.`);
   } catch (e: any) {
-    console.log(chalk.red(`Error: ${e.message}`));
+    return chalk.red(`Error: ${e.message}`);
   }
 }
 
-function handleExport(manager: SettingsManager): void {
+function handleExport(manager: SettingsManager): string {
   const settings = manager.list();
   const obj: Record<string, any> = {};
   for (const s of settings) {
     obj[s.dotKey] = formatSettingValue(s.value, s.masked);
   }
-  console.log(JSON.stringify(obj, null, 2));
+  return JSON.stringify(obj, null, 2);
 }
 
-function handleHelp(): void {
-  console.log(chalk.bold.cyan('/settings') + ' — View and edit configuration\n');
-  console.log('Usage:');
-  console.log('  /settings                          Interactive settings wizard');
-  console.log('  /settings list [category]          List settings in a category');
-  console.log('  /settings get <dot.key>            Show current value + origin');
-  console.log('  /settings set <dot.key> <value>    Set a value');
-  console.log('  /settings reset <dot.key>          Remove a value (revert to default)');
-  console.log('  /settings export                   Print full merged config as JSON');
-  console.log('  /settings help                     Show this help\n');
-  console.log(chalk.dim('Aliases: /config, /setting'));
-  console.log(chalk.dim('Setup wizard: /setup'));
+function handleHelp(): string {
+  const lines = [
+    `${chalk.bold.cyan('/settings')} — View and edit configuration`,
+    '',
+    'Usage:',
+    '  /settings                          Interactive settings wizard',
+    '  /settings list [category]          List settings in a category',
+    '  /settings get <dot.key>            Show current value + origin',
+    '  /settings set <dot.key> <value>    Set a value',
+    '  /settings reset <dot.key>          Remove a value (revert to default)',
+    '  /settings export                   Print full merged config as JSON',
+    '  /settings help                     Show this help',
+    '',
+    chalk.dim('Aliases: /config, /setting'),
+    chalk.dim('Setup wizard: /setup'),
+  ];
+  return lines.join('\n');
 }

@@ -5,6 +5,9 @@
  * key context needed to continue the session.
  *
  * Aliases: /compress
+ *
+ * Uses an `ora` spinner (stdout), so it is marked `interactive` and the TUI
+ * defers it — run it in the readline REPL.
  */
 
 import chalk from 'chalk';
@@ -18,7 +21,6 @@ import { buildSystemPrompt } from '../system-prompts.js';
 
 export const compactHandler: CommandHandler = async (ctx) => {
   const { agent, args } = ctx;
-
   const spinner = ora('Compacting...').start();
 
   try {
@@ -29,9 +31,7 @@ export const compactHandler: CommandHandler = async (ctx) => {
     const conversationMessages = allMessages.filter((m) => m.role !== 'system');
 
     if (conversationMessages.length === 0) {
-      spinner.stop();
-      console.log(chalk.yellow('Nothing to compact — conversation is empty.'));
-      return;
+      return { output: chalk.yellow('Nothing to compact — conversation is empty.') };
     }
 
     // Build the summarization instruction
@@ -68,15 +68,11 @@ export const compactHandler: CommandHandler = async (ctx) => {
         hooks: createHookExecutor(),
       });
     } catch (error: any) {
-      spinner.stop();
-      console.error(chalk.red(`Compaction failed: ${error.message}`));
-      return;
+      return { output: chalk.red(`Compaction failed: ${error.message}`) };
     }
 
     if (result.error) {
-      spinner.stop();
-      console.error(chalk.red(`Compaction failed: ${result.error.message}`));
-      return;
+      return { output: chalk.red(`Compaction failed: ${result.error.message}`) };
     }
 
     // Extract the summary text from the result messages
@@ -104,10 +100,10 @@ export const compactHandler: CommandHandler = async (ctx) => {
 
     agent.setMessages(newMessages);
 
-    spinner.stop();
-    console.log(chalk.green('Conversation compacted. Token usage reduced.'));
+    return { output: chalk.green('Conversation compacted. Token usage reduced.') };
   } catch (error: any) {
+    return { output: chalk.red(`Compaction error: ${error.message}`) };
+  } finally {
     spinner.stop();
-    console.error(chalk.red(`Compaction error: ${error.message}`));
   }
 };

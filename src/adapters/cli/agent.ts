@@ -14,6 +14,17 @@ import { DEFAULT_MODELS } from '../../models-catalog.js';
 import type { Message, StepResult, Usage, ToolCall, ApproveToolFn, PermissionLevel } from '../../core/types.js';
 import type { Middleware } from '../../core/middleware.js';
 
+/**
+ * Outcome of a single `Agent.chat()` turn. Returned so non-readline callers
+ * (the TUI) can render terminal states (aborted / max-steps / error) instead
+ * of relying on chalk stdout. The readline path ignores it and prints the
+ * same chalk messages as before.
+ */
+export interface ChatResult {
+  finishReason: string;
+  error?: string;
+}
+
 export class Agent {
   private provider: LLMProvider;
   private messages: Message[];
@@ -71,31 +82,48 @@ export class Agent {
     this._middleware = middleware;
   }
 
-  async chat(userInput: string, signal?: AbortSignal, approveTool?: ApproveToolFn, permissionLevel?: PermissionLevel): Promise<void> {
-    // Resolve @path references
-    let resolvedInput = userInput;
-    if (userInput.includes('@')) {
-      try {
-        const { resolveReferences } = await import('../../skills/resolver.js');
-        resolvedInput = await resolveReferences(userInput);
-      } catch { /* resolver not available */ }
+  async chat(
+    userInput: string,
+    signal?: AbortSignal,
+    approveTool?: ApproveToolFn,
+    permissionLevel?: PermissionLevel,
+    onStep?: (step: StepResult) => void,
+  ): Promise<ChatResult> {
+    // @path references are resolved by the caller (repl.ts / use-agent.ts),
+    // not here — one resolution site per caller (T022).
+    this.messages.push({ id: generateId(), role: "user", content: userInput, timestamp: now() });
+
+    // When a custom onStep is supplied (TUI mode), the caller owns rendering:
+    // skip the ora spinner and chalk finish messages, and return the loop
+    // result so the caller renders terminal states. The readline path passes
+    // no onStep and stays byte-identical.
+    const customSteps = !!onStep;
+    const spinner = customSteps ? null : ora('Thinking...').start();
+
+    let wrappedApproveTool = approveTool;
+    if (!customSteps && approveTool && spinner) {
+      wrappedApproveTool = async (call: Parameters<ApproveToolFn>[0]) => {
+        spinner.stop();
+        try {
+          return await approveTool(call);
+        } finally {
+          spinner.start();
+        }
+      };
     }
 
-    this.messages.push({ id: generateId(), role: "user", content: resolvedInput, timestamp: now() });
-
-    const spinner = ora('Thinking...').start();
-
-    // Wrap approveTool to manage spinner state
-    const wrappedApproveTool = approveTool
-      ? async (call: Parameters<ApproveToolFn>[0]) => {
-          spinner.stop();
-          try {
-            return await approveTool(call);
-          } finally {
-            spinner.start();
-          }
-        }
-      : undefined;
+    const defaultOnStep = (step: StepResult) => {
+      if (!spinner) return;
+      if (step.type === "text" && step.content) {
+        spinner.stop();
+        console.log(chalk.blue("ZClaw: ") + step.content);
+        spinner.start();
+      } else if (step.type === "tool_call" && step.toolCall) {
+        spinner.stop();
+        console.log(chalk.gray(`Executing tool: ${step.toolCall.name}...`));
+        spinner.start();
+      }
+    };
 
     try {
       const result = await runAgentLoop({
@@ -112,35 +140,30 @@ export class Agent {
         permissionLevel,
         autoConfirm: this.autoConfirm,
         middleware: this._middleware.length > 0 ? this._middleware : undefined,
-        onStep: (step) => {
-          if (step.type === "text" && step.content) {
-            spinner.stop();
-            console.log(chalk.blue("ZClaw: ") + step.content);
-            spinner.start();
-          } else if (step.type === "tool_call" && step.toolCall) {
-            spinner.stop();
-            console.log(chalk.gray(`Executing tool: ${step.toolCall.name}...`));
-            spinner.start();
-          }
-        },
+        onStep: onStep ?? defaultOnStep,
       });
 
-      spinner.stop();
+      spinner?.stop();
 
-      if (result.finishReason === "aborted") {
-        console.log(chalk.yellow("\n(Interrupted)"));
-      } else if (result.finishReason === "max_steps") {
-        console.log(chalk.yellow("\n(Max steps reached — the agent needed more iterations to complete. Try increasing maxSteps or asking a more specific question.)"));
-      } else if (result.error) {
-        console.error(chalk.red(`Error: ${result.error.message}`));
+      if (!customSteps) {
+        if (result.finishReason === "aborted") {
+          console.log(chalk.yellow("\n(Interrupted)"));
+        } else if (result.finishReason === "max_steps") {
+          console.log(chalk.yellow("\n(Max steps reached — the agent needed more iterations to complete. Try increasing maxSteps or asking a more specific question.)"));
+        } else if (result.error) {
+          console.error(chalk.red(`Error: ${result.error.message}`));
+        }
       }
+
+      return { finishReason: result.finishReason, error: result.error?.message };
     } catch (error: any) {
-      spinner.stop();
+      spinner?.stop();
       if (error.name === 'AbortError' || signal?.aborted) {
-        console.log(chalk.yellow("\n(Interrupted)"));
-      } else {
-        console.error(chalk.red(error.message));
+        if (!customSteps) console.log(chalk.yellow("\n(Interrupted)"));
+        return { finishReason: 'aborted' };
       }
+      if (!customSteps) console.error(chalk.red(error.message));
+      return { finishReason: 'error', error: error.message };
     }
   }
 

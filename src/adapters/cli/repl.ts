@@ -6,39 +6,13 @@
  */
 
 import chalk from 'chalk';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import * as readline from 'node:readline/promises';
 import inquirer from 'inquirer';
 
 import { Agent } from './agent.js';
-import { resolveLaunchMode, selectSystemPrompt } from './system-prompts.js';
-import { ProviderType } from '../../providers/types.js';
-import { createProvider } from '../../providers/factory.js';
-import { resolveProviderConfigFromApp } from '../../core/provider-resolver.js';
-import {
-  type AppConfig,
-  loadJsonConfig,
-  applyEnvOverrides,
-  migrateLegacyFormat,
-  resolveActiveProviderType,
-  getConfigPaths,
-} from './config-loader.js';
-import { runSetup } from './setup.js';
-import { isNonInteractive, hasRequiredProviderEnv } from './docker-utils.js';
-import { CommandRegistry } from './commands/registry.js';
-import { createHelpHandler } from './commands/help.js';
-import { clearHandler } from './commands/clear.js';
-import { exitHandler } from './commands/exit.js';
-import { compactHandler } from './commands/compact.js';
-import { skillsHandler } from './commands/skills.js';
-import { modelsHandler } from './commands/models.js';
-import { settingsHandler } from './commands/settings.js';
+import { bootstrapCliSession } from './bootstrap.js';
+import { buildCommandRegistry } from './commands/build-registry.js';
 import type { ApproveToolFn, PermissionLevel } from '../../core/types.js';
-import { resolvePermissionLevel } from '../../core/permission.js';
-import { SettingsManager } from '../../core/settings-manager.js';
-import { loadMergedConfig } from './config-loader.js';
 
 // ── Interrupt handling ───────────────────────────────────────────────
 
@@ -183,60 +157,6 @@ export async function chatWithInterrupt(agent: Agent, input: string, config?: an
   }
 }
 
-// ── Command registry builder ─────────────────────────────────────────
-
-function buildCommandRegistry(agent: Agent, config: any, activeProviderType: string, gatewayInstance?: any): CommandRegistry {
-  const registry = new CommandRegistry();
-  const skillRegistry = agent.getSkillRegistry();
-
-  // Tier 1 — Session Control
-  registry.register('help', createHelpHandler(registry, skillRegistry), {
-    description: 'Show available commands',
-    aliases: ['?'],
-  });
-  registry.register('clear', clearHandler, {
-    description: 'Clear conversation history',
-    aliases: ['reset', 'new'],
-  });
-  registry.register('exit', exitHandler, {
-    description: 'End the session',
-    aliases: ['quit'],
-  });
-  registry.register('compact', compactHandler, {
-    description: 'Compress conversation to a summary',
-    aliases: ['compress'],
-  });
-
-  // Tier 2 — Configuration & Discovery
-  registry.register('skills', skillsHandler, {
-    description: 'List loaded skills',
-  });
-  registry.register('models', modelsHandler(agent, config, activeProviderType), {
-    description: 'Switch providers and models',
-    aliases: ['model'],
-  });
-  registry.register('settings', settingsHandler(), {
-    description: 'View and edit configuration',
-    aliases: ['config', 'setting'],
-  });
-  registry.register('setup', async () => { await runSetup(); }, {
-    description: 'Run the setup wizard',
-  });
-
-  // Gateway management
-  registry.register('gateway', async (ctx) => {
-    const { createGatewayCommandHandler } = await import('./commands/gateway.js');
-    const handler = createGatewayCommandHandler(gatewayInstance);
-    const output = await handler(ctx.args);
-    console.log(output);
-  }, {
-    description: 'Gateway management (targets, routes, credentials)',
-    aliases: ['gw'],
-  });
-
-  return registry;
-}
-
 // ── Main chat runner ─────────────────────────────────────────────────
 
 export async function runChat(queryParts: string[], options: any) {
@@ -245,169 +165,28 @@ export async function runChat(queryParts: string[], options: any) {
   }
 
   const initialQuery = queryParts.join(' ');
-  const { global: GLOBAL_CONFIG_FILE, local: LOCAL_CONFIG_FILE } = getConfigPaths();
-
-  // 1. Load and merge configs (local > global)
-  const globalConfig = loadJsonConfig(GLOBAL_CONFIG_FILE);
-  const localConfig = loadJsonConfig(LOCAL_CONFIG_FILE);
-  if (Object.keys(localConfig).length > 0 && options.interactive) {
-    console.log(chalk.dim(`Loaded project config from ${LOCAL_CONFIG_FILE}`));
-  }
-
-  let fullConfig = { ...globalConfig, ...localConfig };
-
-  // 2. Inject runtime flags
-  fullConfig.autoConfirm = options.yes || options.headless || options.docker || false;
-
-  // 2b. Resolve permission level from CLI flags, env var, and config
-  let permissionLevel: PermissionLevel | undefined;
-  const headless = options.headless || options.yes || options.docker;
-
-  if (!headless) {
-    const flagLevel = options.yolo ? "permissive"
-      : options.strict ? "strict"
-      : options.moderate ? "moderate"
-      : undefined;
-    permissionLevel = resolvePermissionLevel(
-      flagLevel,
-      process.env.ZCLAW_PERMISSION,
-      fullConfig.permissionLevel,
-    );
-  }
-
-  // Warn about conflicting flags
-  if (headless && (options.strict || options.moderate || options.yolo)) {
-    const flag = options.strict ? '--strict' : options.moderate ? '--moderate' : '--yolo';
-    console.warn(`Warning: --headless overrides ${flag}. All tools will be auto-approved.`);
-  }
-
-  // 3. Apply env var overrides for tool settings
-  fullConfig = applyEnvOverrides(fullConfig);
-
-  // 4. Auto-migrate legacy config format (top-level apiKey/baseUrl/model)
-  fullConfig = migrateLegacyFormat(fullConfig, { model: options.model });
-
-  // 5. Resolve active provider
-  let activeProviderType = resolveActiveProviderType(fullConfig, { provider: options.provider });
-  let providerConfig = resolveProviderConfigFromApp(fullConfig, activeProviderType);
-
-  if (!providerConfig) {
-    console.log(chalk.yellow("No provider configuration found."));
-
-    if (isNonInteractive()) {
-      // Non-interactive: cannot run setup wizard, rely on env vars only
-      if (hasRequiredProviderEnv(fullConfig)) {
-        // Re-resolve after env var check
-        fullConfig = migrateLegacyFormat(fullConfig, { model: options.model });
-        activeProviderType = resolveActiveProviderType(fullConfig, { provider: options.provider });
-        providerConfig = resolveProviderConfigFromApp(fullConfig, activeProviderType);
-      }
-      if (!providerConfig) {
-        console.error(chalk.red("No provider configured. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or GLM_API_KEY env vars, or provide a config file."));
-        process.exit(1);
-      }
-    } else {
-      // Interactive: ask user
-      const inquirer = await import('inquirer');
-      const { doSetup } = await inquirer.default.prompt([
-        {
-          type: 'confirm',
-          name: 'doSetup',
-          message: 'Would you like to run the setup wizard now?',
-          default: true
-        }
-      ]);
-
-      if (doSetup) {
-        await runSetup();
-        const newConfig = loadJsonConfig(GLOBAL_CONFIG_FILE);
-        Object.assign(fullConfig, newConfig);
-        const updatedProviderType = resolveActiveProviderType(fullConfig, { provider: options.provider });
-        providerConfig = resolveProviderConfigFromApp(fullConfig, updatedProviderType);
-      } else {
-        console.error(chalk.red("Provider configuration is required to proceed."));
-        process.exit(1);
-      }
-    }
-  }
-
-  if (!providerConfig) {
-    console.error(chalk.red("Provider configuration is still missing. Exiting."));
-    process.exit(1);
-  }
-
-  // CLI --model override
-  if (options.model) {
-    providerConfig.model = options.model;
-  }
-
-  const provider = await createProvider(providerConfig);
-  // Select system prompt by launch mode: interactive (TUI/readline in a TTY)
-  // gets the interactive coding-agent prompt; headless/docker/piped keep
-  // the Docker-native prompt unchanged.
-  const launchMode = resolveLaunchMode(options);
-  const systemPrompt = selectSystemPrompt(launchMode);
-  const agent = new Agent(provider, providerConfig.model, fullConfig, systemPrompt);
-
-  // Initialize skills system
-  await agent.initializeSkills();
-
-  // Initialize gateway (if enabled)
-  let gatewayInstance: any = null;
-  try {
-    const settingsManager = new SettingsManager({
-      config: applyEnvOverrides(loadMergedConfig()),
-      projectConfigPath: LOCAL_CONFIG_FILE,
-      globalConfigPath: GLOBAL_CONFIG_FILE,
-    });
-    const gwEnabled = settingsManager.get('gateway.enabled').value as boolean;
-    if (gwEnabled) {
-      const gatewayConfig = {
-        enabled: true,
-        semanticTopK: settingsManager.get('gateway.semanticTopK').value as number,
-        defaultRateLimitPerMin: settingsManager.get('gateway.defaultRateLimitPerMin').value as number,
-        maxAuditLogsInMemory: settingsManager.get('gateway.maxAuditLogs').value as number,
-      };
-      const { GatewaySettingsAdapter } = await import('../../gateway/settings-adapter.js');
-      const gwStorageDir = process.env.ZCLAW_GATEWAY_DIR ?? path.join(os.homedir(), '.zclaw');
-      const gwSettingsAdapter = new GatewaySettingsAdapter(gwStorageDir);
-      await gwSettingsAdapter.initialize();
-
-      const { createGateway } = await import('../../gateway/index.js');
-      gatewayInstance = await createGateway(gatewayConfig, gwSettingsAdapter);
-
-      if (gatewayInstance) {
-        const { semanticToolInjectionMiddleware } = await import('../../core/middleware/semantic-tools.js');
-        agent.setMiddleware([semanticToolInjectionMiddleware(gatewayInstance, gatewayConfig.semanticTopK)]);
-        if (options.interactive) {
-          console.log(chalk.green('Gateway initialized'));
-        }
-      }
-    }
-  } catch (e) {
-    console.warn(chalk.yellow(`Gateway initialization skipped: ${e instanceof Error ? e.message : String(e)}`));
-  }
-
-  // Ensure ~/zclaw_documents exists
-  const docsDir = path.join(os.homedir(), 'zclaw_documents');
-  if (!fs.existsSync(docsDir)) {
-    fs.mkdirSync(docsDir, { recursive: true });
-    for (const sub of ['notes', 'templates', 'output', 'knowledge']) {
-      fs.mkdirSync(path.join(docsDir, sub), { recursive: true });
-    }
-  }
+  const ctx = await bootstrapCliSession(options);
+  const { agent, fullConfig, activeProviderType, providerConfig, permissionLevel, gatewayInstance } = ctx;
 
   if (options.interactive) {
     console.log(chalk.green(`Agent initialized with ${activeProviderType} (${providerConfig.model})`));
     console.log(chalk.gray("Type /help for commands, /exit to leave."));
   }
 
+  // @path resolver — hoisted so the initial query resolves at the caller,
+  // not inside Agent.chat() (T022). The resolver is idempotent.
+  const { resolveReferences } = await import('../../skills/resolver.js');
+
   // Handle initial query if present
   if (initialQuery) {
     if (options.interactive) {
         console.log(chalk.blue("\nProcessing initial request: ") + chalk.bold(initialQuery));
     }
-    await chatWithInterrupt(agent, initialQuery, fullConfig, permissionLevel);
+    let resolvedInitial = initialQuery;
+    if (initialQuery.includes('@')) {
+      try { resolvedInitial = await resolveReferences(initialQuery); } catch { /* resolver not available */ }
+    }
+    await chatWithInterrupt(agent, resolvedInitial, fullConfig, permissionLevel);
 
     // Headless mode exit
     if (!options.interactive) {
@@ -427,7 +206,6 @@ export async function runChat(queryParts: string[], options: any) {
 
   // Lazy-loaded modules (hoisted outside the loop to avoid repeated import overhead)
   const { invokeSkill, createSkillProviderSwitcher } = await import('../../core/skill-invoker.js');
-  const { resolveReferences } = await import('../../skills/resolver.js');
 
   try {
     while (true) {
@@ -445,14 +223,15 @@ export async function runChat(queryParts: string[], options: any) {
       if (userInput.startsWith('/')) {
         rl.pause();
         try {
-          const result = await cmdRegistry.dispatch(
+          const { status, output } = await cmdRegistry.dispatch(
             userInput,
-            { agent, args: '', rl, config: fullConfig },
+            { agent, args: '', config: fullConfig },
             agent.getSkillRegistry(),
           );
 
-          if (result === 'exit') break;
-          if (result === 'handled') continue;
+          if (output) console.log(output);
+          if (status === 'exit') break;
+          if (status === 'handled') continue;
 
           // 'fallthrough' — try skill invocation
           const skillResult = await invokeSkill({ input: userInput, registry: agent.getSkillRegistry()! });

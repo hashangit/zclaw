@@ -1,0 +1,85 @@
+/**
+ * Build the shared slash-command registry.
+ *
+ * Single owner of which commands exist and how they're wired — used by both
+ * the readline REPL (`repl.ts`) and the Ink TUI (`tui/`). Handlers follow one
+ * contract: they return `{ output, exit }` and never write to stdout directly.
+ *
+ * `interactive: true` marks handlers that own stdin/stdout (inquirer wizards,
+ * ora spinners, the setup wizard). They run in the readline REPL but the TUI
+ * defers them (Ink owns stdin there).
+ */
+
+import type { Agent } from '../agent.js';
+import { CommandRegistry } from './registry.js';
+import { createHelpHandler } from './help.js';
+import { clearHandler } from './clear.js';
+import { exitHandler } from './exit.js';
+import { compactHandler } from './compact.js';
+import { skillsHandler } from './skills.js';
+import { modelsHandler } from './models.js';
+import { settingsHandler } from './settings.js';
+import { runSetup } from '../setup.js';
+
+export function buildCommandRegistry(
+  agent: Agent,
+  config: any,
+  activeProviderType: string,
+  gatewayInstance?: any,
+): CommandRegistry {
+  const registry = new CommandRegistry();
+  const skillRegistry = agent.getSkillRegistry();
+
+  // Tier 1 — Session Control
+  registry.register('help', createHelpHandler(registry, skillRegistry), {
+    description: 'Show available commands',
+    aliases: ['?'],
+  });
+  registry.register('clear', clearHandler, {
+    description: 'Clear conversation history',
+    aliases: ['reset', 'new'],
+  });
+  registry.register('exit', exitHandler, {
+    description: 'End the session',
+    aliases: ['quit'],
+  });
+  registry.register('compact', compactHandler, {
+    description: 'Compress conversation to a summary',
+    aliases: ['compress'],
+    interactive: true, // ora spinner
+  });
+
+  // Tier 2 — Configuration & Discovery
+  registry.register('skills', skillsHandler, {
+    description: 'List loaded skills',
+  });
+  registry.register('models', modelsHandler(agent, config, activeProviderType), {
+    description: 'Switch providers and models',
+    aliases: ['model'],
+    interactive: true, // inquirer wizard
+  });
+  registry.register('settings', settingsHandler(), {
+    description: 'View and edit configuration',
+    aliases: ['config', 'setting'],
+    interactive: true, // inquirer wizard
+  });
+  registry.register('setup', async () => {
+    await runSetup();
+    return {};
+  }, {
+    description: 'Run the setup wizard',
+    interactive: true,
+  });
+
+  // Gateway management — handler returns a string; adapt to CommandResult.
+  registry.register('gateway', async (ctx) => {
+    const { createGatewayCommandHandler } = await import('./gateway.js');
+    const handler = createGatewayCommandHandler(gatewayInstance);
+    return { output: await handler(ctx.args) };
+  }, {
+    description: 'Gateway management (targets, routes, credentials)',
+    aliases: ['gw'],
+  });
+
+  return registry;
+}
