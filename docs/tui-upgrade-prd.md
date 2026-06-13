@@ -26,7 +26,7 @@ We evaluated using Pi TUI via its published npm package (`@earendil-works/pi-tui
 | **Reuse runAgentLoop + StreamManager** (mirror SDK's chatStream) | Yes — **chosen** | Wraps runAgentLoop in background, pipes onStep → StreamManager. Zero engine divergence. Tool execution, skills, permissions, gateway all work identically in interactive and headless mode. |
 | **New parallel loop** (rewrite tool execution, permissions, etc.) | Yes | Rejected. Hundreds of lines of duplicated logic. Guaranteed behavioral divergence. |
 
-The chosen pattern ships today in `src/adapters/sdk/agent.ts::chatStream()`. The CLI Agent follows the same architecture — wraps `runAgentLoop` in a background loop, pipes `onStep` events into `StreamManager`. The wiring differs from the SDK because the CLI Agent holds state as instance fields (`this.messages`, `this._middleware`, `this.skillCatalog`, `this.autoConfirm`) rather than closure variables, and additionally does `@path` resolution (`resolveReferences`) and `approveTool`-spinner bridging. Pattern is identical; line count is ~60 lines (not 50 — accounts for `@path` resolution and TUI-wired `approveTool`).
+The chosen pattern ships today in `src/adapters/sdk/agent.ts::chatStream()`. The CLI Agent follows the same architecture — wraps `runAgentLoop` in a background loop, pipes `onStep` events into `StreamManager`. The wiring differs from the SDK because the CLI Agent holds state as instance fields (`this.messages`, `this._middleware`, `this.skillCatalog`, `this.autoConfirm`) rather than closure variables, and additionally bridges `approveTool` to the TUI's inline permission prompt. `@path` resolution is consolidated to the caller in Phase 1 (see §Feature Gap #2), so neither `Agent.chat()` nor `Agent.chatStream()` resolves references. `Agent.chatStream()` lands in **Phase 2** at ~80-100 lines (instance-state wiring + TUI-wired `approveTool`); Phase 1 renders via the existing `Agent.chat({ onStep })` path. Because the TUI is in-process, `Agent.chatStream()` may expose deltas through a direct `onStep`/`onDelta` callback rather than routing through `StreamManager` (which exists to serve remote SDK/Server consumers) — decide at Phase-2 kickoff.
 
 ---
 
@@ -142,7 +142,7 @@ src/adapters/cli/
 src/adapters/cli/
 ├── index.ts           → ✅ EXISTS + 🔲 Phase 1 — add TUI/REPL dispatch
 ├── repl.ts            → ✅ EXISTS — readline fallback for non-interactive
-├── agent.ts           → ✅ EXISTS + 🔲 Phase 1 — add chatStream() method
+├── agent.ts           → ✅ EXISTS + 🔲 Phase 2 — add chatStream() (Phase 1 uses existing chat({onStep}))
 ├── system-prompts.ts  → ✅ SHIPPED — no changes needed
 ├── setup.ts           → ✅ SHIPPED — unchanged
 ├── config-loader.ts   → ✅ SHIPPED — unchanged
@@ -188,8 +188,11 @@ src/adapters/cli/
 // index.ts — CLI entry point
 const { options, queryParts } = parseArgs();
 
-if (options.interactive && process.stdin.isTTY) {
-  // Dynamic import — React/Ink not loaded in headless/CI/Docker mode
+if (resolveLaunchMode(options) === 'interactive') {
+  // Dynamic import — React/Ink not loaded in headless/CI/Docker mode.
+  // resolveLaunchMode composes TTY + --no-interactive + piped stdin + --docker +
+  // ZCLAW_NO_INTERACTIVE — the SAME predicate that selects the system prompt,
+  // so launch mode and UI mode can never diverge.
   const { startTui } = await import('./tui/index.js');
   await startTui({ queryParts, options, config, agent, ... });
 } else {
@@ -290,7 +293,7 @@ TUI calls Agent.chatStream(input, signal)
   → TUI use-agent.ts hook      (consumes step streams, renders components)
 ```
 
-This follows the pattern of `src/adapters/sdk/agent.ts::chatStream()`, which wraps `runAgentLoop` in a background loop, pipes `onStep` events into a `StreamManager`, and exposes `textStream` + `stepsStream`. The CLI Agent adopts the same pattern — wiring differs (Agent instance state vs. SDK closure variables, plus `@path` resolution and TUI-wired `approveTool`), but the engine path is identical. `StreamManager` was built for exactly this (its docstring: "Eliminate duplication between SDK's streamText() and agent's chatStream()").
+This follows the pattern of `src/adapters/sdk/agent.ts::chatStream()`, which wraps `runAgentLoop` in a background loop, pipes `onStep` events into a `StreamManager`, and exposes `textStream` + `stepsStream`. The CLI Agent adopts the same pattern in Phase 2 — wiring differs (Agent instance state vs. SDK closure variables, plus TUI-wired `approveTool`; `@path` resolution stays at the caller), but the engine path is identical. `StreamManager` was built for exactly this (its docstring: "Eliminate duplication between SDK's streamText() and agent's chatStream()"). Phase 1 needs none of it — it renders via `Agent.chat({ onStep })`; even in Phase 2 the in-process TUI may consume deltas through a direct callback rather than `StreamManager`.
 
 **Token-level streaming (phase 2):** This becomes an additive enhancement to `runAgentLoop`. When `provider.chatStream()` is available, `executeLoop()` branches on the one call site (`response = await currentProvider.chat(...)`) to iterate deltas and emit per-token updates via a new `text_delta` step type. ~40-60 lines in the loop, including a `StreamingResponseAccumulator` to reconstruct incremental `tool_calls[].function.arguments` from fragmented provider streams. The new `text_delta` step type ripples into `StreamManager.toSSEStream`, SDK `chatStream`, and Server event typing — each needs a small addition to handle the new event.
 
@@ -298,7 +301,7 @@ This follows the pattern of `src/adapters/sdk/agent.ts::chatStream()`, which wra
 
 | Layer | Change | Size |
 |-------|--------|------|
-| `src/adapters/cli/agent.ts` | New `chatStream()` — wraps `runAgentLoop` + `StreamManager` (same pattern as SDK, ~100-130 lines accounting for `@path` resolution and TUI-wired `approveTool`) | ~100-130 lines |
+| `src/adapters/cli/agent.ts` | **Phase 2:** new `chatStream()` — wraps `runAgentLoop` and exposes deltas to the TUI (~80-100 lines; `@path` resolution already consolidated to the caller in Phase 1; the in-process TUI likely uses a direct `onStep`/`onDelta` callback rather than `StreamManager`) | ~80-100 lines (Phase 2) |
 | `src/core/agent-loop.ts` | Phase 2: optionally emit `text_delta` steps when `provider.chatStream()` is used | ~50 lines |
 | `src/providers/types.ts` | Add `chatStream()` to `LLMProvider` interface (phase 2) | ~15 lines |
 | `src/providers/openai.ts` | Implement `chatStream()` for OpenAI + OpenAI-compatible (phase 2) | ~80 lines |
@@ -315,7 +318,7 @@ This follows the pattern of `src/adapters/sdk/agent.ts::chatStream()`, which wra
 
 #### 3. Slash Command Autocomplete
 **Current:** No TAB completion. Discovery via `/help`.
-**Target:** Type `/` in prompt → dropdown above input showing fuzzy-filtered commands with descriptions. Uses Ink's `useInput` hook. Built-in + custom `.zclaw/commands/` markdown commands + skill names.
+**Target:** Type `/` in prompt → dropdown above input showing fuzzy-filtered commands with descriptions. Uses Ink's `useInput` hook. Sources: the built-in command registry + skill names (a `.zclaw/commands/` custom-command loader is added only if that mechanism is introduced).
 
 #### 4. @mention / File Autocomplete
 **Current:** Regex substitution in raw input. No discovery.
@@ -389,7 +392,7 @@ Tokyo Night Moon as default. `theme.ts` exports color tokens. Switchable by relo
 
 Before any Phase 1 code:
 
-1. Add `"jsx": "react-jsx"` to `tsconfig.json` (1 line). Run `pnpm test` — all 161 existing tests must pass. If any test fails due to JSX resolution, fix before proceeding.
+1. Add `"jsx": "react-jsx"` to `tsconfig.json` (1 line). Run `pnpm test` — all pre-existing tests must pass (snapshot: 243 across 19 files; the count drifts, so treat as "all pre-existing"). If any test fails due to JSX resolution, fix before proceeding.
 2. Run the Ink companion smoke test: a minimal script that `render(<TextInput/>)` and `render(<SelectInput/>)` against `ink@6.6.0` + `react@^19.1.7`. If they crash at runtime, build custom input/select components (~50 lines each) and drop the packages. Do the same for `ink-spinner` and `terminal-link` — if not needed for Phase 1's 7 components, defer.
 3. Remove `marked@^18.0.5` from `dependencies` if unused (grep confirms no import in `src/` — dead weight). Re-add later when markdown rendering lands (Phase 3).
 4. Run `pnpm install` with zero peer warnings.
@@ -397,24 +400,23 @@ Before any Phase 1 code:
 ### Phase 1: Foundation
 
 1. `pnpm add ink react` + any companion packages that passed the Phase 0 smoke test
-2. Extract `runChat()`'s setup phase (config loading, provider resolution, skills init, gateway init, permissions) into a shared `bootstrapCliSession()` function. Both `runChat` (readline) and `startTui` call it. This prevents duplicating 160 lines of setup between the two dispatch paths.
+2. Extract `runChat()`'s setup phase (config loading, provider resolution, skills init, gateway init, permissions) into a shared `bootstrapCliSession()` function. Both `runChat` (readline) and `startTui` call it. This prevents duplicating ~175 lines of setup between the two dispatch paths.
 3. Create `src/adapters/cli/tui/` directory with app root, 7 components, 2 hooks, and lazy-load entry in `index.ts`
 4. Wire `render()` call with basic layout: `<MessageArea>` + `<PromptArea>`
-5. Connect user input → `Agent.chat()` → display response in message area (existing sync path, step-at-a-time)
-6. Add `Agent.chatStream()` — wraps `runAgentLoop` in background, pipes `onStep` → `StreamManager` (follows SDK pattern, ~100-130 lines accounting for `@path` resolution, TUI-wired `approveTool`, and instance-state wiring vs. SDK closures)
-7. TUI consumes step streams: text steps render as `AssistantMessage`, tool steps render as `ToolCallBlock`
-8. **Verify:** Compile succeeds. `zclaw -n` (non-interactive) still uses readline. `zclaw` (interactive) shows Ink-based TUI with input → response flow **including tool execution**: a prompt that triggers a shell command renders the tool block with output, a skill with a custom model switches providers and runs, a `--moderate` destructive tool prompts for approval inline.
+5. Connect user input → `Agent.chat({ onStep, approveTool, signal })` → render response in message area. **No new engine API:** the loop's existing `onStep` callback drives step-at-a-time rendering (see §Feature Gap #2). `@path` resolution is consolidated to the caller here.
+6. TUI consumes `onStep`: text steps render as `AssistantMessage`, tool steps render as `ToolCallBlock`; `approveTool` is bridged to the inline `<PermissionPrompt>` via a `PromiseWithResolvers`.
+7. **Verify:** Compile succeeds. `zclaw -n` / `--docker` still use readline. `zclaw` (interactive) shows the Ink TUI with input → response flow **including tool execution**: a shell-command prompt renders the tool block with output, a custom-model skill switches providers and runs, a `--moderate` destructive tool prompts for approval inline. `pnpm dev` (tsx) resolves the lazy `.tsx` import. `pnpm test` passes.
 
-**`approveTool` async bridge spec.** In TUI mode, the `approveTool` callback runs inside a detached `runAgentLoop` promise; it must pause and wait for the user to press y/n in a React component. Pattern: `use-agent.ts` creates a `PromiseWithResolvers<boolean>`, sets React state to render `<PermissionPrompt>`, and the pending promise is passed as the `approveTool` to `runAgentLoop`. `<PermissionPrompt>` calls `resolve(true/false)` on keypress. The `Agent.chatStream()` wrapper creates this bridge — it owns the promise lifecycle and GCs stale resolvers on abort.
+**`approveTool` async bridge spec.** In TUI mode, the `approveTool` callback runs inside a detached `runAgentLoop` promise; it must pause and wait for the user to press y/n in a React component. Pattern: `use-agent.ts` creates a `PromiseWithResolvers<boolean>`, sets React state to render `<PermissionPrompt>`, and the pending promise is passed as the `approveTool` to `runAgentLoop`. `<PermissionPrompt>` calls `resolve(true/false)` on keypress. The **caller** (`use-agent.ts`) owns this bridge — it creates the promise and GCs stale resolvers on abort — regardless of whether the underlying call is `Agent.chat()` (Phase 1) or `Agent.chatStream()` (Phase 2).
 
-**`@path` resolution consolidation.** `@path` references are currently resolved twice: once in `repl.ts:494-498` and again in `agent.chat():77-82`. During TUI implementation, consolidate to one call site (the caller — `repl.ts` or `use-agent.ts`) and remove from `Agent.chat()`/`Agent.chatStream()`. The resolver is idempotent so double-resolution is harmless today, but adding a third call site in the TUI makes this messier.
+**`@path` resolution consolidation.** `@path` references are currently resolved twice: once in `repl.ts:497` and again in `agent.chat()` at `agent.ts:79-80`. During Phase 1, consolidate to one call site (the caller — `repl.ts` or `use-agent.ts`) and remove from `Agent.chat()` (and, when it lands in Phase 2, `Agent.chatStream()`). The resolver is idempotent so double-resolution is harmless today, but adding a third call site in the TUI makes this messier.
 
 ### Phase 2: Core Interaction
-8. Slash command autocomplete in prompt
-9. @mention file autocomplete in prompt
-10. Tool call block component with expand/collapse
-11. Permission prompt inline in feed
-12. **Verify:** Type `/hel` → autocomplete shows `/help`. Type `@src/` → file list. Tool calls render as bordered blocks.
+1. Slash command autocomplete in prompt
+2. @mention file autocomplete in prompt
+3. Tool call block component with expand/collapse
+4. **Token-level streaming (additive):** add `provider.chatStream()` to both provider classes; add the `text_delta` step + `StreamingResponseAccumulator` to `runAgentLoop`; add `Agent.chatStream()` on the CLI Agent (exposes deltas to the TUI). Providers without `chatStream()` fall back to `chat()` — headless/SDK/Server unaffected.
+5. **Verify:** Type `/hel` → autocomplete shows `/help`. Type `@src/` → file list. Tool calls render as bordered blocks. A streaming provider shows per-token updates; a non-streaming provider falls back with no regression.
 
 ### Phase 3: Quality of Life
 13. Command palette (Ctrl+P)
@@ -435,7 +437,7 @@ Before any Phase 1 code:
 
 ## Risks & Dependencies
 
-1. **Streaming API (Phase 2 — cross-cutting core change, ~250 lines across 7 files in 3 layers).** Add `provider.chatStream()` to the two provider classes (`OpenAIProvider`, `AnthropicProvider`). `OpenAIProvider` = OpenAI + OpenAI-compatible (shared class). `AnthropicProvider` = Anthropic + GLM (shared class). ~80 lines each using their SDKs' native streaming. Agent loop gains ~50 lines for delta iteration + `StreamingResponseAccumulator` (reconstructs incremental tool-call argument fragments). `StreamManager`, SDK, and Server each need ~5-10 lines for the new `text_delta` step type. This is not a small additive enhancement — it touches Core, Infrastructure, and all three adapters. Needs its own mini-PRD before Phase 2 start.
+1. **Streaming API (Phase 2 — cross-cutting core change, ~330 lines across 8 files in 3 layers).** Add `provider.chatStream()` to the two provider classes (`OpenAIProvider`, `AnthropicProvider`). `OpenAIProvider` = OpenAI + OpenAI-compatible (shared class). `AnthropicProvider` = Anthropic + GLM (shared class). ~80 lines each using their SDKs' native streaming. Agent loop gains ~50 lines for delta iteration + `StreamingResponseAccumulator` (reconstructs incremental tool-call argument fragments). The CLI `Agent.chatStream()` (~80-100 lines) also lands here — Phase 1 renders via the existing `Agent.chat({ onStep })` path, so no Agent or engine API is added in Phase 1. `StreamManager`, SDK, and Server each need ~5-10 lines for the new `text_delta` step type. This is not a small additive enhancement — it touches Core, Infrastructure, and all three adapters. Needs its own mini-PRD before Phase 2 start.
 
 2. **React in CLI bundle** — Adds ~500KB to install size (React + Ink + utilities). Mitigation: lazy import only in interactive mode. Headless never loads it. Acceptable for a developer tool.
 
@@ -445,9 +447,9 @@ Before any Phase 1 code:
 
 4. **Terminal compatibility** — Ink renders using ANSI escape sequences. Works in all modern terminals (iTerm2, Terminal.app, Windows Terminal, VS Code terminal, tmux). Docker containers with `-it` flag work. CI/headless never loads the TUI.
 
-5. **zClaw architecture constraints** — Phase 1 is contained to the CLI adapter; the TUI calls `agent.chatStream()`, never reaches into provider or core internals. The existing `agent.chat()` path is untouched and used by headless mode. Phase 2 is an additive, backward-compatible enhancement to the shared engine (new optional `chatStream()` + `text_delta` step type, plus provider implementations), consistent with the single-`runAgentLoop` invariant rather than a bypass.
+5. **zClaw architecture constraints** — Phase 1 is contained to the CLI adapter; the TUI drives the existing `agent.chat({ onStep })` path, never reaches into provider or core internals. The existing `agent.chat()` path is also used by headless mode. Phase 2 is an additive, backward-compatible enhancement to the shared engine (new optional `provider.chatStream()` + `Agent.chatStream()` + `text_delta` step type, plus provider implementations), consistent with the single-`runAgentLoop` invariant rather than a bypass.
 
-6. **Build configuration** — Requires `"jsx": "react-jsx"` in `tsconfig.json` (1 line). `tsc` supports JSX compilation natively since TypeScript 4.1. No bundler needed — same `tsc` build as today. React is kept out of headless because `index.ts` uses a dynamic `import('./tui/index.js')` guarded by `if (process.stdin.isTTY && options.interactive)`. No static import chain from `index.ts` or `repl.ts` reaches any `.tsx` file. Guard: CI should assert `grep -L jsx-runtime dist/adapters/cli/repl.js` (fails if React leaks into headless).
+6. **Build configuration** — Requires `"jsx": "react-jsx"` in `tsconfig.json` (1 line). `tsc` supports JSX compilation natively since TypeScript 4.1. No bundler needed — same `tsc` build as today. React is kept out of headless because `index.ts` uses a dynamic `import('./tui/index.js')` guarded by `resolveLaunchMode(options) === 'interactive'` (composes TTY + `--no-interactive` + piped stdin + `--docker` + `ZCLAW_NO_INTERACTIVE` — the same predicate that selects the system prompt). No static import chain from `index.ts` or `repl.ts` reaches any `.tsx` file. Guard: CI should assert `grep -L jsx-runtime dist/adapters/cli/repl.js` (fails if React leaks into headless) — enforced from the first TUI commit, not deferred. **Dev-mode caveat:** under `pnpm dev` (tsx) the lazy `.js` specifier must resolve the `.tsx` source; verify on the first US1 commit or the interactive dev loop breaks.
 
 ---
 
