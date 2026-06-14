@@ -17,10 +17,14 @@ import {
   resolveDefaultModel,
 } from "./provider-env.js";
 import {
+  type AppConfig,
   applyEnvOverrides,
   loadMergedConfig,
   resolveActiveProviderType,
 } from "./config.js";
+
+// Re-export AppConfig so the provider-resolver → core/index chain works
+export type { AppConfig };
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -37,25 +41,8 @@ export interface ResolvedProviderConfig {
 }
 
 /**
- * Legacy AppConfig format from CLI (src/index.ts).
- * This supports the old-style config with top-level apiKey/baseUrl/model
- * plus the newer models map format.
+ * Module-level singleton that holds multi-provider configuration.
  */
-export interface AppConfig {
-  provider?: ProviderType;
-  apiKey?: string;
-  baseUrl?: string;
-  model?: string;
-  models?: {
-    "openai-compatible"?: { apiKey: string; baseUrl: string; model: string };
-    openai?: { apiKey: string; model: string };
-    anthropic?: { apiKey: string; model: string };
-    glm?: { apiKey: string; model: string };
-  };
-}
-
-// ── Module-level singleton ───────────────────────────────────────────
-
 let providerConfig: MultiProviderConfig | null = null;
 
 // ── Public API ───────────────────────────────────────────────────────
@@ -209,18 +196,15 @@ export function resolveProviderConfigFromApp(
  * overrides) and translate it to a MultiProviderConfig suitable for
  * `configureProviders()`.
  *
- * `loadMergedConfig()` + `applyEnvOverrides()` return AppConfig, where each
- * provider entry is nested under `models[providerType]` and there is no
- * `default` field. `configureProviders()` takes MultiProviderConfig, where
- * providers sit at the top level and `default` is required. This function
- * bridges the two shapes so the common case `configureProviders(loadProviderConfig())`
- * works without callers hand-rolling the conversion.
+ * When `app` is provided, uses that config directly (callers that have already
+ * loaded and mutated their AppConfig should pass it here). Otherwise reads
+ * fresh from disk via `loadMergedConfig()` + `applyEnvOverrides()`.
  *
  * @returns MultiProviderConfig if any provider has a configured apiKey, null otherwise.
  *          Callers should check for null before passing to configureProviders().
  */
-export function loadProviderConfig(): MultiProviderConfig | null {
-  const app = applyEnvOverrides(loadMergedConfig());
+export function loadProviderConfig(app?: AppConfig, cliProvider?: string): MultiProviderConfig | null {
+  const appConfig = app ?? applyEnvOverrides(loadMergedConfig());
   const multi = {} as MultiProviderConfig;
   const types: ProviderType[] = [
     "openai",
@@ -229,7 +213,7 @@ export function loadProviderConfig(): MultiProviderConfig | null {
     "openai-compatible",
   ];
   for (const t of types) {
-    const entry = app.models?.[t];
+    const entry = appConfig.models?.[t];
     if (entry && "apiKey" in entry && entry.apiKey) {
       (multi as unknown as Record<string, unknown>)[t] = entry;
     }
@@ -238,12 +222,13 @@ export function loadProviderConfig(): MultiProviderConfig | null {
   const collected = Object.keys(multi) as ProviderType[];
   if (collected.length === 0) return null;
 
-  // Derive `default`: config.provider → resolveActiveProviderType(), but only
-  // if that provider was actually collected above. Otherwise fall back to the
-  // first collected entry so `default` always points at a real provider.
+  // Derive `default`: CLI flag → config.provider → resolveActiveProviderType(),
+  // but only if that provider was actually collected above. Otherwise fall back
+  // to the first collected entry so `default` always points at a real provider.
   const candidate =
-    (app.provider as ProviderType | undefined) ??
-    resolveActiveProviderType(app);
+    (cliProvider as ProviderType | undefined) ??
+    (appConfig.provider as ProviderType | undefined) ??
+    resolveActiveProviderType(appConfig);
   multi.default = collected.includes(candidate) ? candidate : collected[0];
 
   return multi;

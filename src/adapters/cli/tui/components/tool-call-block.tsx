@@ -1,10 +1,11 @@
 import { Box, Text } from 'ink';
 import { useTheme } from '../hooks/use-theme.js';
 import { Markdown } from './markdown.js';
+import { GoalStatus, type Todo } from './goal-status.js';
 import type { ToolCallEntry } from '../types.js';
 
 const STATUS_GLYPH: Record<ToolCallEntry['status'], string> = {
-  running: '⏳',
+  running: '~',
   ok: '✓',
   fail: '✗',
 };
@@ -32,6 +33,16 @@ function truncate(text: string, max: number): string {
  */
 export function ToolCallBlock({ entry, expanded }: { entry: ToolCallEntry; expanded: boolean }) {
   const theme = useTheme();
+
+  // manage_todos renders as a GoalStatus (task list with glyphs), not a
+  // generic tool block.
+  if (entry.name === 'manage_todos' && entry.output) {
+    try {
+      const todos = JSON.parse(entry.output) as Todo[];
+      if (Array.isArray(todos) && todos.length > 0) return <GoalStatus todos={todos} />;
+    } catch { /* fall through to generic block */ }
+  }
+
   const glyph = STATUS_GLYPH[entry.status];
   const glyphColor =
     entry.status === 'fail' ? theme.red : entry.status === 'running' ? theme.yellow : theme.green;

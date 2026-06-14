@@ -4,12 +4,15 @@ import { useTheme } from './hooks/use-theme.js';
 import { useFeed } from './hooks/use-feed.js';
 import { useAgent } from './hooks/use-agent.js';
 import { useKeybindings } from './hooks/use-keybindings.js';
+import { useFileWatcher } from './hooks/use-file-watcher.js';
 import { MessageArea } from './components/message-area.js';
 import { PromptArea } from './components/prompt-area.js';
 import { PermissionPrompt } from './components/permission-prompt.js';
 import { AssistantMessage } from './components/assistant-message.js';
 import { ToolCallBlock } from './components/tool-call-block.js';
+import { GoalStatus } from './components/goal-status.js';
 import { Footer } from './components/footer.js';
+import Spinner from 'ink-spinner';
 import { CommandPalette } from './components/command-palette.js';
 import { HelpDialog } from './overlays/help-dialog.js';
 import { ModelSelector, type ModelOption } from './overlays/model-selector.js';
@@ -71,7 +74,7 @@ export function TuiApp({
 }: TuiAppProps) {
   const theme = useTheme();
   const feed = useFeed();
-  const { isRunning, pendingPermission, streamingText, streamingTool, usage, contextTokens, submit, resolvePermission, abort } = useAgent({
+  const { isRunning, pendingPermission, streamingText, streamingTool, usage, contextTokens, latestTodos, submit, resolvePermission, abort, resetTodos } = useAgent({
     agent,
     feed,
     permissionLevel,
@@ -79,6 +82,9 @@ export function TuiApp({
   const [input, setInput] = useState('');
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [settingsList, setSettingsList] = useState<SettingItem[]>([]);
+
+  // File-watcher: notifies when project files change externally while idle.
+  const { changedFile, clear: clearFileChange } = useFileWatcher(!isRunning);
 
   // Input history lives here (not in PromptArea) so it survives PromptArea
   // unmounting during a run — otherwise every turn wiped the history.
@@ -132,6 +138,7 @@ export function TuiApp({
       historyIndexRef.current = -1;
     }
     setInput('');
+    clearFileChange();
     if (trimmed === '/?') {
       setOverlay('help');
       return;
@@ -226,6 +233,7 @@ export function TuiApp({
       onClear: () => {
         agent.clearConversation();
         feed.clear();
+        resetTodos();
         resetView();
         setStaticKey((k) => k + 1);
       },
@@ -236,6 +244,8 @@ export function TuiApp({
   return (
     <Box flexDirection="column" paddingLeft={HORIZONTAL_PADDING} paddingRight={HORIZONTAL_PADDING}>
       <MessageArea entries={feed.entries} staticKey={staticKey} expanded={expanded} />
+      {/* Persistent todo panel — stays visible; updates on each manage_todos call. */}
+      {latestTodos ? <GoalStatus todos={latestTodos} /> : null}
       {streamingText ? (
         <AssistantMessage entry={{ id: '__streaming', kind: 'assistant', content: streamingText }} />
       ) : null}
@@ -263,13 +273,16 @@ export function TuiApp({
           <PermissionPrompt toolName={pendingPermission.toolName} args={pendingPermission.args} onResolve={resolvePermission} />
         ) : isRunning && !streamingText ? (
           <Box>
-            <Text color={theme.yellow}>⏳ ZClaw is working… </Text>
+            <Text color={theme.yellow}><Spinner type="dots" /> ZClaw is working </Text>
             <Text color={theme.fgDim}>(Esc to abort)</Text>
           </Box>
         ) : !isRunning ? (
           <PromptArea value={input} onChange={setInput} onSubmit={(v) => { void handleUserInput(v); }} onHistoryUp={onHistoryUp} onHistoryDown={onHistoryDown} commands={commands} skills={skills} />
         ) : null}
       </Box>
+      {changedFile ? (
+        <Text color={theme.yellow}>~ {changedFile} changed externally</Text>
+      ) : null}
       <Footer
         providerType={providerType}
         model={agent.getModel()}

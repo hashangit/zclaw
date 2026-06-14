@@ -17,6 +17,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { Agent, type ChatResult } from '../../agent.js';
 import type { ApproveToolFn, PermissionLevel, StepResult, CumulativeUsage } from '../../../../core/types.js';
+import type { Todo } from '../components/goal-status.js';
 import type { FeedApi } from './use-feed.js';
 
 export interface PendingPermissionView {
@@ -41,9 +42,12 @@ export interface AgentApi {
   usage: CumulativeUsage;
   /** Last turn's input size in tokens — the current context-window usage. */
   contextTokens: number;
+  /** Persistent todo list (updated by manage_todos tool; null when none). */
+  latestTodos: Todo[] | null;
   submit: (input: string) => Promise<void>;
   resolvePermission: (approve: boolean) => void;
   abort: () => void;
+  resetTodos: () => void;
 }
 
 export interface UseAgentArgs {
@@ -64,6 +68,7 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
     requestCount: 0,
   });
   const [contextTokens, setContextTokens] = useState(0);
+  const [latestTodos, setLatestTodos] = useState<Todo[] | null>(null);
 
   // Refs hold the latest values so the stable callbacks never close over
   // stale state (CLAUDE.md §6: long-lived callbacks read through refs).
@@ -140,12 +145,18 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
         }
         setStreamingTool(streamingToolRef.current ? { ...streamingToolRef.current } : null);
       } else if (step.type === 'tool_call' && step.toolCall) {
-        // Finalize the assistant message, then commit the tool result — the
-        // live streamingTool is superseded by this authoritative entry.
         commitStreaming();
         streamingToolRef.current = null;
         setStreamingTool(null);
         const tc = step.toolCall;
+        // manage_todos updates the persistent todo panel (not the feed).
+        if (tc.name === 'manage_todos') {
+          try {
+            const parsed = JSON.parse(tc.result);
+            if (Array.isArray(parsed)) setLatestTodos(parsed);
+          } catch { /* ignore parse error */ }
+          return;
+        }
         feedRef.current.appendEntry({
           kind: 'tool',
           name: tc.name,
@@ -211,5 +222,7 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
     agent.abort();
   }, [agent]);
 
-  return { isRunning, pendingPermission, streamingText, streamingTool, usage, contextTokens, submit, resolvePermission, abort };
+  const resetTodos = useCallback((): void => setLatestTodos(null), []);
+
+  return { isRunning, pendingPermission, streamingText, streamingTool, usage, contextTokens, latestTodos, submit, resolvePermission, abort, resetTodos };
 }

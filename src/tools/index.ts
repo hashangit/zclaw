@@ -1,5 +1,6 @@
 import { ToolModule } from './interface.js';
 import { ShellTool, ReadFileTool, WriteFileTool, DateTimeTool } from './core.js';
+import { TodoTool } from './todos.js';
 import { EmailTool } from './email.js';
 import { SearchTool } from './search.js';
 import { NotifyTool } from './notify.js';
@@ -83,6 +84,7 @@ export const builtInTools: ToolModule[] = [
   ReadFileTool,
   WriteFileTool,
   DateTimeTool,
+  TodoTool,
   PromptOptimizerTool,
   EmailTool,
   SearchTool,

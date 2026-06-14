@@ -145,18 +145,17 @@ export function applyEnvOverrides(config: AppConfig): AppConfig {
   if (!config.models) config.models = {};
 
   if (process.env.OPENAI_API_KEY) {
-    config.models['openai-compatible'] = {
+    config.models.openai = {
       apiKey: process.env.OPENAI_API_KEY,
-      baseUrl: process.env.OPENAI_COMPAT_BASE_URL || process.env.OPENAI_BASE_URL || config.models['openai-compatible']?.baseUrl || 'https://api.openai.com/v1',
-      model: process.env.OPENAI_MODEL || config.models['openai-compatible']?.model || DEFAULT_MODELS['openai-compatible'],
+      model: process.env.OPENAI_MODEL || config.models.openai?.model || DEFAULT_MODELS.openai,
     };
-    // Also populate 'openai' if same key works
-    if (!config.models.openai?.apiKey) {
-      config.models.openai = {
-        apiKey: process.env.OPENAI_API_KEY,
-        model: process.env.OPENAI_MODEL || config.models.openai?.model || DEFAULT_MODELS.openai,
-      };
-    }
+  }
+  if (process.env.OPENAI_COMPAT_API_KEY) {
+    config.models['openai-compatible'] = {
+      apiKey: process.env.OPENAI_COMPAT_API_KEY,
+      baseUrl: process.env.OPENAI_COMPAT_BASE_URL || process.env.OPENAI_BASE_URL || config.models['openai-compatible']?.baseUrl || 'https://api.openai.com/v1',
+      model: process.env.OPENAI_COMPAT_MODEL || process.env.LLM_MODEL || process.env.ZCLAW_MODEL || config.models['openai-compatible']?.model || DEFAULT_MODELS['openai-compatible'],
+    };
   }
   if (process.env.ANTHROPIC_API_KEY) {
     config.models.anthropic = {
@@ -184,13 +183,12 @@ export function migrateLegacyFormat(
 ): AppConfig {
   if (!config.models && (config.apiKey || process.env.OPENAI_API_KEY)) {
     config.models = {
-      'openai-compatible': {
+      openai: {
         apiKey: process.env.OPENAI_API_KEY || config.apiKey || '',
-        baseUrl: process.env.OPENAI_COMPAT_BASE_URL || process.env.OPENAI_BASE_URL || config.baseUrl || 'https://api.openai.com/v1',
-        model: options?.model || process.env.OPENAI_MODEL || config.model || DEFAULT_MODELS['openai-compatible'],
+        model: options?.model || process.env.OPENAI_MODEL || config.model || DEFAULT_MODELS.openai,
       },
     };
-    if (!config.provider) config.provider = 'openai-compatible';
+    if (!config.provider) config.provider = 'openai';
   }
   return config;
 }
@@ -208,7 +206,7 @@ export function resolveActiveProviderType(
     (process.env.LLM_PROVIDER as ProviderType) ||
     (process.env.ZCLAW_PROVIDER as ProviderType) ||
     config.provider ||
-    'openai-compatible'
+    'openai'
   );
 }
 

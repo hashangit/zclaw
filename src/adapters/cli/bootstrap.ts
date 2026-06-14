@@ -19,13 +19,15 @@ import * as os from 'os';
 
 import { Agent } from './agent.js';
 import { resolveLaunchMode, selectSystemPrompt } from './system-prompts.js';
-import { createProvider } from '../../providers/factory.js';
-import { resolveProviderConfigFromApp } from '../../core/provider-resolver.js';
+import {
+  configureProviders,
+  loadProviderConfig,
+  getProvider,
+} from '../../core/provider-resolver.js';
 import {
   loadJsonConfig,
   applyEnvOverrides,
   migrateLegacyFormat,
-  resolveActiveProviderType,
   getConfigPaths,
 } from './config-loader.js';
 import { runSetup } from './setup.js';
@@ -87,27 +89,22 @@ export async function bootstrapCliSession(options: any): Promise<CliSessionConte
   // 4. Auto-migrate legacy config format (top-level apiKey/baseUrl/model)
   fullConfig = migrateLegacyFormat(fullConfig, { model: options.model });
 
-  // 5. Resolve active provider
-  let activeProviderType = resolveActiveProviderType(fullConfig, { provider: options.provider });
-  let providerConfig = resolveProviderConfigFromApp(fullConfig, activeProviderType);
+  // 5. Load provider config via unified resolution
+  const cliProvider = options.provider;
+  let multiConfig = loadProviderConfig(fullConfig, cliProvider);
 
-  if (!providerConfig) {
+  if (!multiConfig) {
     console.log(chalk.yellow("No provider configuration found."));
 
     if (isNonInteractive()) {
-      // Non-interactive: cannot run setup wizard, rely on env vars only
       if (hasRequiredProviderEnv(fullConfig)) {
-        // Re-resolve after env var check
-        fullConfig = migrateLegacyFormat(fullConfig, { model: options.model });
-        activeProviderType = resolveActiveProviderType(fullConfig, { provider: options.provider });
-        providerConfig = resolveProviderConfigFromApp(fullConfig, activeProviderType);
+        multiConfig = loadProviderConfig(fullConfig, cliProvider);
       }
-      if (!providerConfig) {
+      if (!multiConfig) {
         console.error(chalk.red("No provider configured. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or GLM_API_KEY env vars, or provide a config file."));
         process.exit(1);
       }
     } else {
-      // Interactive: ask user
       const inquirer = await import('inquirer');
       const { doSetup } = await inquirer.default.prompt([
         {
@@ -122,8 +119,7 @@ export async function bootstrapCliSession(options: any): Promise<CliSessionConte
         await runSetup();
         const newConfig = loadJsonConfig(GLOBAL_CONFIG_FILE);
         Object.assign(fullConfig, newConfig);
-        const updatedProviderType = resolveActiveProviderType(fullConfig, { provider: options.provider });
-        providerConfig = resolveProviderConfigFromApp(fullConfig, updatedProviderType);
+        multiConfig = loadProviderConfig(fullConfig, cliProvider);
       } else {
         console.error(chalk.red("Provider configuration is required to proceed."));
         process.exit(1);
@@ -131,17 +127,21 @@ export async function bootstrapCliSession(options: any): Promise<CliSessionConte
     }
   }
 
-  if (!providerConfig) {
+  if (!multiConfig) {
     console.error(chalk.red("Provider configuration is still missing. Exiting."));
     process.exit(1);
   }
 
-  // CLI --model override
-  if (options.model) {
-    providerConfig.model = options.model;
-  }
+  configureProviders(multiConfig);
 
-  const provider = await createProvider(providerConfig);
+  // Active provider: CLI --provider flag → multiConfig.default
+  const activeProviderType = (cliProvider as string) ?? multiConfig.default;
+
+  const { provider, model: resolvedModel } = await getProvider(activeProviderType as any);
+
+  // CLI --model override
+  const model = options.model ?? resolvedModel;
+  const providerConfig = { type: activeProviderType, model };
   // Select system prompt by launch mode: interactive (TUI/readline in a TTY)
   // gets the interactive coding-agent prompt; headless/docker/piped keep
   // the Docker-native prompt unchanged.

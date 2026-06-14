@@ -191,12 +191,12 @@ externally → footer notifies.
 
 ### Implementation for User Story 4
 
-- [ ] T048 [P] [US4] Create src/adapters/cli/tui/components/goal-status.tsx — todo/task entry with status glyphs (⬜ ⏳ ✅ ❌), persists across turns
+- [X] T048 [P] [US4] Create src/adapters/cli/tui/components/goal-status.tsx — todo/task entry with status glyphs (⬜ ⏳ ✅ ❌), persists across turns
 - [ ] T049 [P] [US4] Create src/adapters/cli/tui/overlays/session-selector.tsx — flat/tree session list with fuzzy search, preview, delete/rename/export
-- [ ] T050 [P] [US4] Add a `manage_todos` tool (in src/tools/) that emits `<GoalStatus>` feed entries via a new step type; register it in the tool registry
+- [X] T050 [P] [US4] Add a `manage_todos` tool (in src/tools/) that emits `<GoalStatus>` feed entries via a new step type; register it in the tool registry
 - [ ] T051 [US4] Add an inline diff viewer for file-edit tools — extend src/adapters/cli/tui/components/tool-call-block.tsx or create src/adapters/cli/tui/components/diff-viewer.tsx
 - [ ] T052 [US4] Add a collapsible reasoning/thinking block in src/adapters/cli/tui/components/reasoning-block.tsx, toggleable via a `/thinking` slash command
-- [ ] T053 [P] [US4] Add a file-watcher (e.g. `chokidar`) that surfaces a footer notification when project files change externally during a session — wire the notification into the US3 footer (T040)
+- [X] T053 [P] [US4] Add a file-watcher (e.g. `chokidar`) that surfaces a footer notification when project files change externally during a session — wire the notification into the US3 footer (T040)
 - [ ] T054 [US4] Verify (manual gate): `manage_todos` updates glyphs; session selector lists/previews/resumes; a file edit renders an inline diff; `/thinking` toggles the reasoning block; an external file change fires the footer notification; `pnpm test` passes
 
 **Checkpoint**: US4 fully functional and independently testable.
