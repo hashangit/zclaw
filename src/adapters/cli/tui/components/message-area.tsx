@@ -6,6 +6,7 @@ import { UserMessage } from './user-message.js';
 import { AssistantMessage } from './assistant-message.js';
 import { ToolCallBlock } from './tool-call-block.js';
 import { ErrorMessage } from './error-message.js';
+import { InfoMessage } from './info-message.js';
 
 /** Renders one feed entry by kind. */
 function FeedItem({ entry }: { entry: FeedEntry }) {
@@ -18,6 +19,8 @@ function FeedItem({ entry }: { entry: FeedEntry }) {
       return <ToolCallBlock entry={entry} />;
     case 'error':
       return <ErrorMessage entry={entry} />;
+    case 'info':
+      return <InfoMessage entry={entry} />;
   }
 }
 
@@ -49,7 +52,7 @@ export function MessageArea({ entries }: { entries: FeedEntry[] }) {
   return (
     <Static items={entries}>
       {(entry) => (
-        <Box key={entry.id} width={itemWidth} paddingLeft={HORIZONTAL_PADDING}>
+        <Box width={itemWidth} paddingLeft={HORIZONTAL_PADDING}>
           <FeedItem entry={entry} />
         </Box>
       )}

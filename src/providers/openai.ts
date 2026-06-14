@@ -1,5 +1,5 @@
 import { OpenAI } from 'openai';
-import { ProviderMessage, ProviderResponse, ProviderToolCall, LLMProvider, ChatOptions } from './types.js';
+import { ProviderMessage, ProviderResponse, ProviderToolCall, LLMProvider, ChatOptions, StreamDelta } from './types.js';
 import type { ToolDefinition } from '../tools/interface.js';
 
 export class OpenAIProvider implements LLMProvider {
@@ -31,5 +31,49 @@ export class OpenAIProvider implements LLMProvider {
           arguments: tc.function.arguments,
         })),
     };
+  }
+
+  /**
+   * Stream the response using the OpenAI SDK's native streaming. Maps chunks to
+   * `StreamDelta`s: text deltas, tool-call begin (id+name on the first chunk)
+   * and argument fragments (subsequent chunks, keyed by `index`), and a final
+   * `finish` with usage (when `stream_options.include_usage` is set).
+   */
+  async *chatStream(messages: ProviderMessage[], tools: ToolDefinition[], options?: ChatOptions): AsyncIterable<StreamDelta> {
+    const stream = await this.client.chat.completions.create({
+      model: this.model,
+      messages: messages as OpenAI.ChatCompletionMessageParam[],
+      tools: tools as OpenAI.ChatCompletionTool[],
+      stream: true,
+      stream_options: { include_usage: true },
+    }, { signal: options?.signal });
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+      if (delta?.content) {
+        yield { type: 'text_delta', content: delta.content };
+      }
+      if (delta?.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          if (tc.function?.name) {
+            yield { type: 'tool_call_begin', index: tc.index, id: tc.id ?? '', name: tc.function.name };
+          }
+          if (tc.function?.arguments) {
+            yield { type: 'tool_call_delta', index: tc.index, argumentsDelta: tc.function.arguments };
+          }
+        }
+      }
+      if (chunk.usage) {
+        yield {
+          type: 'finish',
+          usage: {
+            promptTokens: chunk.usage.prompt_tokens,
+            completionTokens: chunk.usage.completion_tokens,
+            totalTokens: chunk.usage.total_tokens,
+            cost: 0,
+          },
+        };
+      }
+    }
   }
 }

@@ -25,6 +25,7 @@ Thumbs.db
 .qwen/
 .claude/
 .agents/
+.zcode/
 
 # Logs
 *.log

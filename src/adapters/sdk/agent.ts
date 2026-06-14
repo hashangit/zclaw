@@ -271,9 +271,12 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
           middleware: opts.middleware,
           approveTool: opts.approveTool,
           permissionLevel: opts.permissionLevel,
+          stream: true,
           onStep: (step) => {
             if (streamOptions?.onStep) streamOptions.onStep(step);
-            if (step.type === "text" && step.content) {
+            // Streaming emits text_delta; non-streaming emits one complete
+            // 'text'. Both flow to consumers as text deltas via enqueueText.
+            if ((step.type === "text" || step.type === "text_delta") && step.content) {
               if (streamOptions?.onText) streamOptions.onText(step.content);
               stream.enqueueText(step.content);
             }
@@ -303,10 +306,12 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
         cumulativeUsage.totalCost += result.usage.cost;
         cumulativeUsage.requestCount += 1;
 
-        const finalText = result.steps
-          .filter((s) => s.type === "text")
-          .map((s) => s.content ?? "")
-          .join("");
+        // Derive final text from the message history (robust to streaming,
+        // where steps contain text_delta, not a complete 'text' step).
+        const lastAssistant = [...messages]
+          .reverse()
+          .find((m) => m.role === "assistant" && m.content);
+        const finalText = lastAssistant?.content ?? "";
 
         stream.resolveText(finalText);
         stream.resolveUsage(result.usage);

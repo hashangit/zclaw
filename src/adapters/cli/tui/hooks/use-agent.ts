@@ -1,16 +1,17 @@
 /**
  * use-agent — agent run state for the TUI.
  *
- * Drives the existing `Agent.chat(input, signal, approveTool, permissionLevel,
- * onStep)` (US1; US2 swaps `chat()` for `chatStream()`). The loop's `onStep`
- * callback is mapped to feed entries; ESC/Ctrl+C calls `agent.abort()`.
+ * Drives `Agent.chat(input, signal, approveTool, permissionLevel, onStep)`,
+ * which (in TUI mode) opts into token streaming — the loop emits `text_delta`
+ * steps as tokens arrive. Those accumulate into `streamingText` (rendered live
+ * in the message area, since Ink `<Static>` freezes completed entries); on a
+ * tool call or turn end the accumulated text is committed to the feed history.
+ * ESC/Ctrl+C calls `agent.abort()`.
  *
  * `approveTool` runs inside the detached `runAgentLoop` promise, so it must
  * pause and wait for the user to press y/n in `<PermissionPrompt>`. This hook
  * owns that bridge: it stores the pending resolver in a ref (stable across
- * renders, not a stale closure) and the pending prompt's view in state (so
- * the component re-renders). The caller — this hook — creates the promise and
- * GCs stale resolvers on abort, regardless of the underlying call.
+ * renders) and the pending prompt's view in state (so the component re-renders).
  */
 
 import { useCallback, useRef, useState } from 'react';
@@ -26,6 +27,8 @@ export interface PendingPermissionView {
 export interface AgentApi {
   isRunning: boolean;
   pendingPermission: PendingPermissionView | null;
+  /** Live, accumulating assistant text while streaming (empty when idle). */
+  streamingText: string;
   submit: (input: string) => Promise<void>;
   resolvePermission: (approve: boolean) => void;
   abort: () => void;
@@ -40,6 +43,7 @@ export interface UseAgentArgs {
 export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentApi {
   const [isRunning, setIsRunning] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<PendingPermissionView | null>(null);
+  const [streamingText, setStreamingText] = useState('');
 
   // Refs hold the latest values so the stable callbacks never close over
   // stale state (CLAUDE.md §6: long-lived callbacks read through refs).
@@ -48,12 +52,24 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
   const permissionLevelRef = useRef(permissionLevel);
   permissionLevelRef.current = permissionLevel;
   const resolverRef = useRef<((value: boolean) => void) | null>(null);
+  const streamingTextRef = useRef('');
+
+  /** Commit accumulated streaming text to the feed history as an assistant entry. */
+  const commitStreaming = useCallback((): void => {
+    if (streamingTextRef.current) {
+      feedRef.current.appendEntry({ kind: 'assistant', content: streamingTextRef.current });
+      streamingTextRef.current = '';
+      setStreamingText('');
+    }
+  }, []);
 
   const submit = useCallback(async (input: string): Promise<void> => {
     const trimmed = input.trim();
     if (!trimmed) return;
 
     setIsRunning(true);
+    streamingTextRef.current = '';
+    setStreamingText('');
     feedRef.current.appendEntry({ kind: 'user', content: trimmed });
 
     // Resolve @path file references at the caller, not inside Agent.chat (T022).
@@ -80,9 +96,16 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
     };
 
     const onStep = (step: StepResult): void => {
-      if (step.type === 'text' && step.content != null) {
+      if (step.type === 'text_delta' && step.content) {
+        streamingTextRef.current += step.content;
+        setStreamingText(streamingTextRef.current);
+      } else if (step.type === 'text' && step.content != null) {
+        // Non-streaming fallback (defensive; stream mode emits text_delta).
+        commitStreaming();
         feedRef.current.appendEntry({ kind: 'assistant', content: step.content });
       } else if (step.type === 'tool_call' && step.toolCall) {
+        // Finalize the assistant message before rendering the tool block.
+        commitStreaming();
         const tc = step.toolCall;
         feedRef.current.appendEntry({
           kind: 'tool',
@@ -103,10 +126,12 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
         permissionLevelRef.current,
         onStep,
       );
+      commitStreaming(); // commit the final assistant message if any
       if (result.finishReason === 'error' && result.error) {
         feedRef.current.appendEntry({ kind: 'error', message: result.error });
       }
     } catch (error) {
+      commitStreaming();
       const message = error instanceof Error ? error.message : String(error);
       feedRef.current.appendEntry({ kind: 'error', message });
     } finally {
@@ -118,7 +143,7 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
       setPendingPermission(null);
       setIsRunning(false);
     }
-  }, [agent]);
+  }, [agent, commitStreaming]);
 
   const resolvePermission = useCallback((approve: boolean): void => {
     const resolve = resolverRef.current;
@@ -138,5 +163,5 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
     agent.abort();
   }, [agent]);
 
-  return { isRunning, pendingPermission, submit, resolvePermission, abort };
+  return { isRunning, pendingPermission, streamingText, submit, resolvePermission, abort };
 }

@@ -46,7 +46,7 @@ export interface ToolCall {
 // ── Steps ─────────────────────────────────────────────────────────────
 
 export interface StepResult {
-  type: "text" | "tool_call";
+  type: "text" | "tool_call" | "text_delta";
   content?: string;
   toolCall?: {
     id: string;

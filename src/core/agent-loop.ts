@@ -1,9 +1,10 @@
 /** ZClaw Core — THE Agent Loop (single implementation) */
 
 import type { Message, StepResult, ToolCall, Usage, ZclawError, ApproveToolFn, PermissionLevel, ToolRiskCategory } from "./types.js";
-import type { LLMProvider, ProviderMessage, ProviderToolCall } from "../providers/types.js";
+import type { LLMProvider, ProviderMessage, ProviderToolCall, ProviderResponse } from "../providers/types.js";
 import type { ToolDefinition } from "../tools/interface.js";
 import { generateId, now, toZclawError, messageToProviderMessage, providerToolCallToToolCall } from "./message-convert.js";
+import { StreamingResponseAccumulator } from "./stream-accumulator.js";
 import { executeTool } from "./tool-executor.js";
 import type { HookExecutor } from "./hooks.js";
 import type { Middleware, PipelineContext } from "./middleware.js";
@@ -30,6 +31,8 @@ export interface AgentLoopOptions {
   config?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   onStep?: (step: StepResult) => void;
+  /** Opt into token streaming (provider.chatStream). Off → always chat(). */
+  stream?: boolean;
   providerFactory?: ProviderFactory;
   middleware?: Middleware[];
   approveTool?: ApproveToolFn;
@@ -190,6 +193,7 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
     signal,
     config = {},
     onStep,
+    stream,
     providerFactory,
   } = options;
 
@@ -265,10 +269,34 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
     // Convert messages to provider format
     const providerMessages: ProviderMessage[] = messages.map(messageToProviderMessage);
 
-    // Call provider
-    let response;
+    // Call provider (stream if available, else chat). Streaming emits
+    // text_delta steps as tokens arrive; non-streaming emits one complete
+    // 'text' step below. Tool calls are reassembled by the accumulator.
+    let response: ProviderResponse;
+    let streamed = false;
     try {
-      response = await currentProvider.chat(providerMessages, toolDefs, { signal });
+      if (stream && typeof currentProvider.chatStream === 'function') {
+        streamed = true;
+        const acc = new StreamingResponseAccumulator();
+        for await (const delta of currentProvider.chatStream(providerMessages, toolDefs, { signal })) {
+          if (delta.type === 'text_delta' && delta.content) {
+            acc.appendText(delta.content);
+            const deltaStep: StepResult = { type: 'text_delta', content: delta.content, timestamp: now() };
+            steps.push(deltaStep);
+            await hooks.onStep(deltaStep);
+            if (onStep) onStep(deltaStep);
+          } else if (delta.type === 'tool_call_begin') {
+            acc.beginToolCall(delta.index, delta.id, delta.name);
+          } else if (delta.type === 'tool_call_delta') {
+            acc.appendToolCallArgs(delta.index, delta.argumentsDelta);
+          } else if (delta.type === 'finish' && delta.usage) {
+            acc.setUsage(delta.usage);
+          }
+        }
+        response = acc.toResponse();
+      } else {
+        response = await currentProvider.chat(providerMessages, toolDefs, { signal });
+      }
     } catch (err) {
       finishReason = "error";
       const zclawErr = toZclawError(err, "PROVIDER_ERROR");
@@ -287,18 +315,22 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
       totalPromptChars += (msg.content ?? "").length;
     }
 
-    // Text content
+    // Text content. When streamed, tokens already went out as text_delta steps,
+    // so we only emit the complete 'text' step for the non-streamed path; the
+    // assembled content is always added to history either way.
     if (response.content) {
       totalCompletionChars += response.content.length;
 
-      const textStep: StepResult = {
-        type: "text",
-        content: response.content,
-        timestamp: now(),
-      };
-      steps.push(textStep);
-      await hooks.onStep(textStep);
-      if (onStep) onStep(textStep);
+      if (!streamed) {
+        const textStep: StepResult = {
+          type: "text",
+          content: response.content,
+          timestamp: now(),
+        };
+        steps.push(textStep);
+        await hooks.onStep(textStep);
+        if (onStep) onStep(textStep);
+      }
 
       // Add assistant message with text content
       messages.push({

@@ -141,6 +141,9 @@ export class Agent {
         autoConfirm: this.autoConfirm,
         middleware: this._middleware.length > 0 ? this._middleware : undefined,
         onStep: onStep ?? defaultOnStep,
+        // Stream only when the caller supplies its own onStep (TUI mode) — the
+        // readline default handler prints complete 'text' steps, not deltas.
+        stream: customSteps,
       });
 
       spinner?.stop();

@@ -6,6 +6,8 @@ import { useAgent } from './hooks/use-agent.js';
 import { MessageArea } from './components/message-area.js';
 import { PromptArea } from './components/prompt-area.js';
 import { PermissionPrompt } from './components/permission-prompt.js';
+import { AssistantMessage } from './components/assistant-message.js';
+import type { Suggestion } from './components/autocomplete.js';
 import type { Agent } from '../agent.js';
 import type { PermissionLevel } from '../../../core/types.js';
 import { HORIZONTAL_PADDING } from './layout.js';
@@ -35,6 +37,9 @@ interface TuiAppProps {
   onExit: () => void;
   /** Dispatch a `/command` via the shared registry (one owner, no duplication). */
   dispatchCommand: (input: string) => Promise<TuiCommandOutcome>;
+  /** Autocomplete sources built from the shared registry + loaded skills. */
+  commands: Suggestion[];
+  skills: Suggestion[];
 }
 
 /**
@@ -43,9 +48,9 @@ interface TuiAppProps {
  * (while a run is in flight), and the input prompt. ESC aborts the current
  * run; Ctrl+C aborts mid-run or exits when idle (FR-006).
  */
-export function TuiApp({ agent, permissionLevel, initialQuery, onExit, dispatchCommand }: TuiAppProps) {
+export function TuiApp({ agent, permissionLevel, initialQuery, onExit, dispatchCommand, commands, skills }: TuiAppProps) {
   const feed = useFeed();
-  const { isRunning, pendingPermission, submit, resolvePermission, abort } = useAgent({
+  const { isRunning, pendingPermission, streamingText, submit, resolvePermission, abort } = useAgent({
     agent,
     feed,
     permissionLevel,
@@ -105,6 +110,11 @@ export function TuiApp({ agent, permissionLevel, initialQuery, onExit, dispatchC
   return (
     <Box flexDirection="column" paddingLeft={HORIZONTAL_PADDING} paddingRight={HORIZONTAL_PADDING}>
       <MessageArea entries={feed.entries} />
+      {/* Live streaming assistant message — rendered here (not in <Static>) so it
+          repaints per token; committed to history when the turn/tool completes. */}
+      {streamingText ? (
+        <AssistantMessage entry={{ id: '__streaming', kind: 'assistant', content: streamingText }} />
+      ) : null}
       <Box flexDirection="column">
         {pendingPermission ? (
           <PermissionPrompt
@@ -112,14 +122,20 @@ export function TuiApp({ agent, permissionLevel, initialQuery, onExit, dispatchC
             args={pendingPermission.args}
             onResolve={resolvePermission}
           />
-        ) : isRunning ? (
+        ) : isRunning && !streamingText ? (
           <Box>
             <Text color={theme.yellow}>⏳ ZClaw is working… </Text>
             <Text color={theme.fgDim}>(Esc to abort)</Text>
           </Box>
-        ) : (
-          <PromptArea value={input} onChange={setInput} onSubmit={(v) => { void handleUserInput(v); }} />
-        )}
+        ) : !isRunning ? (
+          <PromptArea
+            value={input}
+            onChange={setInput}
+            onSubmit={(v) => { void handleUserInput(v); }}
+            commands={commands}
+            skills={skills}
+          />
+        ) : null}
       </Box>
     </Box>
   );

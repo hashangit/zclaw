@@ -10,6 +10,7 @@
 
 import { render } from 'ink';
 import { TuiApp, type TuiCommandOutcome } from './app.js';
+import type { Suggestion } from './components/autocomplete.js';
 import { bootstrapCliSession } from '../bootstrap.js';
 import { buildCommandRegistry } from '../commands/build-registry.js';
 
@@ -30,6 +31,13 @@ export async function startTui({ queryParts, options }: StartTuiArgs): Promise<v
 
   // Same registry the readline REPL uses — one owner of the command set.
   const registry = buildCommandRegistry(agent, fullConfig, activeProviderType, gatewayInstance);
+
+  // Autocomplete sources: built-in commands + loaded skills.
+  const commands: Suggestion[] = registry.getAll()
+    .filter((e) => !e.hidden)
+    .map((e) => ({ name: e.name, description: e.description }));
+  const skills: Suggestion[] = (agent.getSkillRegistry()?.getAll() ?? [])
+    .map((s) => ({ name: s.name, description: s.description }));
 
   // Bridge the registry to the TUI: defer interactive (stdin/stdout-owning)
   // commands; otherwise dispatch and surface the returned output.
@@ -61,6 +69,8 @@ export async function startTui({ queryParts, options }: StartTuiArgs): Promise<v
       initialQuery={initialQuery}
       onExit={onExit}
       dispatchCommand={dispatchCommand}
+      commands={commands}
+      skills={skills}
     />,
     { exitOnCtrlC: false },
   );
