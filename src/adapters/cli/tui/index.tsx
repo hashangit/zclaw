@@ -14,6 +14,15 @@ import type { Suggestion } from './components/autocomplete.js';
 import { bootstrapCliSession } from '../bootstrap.js';
 import { buildCommandRegistry } from '../commands/build-registry.js';
 import { warmInkReset, resetInkStatic } from './ink-reset.js';
+import { ThemeProvider } from './hooks/use-theme.js';
+import { MODEL_CATALOG } from '../../../models-catalog.js';
+import { resolveProviderConfigFromApp } from '../../../core/provider-resolver.js';
+import { createProvider } from '../../../providers/factory.js';
+import type { ModelOption } from './overlays/model-selector.js';
+import type { SettingItem } from './overlays/settings-overlay.js';
+import { SettingsManager } from '../../../core/settings-manager.js';
+import { SETTINGS_MAP, SETTINGS_SCHEMA } from '../../../core/settings-schema.js';
+import { loadMergedConfig, loadJsonConfig, getConfigPaths, applyEnvOverrides } from '../config-loader.js';
 
 export interface StartTuiArgs {
   queryParts: string[];
@@ -39,6 +48,60 @@ export async function startTui({ queryParts, options }: StartTuiArgs): Promise<v
     .map((e) => ({ name: e.name, description: e.description }));
   const skills: Suggestion[] = (agent.getSkillRegistry()?.getAll() ?? [])
     .map((s) => ({ name: s.name, description: s.description }));
+
+  // Model-selector options: catalog models for each CONFIGURED provider.
+  const modelOptions: ModelOption[] = [];
+  for (const pt of ['openai', 'anthropic', 'glm', 'openai-compatible'] as const) {
+    if (!resolveProviderConfigFromApp(fullConfig, pt)) continue;
+    for (const m of MODEL_CATALOG[pt]) {
+      modelOptions.push({ providerType: pt, modelId: m.id, modelName: m.name });
+    }
+  }
+  const onSwitchModel = async (providerType: string, modelId: string): Promise<void> => {
+    const pc = resolveProviderConfigFromApp(fullConfig, providerType as any);
+    if (!pc) return;
+    pc.model = modelId;
+    const provider = await createProvider(pc);
+    agent.switchProvider(provider, modelId);
+  };
+
+  // Fresh settings list each time the overlay opens (so edits via /settings set
+  // are reflected without a restart).
+  const getSettingsList = (): SettingItem[] => {
+    const paths = getConfigPaths();
+    const sm = new SettingsManager({
+      config: applyEnvOverrides(loadMergedConfig()),
+      projectConfigPath: paths.local,
+      globalConfigPath: paths.global,
+      projectConfig: loadJsonConfig(paths.local) as Record<string, any>,
+      globalConfig: loadJsonConfig(paths.global) as Record<string, any>,
+    });
+    return sm.list().map((s) => {
+      const mapEntry = SETTINGS_MAP.get(s.dotKey);
+      const schemaEntry = SETTINGS_SCHEMA.get(s.dotKey);
+      return {
+        dotKey: s.dotKey,
+        value: s.masked ? '******' : String(s.value),
+        category: s.category,
+        label: mapEntry?.label ?? s.dotKey,
+        type: schemaEntry?.type ?? 'string' as const,
+        secret: schemaEntry?.secret ?? false,
+        enumValues: schemaEntry?.enumValues,
+        restartRequired: schemaEntry?.restartRequired ?? false,
+      };
+    });
+  };
+  const onSetSetting = async (dotKey: string, value: string): Promise<void> => {
+    const paths = getConfigPaths();
+    const sm = new SettingsManager({
+      config: applyEnvOverrides(loadMergedConfig()),
+      projectConfigPath: paths.local,
+      globalConfigPath: paths.global,
+      projectConfig: loadJsonConfig(paths.local) as Record<string, any>,
+      globalConfig: loadJsonConfig(paths.global) as Record<string, any>,
+    });
+    await sm.set(dotKey, value);
+  };
 
   // Bridge the registry to the TUI: defer interactive (stdin/stdout-owning)
   // commands; otherwise dispatch and surface the returned output.
@@ -76,6 +139,7 @@ export async function startTui({ queryParts, options }: StartTuiArgs): Promise<v
     process.stdout.write('\x1B[2J\x1B[3J\x1B[H');
   };
   instance = render(
+    <ThemeProvider>
     <TuiApp
       agent={agent}
       permissionLevel={permissionLevel}
@@ -89,7 +153,12 @@ export async function startTui({ queryParts, options }: StartTuiArgs): Promise<v
       gatewayOn={!!gatewayInstance}
       skillCount={skills.length}
       mcpCount={gatewayInstance?.getTargets ? Object.keys(gatewayInstance.getTargets()).length : 0}
-    />,
+      modelOptions={modelOptions}
+      onSwitchModel={onSwitchModel}
+      getSettingsList={getSettingsList}
+      onSetSetting={onSetSetting}
+    />
+    </ThemeProvider>,
     { exitOnCtrlC: false },
   );
 }

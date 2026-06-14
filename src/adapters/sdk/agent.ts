@@ -82,7 +82,8 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
   const opts = options ?? {};
 
   // Resolve provider
-  let { provider: llmProvider, model } = await getProvider(opts.provider);
+  let { provider: llmProvider, model: resolvedModel } = await getProvider(opts.provider);
+  let model = opts.model ?? resolvedModel;
 
   // System prompt
   let systemPrompt = opts.systemPrompt ?? "You are a helpful assistant.";

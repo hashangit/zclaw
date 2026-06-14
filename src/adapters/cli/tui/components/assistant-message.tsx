@@ -1,13 +1,15 @@
 import { Box, Text } from 'ink';
-import { theme } from '../theme.js';
+import { useTheme } from '../hooks/use-theme.js';
+import { Markdown } from './markdown.js';
 import type { AssistantMessageEntry } from '../types.js';
 
-/** An LLM text response entry — blue speaker token + content. */
+/** An LLM text response entry — blue speaker token + markdown-rendered content. */
 export function AssistantMessage({ entry }: { entry: AssistantMessageEntry }) {
+  const theme = useTheme();
   return (
     <Box>
       <Text color={theme.blue} bold>ZClaw › </Text>
-      <Text color={theme.fg}>{entry.content}</Text>
+      <Markdown content={entry.content} />
     </Box>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { theme } from '../theme.js';
+import { useTheme } from '../hooks/use-theme.js';
 
 interface TextInputProps {
   value: string;
@@ -62,6 +62,7 @@ function moveVertical(value: string, cursor: number, dir: 1 | -1): number {
 export function TextInput({
   value, onChange, onSubmit, placeholder, ignoreArrows, ignoreReturn, onHistoryUp, onHistoryDown,
 }: TextInputProps) {
+  const theme = useTheme();
   const [cursor, setCursor] = useState(value.length);
   const selfUpdate = useRef(false);
 

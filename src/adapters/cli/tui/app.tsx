@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
-import { theme } from './theme.js';
+import { useTheme } from './hooks/use-theme.js';
 import { useFeed } from './hooks/use-feed.js';
 import { useAgent } from './hooks/use-agent.js';
 import { useKeybindings } from './hooks/use-keybindings.js';
@@ -12,6 +12,8 @@ import { ToolCallBlock } from './components/tool-call-block.js';
 import { Footer } from './components/footer.js';
 import { CommandPalette } from './components/command-palette.js';
 import { HelpDialog } from './overlays/help-dialog.js';
+import { ModelSelector, type ModelOption } from './overlays/model-selector.js';
+import { SettingsEditor, type SettingItem } from './overlays/settings-overlay.js';
 import type { Suggestion } from './components/autocomplete.js';
 import type { Agent } from '../agent.js';
 import type { PermissionLevel } from '../../../core/types.js';
@@ -29,7 +31,7 @@ export interface TuiCommandOutcome {
   exit?: boolean;
 }
 
-type Overlay = 'palette' | 'help' | null;
+type Overlay = 'palette' | 'help' | 'model' | 'settings' | null;
 
 /** Strip ANSI escapes — handler output is chalk-styled for the readline path. */
 function stripAnsi(text: string): string {
@@ -50,6 +52,10 @@ interface TuiAppProps {
   gatewayOn: boolean;
   skillCount: number;
   mcpCount: number;
+  modelOptions: ModelOption[];
+  onSwitchModel: (providerType: string, modelId: string) => Promise<void>;
+  getSettingsList: () => SettingItem[];
+  onSetSetting: (dotKey: string, value: string) => Promise<void>;
 }
 
 /**
@@ -61,8 +67,9 @@ interface TuiAppProps {
  */
 export function TuiApp({
   agent, permissionLevel, initialQuery, onExit, dispatchCommand, commands, skills, resetView,
-  providerType, gatewayOn, skillCount, mcpCount,
+  providerType, gatewayOn, skillCount, mcpCount, modelOptions, onSwitchModel, getSettingsList, onSetSetting,
 }: TuiAppProps) {
+  const theme = useTheme();
   const feed = useFeed();
   const { isRunning, pendingPermission, streamingText, streamingTool, usage, contextTokens, submit, resolvePermission, abort } = useAgent({
     agent,
@@ -71,6 +78,7 @@ export function TuiApp({
   });
   const [input, setInput] = useState('');
   const [overlay, setOverlay] = useState<Overlay>(null);
+  const [settingsList, setSettingsList] = useState<SettingItem[]>([]);
 
   // Input history lives here (not in PromptArea) so it survives PromptArea
   // unmounting during a run — otherwise every turn wiped the history.
@@ -125,9 +133,31 @@ export function TuiApp({
     }
     setInput('');
     if (trimmed === '/?') {
-      // Keyboard-shortcuts dialog (not bare '?', which would fire mid-question).
       setOverlay('help');
       return;
+    }
+    if (trimmed === '/models' || trimmed === '/model') {
+      setOverlay('model');
+      return;
+    }
+    // /settings wizard (no args) → open the settings overlay.
+    // /settings set <key> (no value) → guide (would inquirer).
+    // /settings set <key> <value> + list/get/reset/export/help → dispatch.
+    {
+      const parts = trimmed.split(/\s+/);
+      const cmd = parts[0]?.toLowerCase();
+      const sub = parts[1]?.toLowerCase();
+      if (['/settings', '/setting', '/config'].includes(cmd)) {
+        if (sub === undefined) {
+          setSettingsList(getSettingsList());
+          setOverlay('settings');
+          return;
+        }
+        if (sub === 'set' && parts.length <= 3) {
+          feed.appendEntry({ kind: 'info', content: 'Provide a value: /settings set <key> <value>  (e.g. /settings set gateway.enabled true)' });
+          return;
+        }
+      }
     }
     if (trimmed.startsWith('/')) {
       await runSlash(trimmed);
@@ -163,14 +193,28 @@ export function TuiApp({
   const paletteCommands: Suggestion[] = [
     ...commands,
     { name: 'shortcuts', description: 'Keyboard reference' },
+    { name: 'model', description: 'Switch model' },
+    { name: 'settings', description: 'View settings' },
   ];
   const onPaletteRun = (name: string): void => {
     setOverlay(null);
     if (name === 'shortcuts') {
       setOverlay('help');
+    } else if (name === 'model') {
+      setOverlay('model');
+    } else if (name === 'settings') {
+      setSettingsList(getSettingsList());
+      setOverlay('settings');
     } else {
       void runSlash('/' + name);
     }
+  };
+
+  // Save a setting via the settings editor, then refresh the list so the new
+  // value is immediately visible.
+  const handleSetSetting = async (dotKey: string, value: string): Promise<void> => {
+    await onSetSetting(dotKey, value);
+    setSettingsList(getSettingsList());
   };
 
   useKeybindings(
@@ -206,6 +250,15 @@ export function TuiApp({
           <CommandPalette commands={paletteCommands} skills={skills} onRun={onPaletteRun} onClose={() => setOverlay(null)} />
         ) : overlay === 'help' ? (
           <HelpDialog onClose={() => setOverlay(null)} />
+        ) : overlay === 'model' ? (
+          <ModelSelector
+            options={modelOptions}
+            currentModel={agent.getModel()}
+            onSwitch={(pt, m) => { setOverlay(null); void onSwitchModel(pt, m); }}
+            onClose={() => setOverlay(null)}
+          />
+        ) : overlay === 'settings' ? (
+          <SettingsEditor settings={settingsList} onSet={handleSetSetting} onClose={() => setOverlay(null)} />
         ) : pendingPermission ? (
           <PermissionPrompt toolName={pendingPermission.toolName} args={pendingPermission.args} onResolve={resolvePermission} />
         ) : isRunning && !streamingText ? (

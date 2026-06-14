@@ -16,6 +16,11 @@ import {
   resolveDefaultType,
   resolveDefaultModel,
 } from "./provider-env.js";
+import {
+  applyEnvOverrides,
+  loadMergedConfig,
+  resolveActiveProviderType,
+} from "./config.js";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -117,8 +122,8 @@ export function getProviderConfig(
   if (!apiKey) {
     const envHint = PROVIDER_ENV_KEYS[resolvedType].apiKey;
     throw new Error(
-      `Provider "${resolvedType}" is not configured. ` +
-        `Set ${envHint} or call configureProviders() with an apiKey for "${resolvedType}".`,
+      `No provider is configured. Pass \`provider\` to generateText/createAgent/streamText, ` +
+        `call \`configureProviders(loadProviderConfig())\` at startup, or set the ${envHint} env var.`,
     );
   }
 
@@ -195,6 +200,53 @@ export function resolveProviderConfigFromApp(
   const baseUrl = "baseUrl" in modelConfig ? modelConfig.baseUrl : config.baseUrl;
 
   return { type: providerType, apiKey, model, baseUrl };
+}
+
+// ── CLI-config bridge ────────────────────────────────────────────────
+
+/**
+ * Load CLI-style config (~/.zclaw/setting.json + .zclaw/setting.json + env
+ * overrides) and translate it to a MultiProviderConfig suitable for
+ * `configureProviders()`.
+ *
+ * `loadMergedConfig()` + `applyEnvOverrides()` return AppConfig, where each
+ * provider entry is nested under `models[providerType]` and there is no
+ * `default` field. `configureProviders()` takes MultiProviderConfig, where
+ * providers sit at the top level and `default` is required. This function
+ * bridges the two shapes so the common case `configureProviders(loadProviderConfig())`
+ * works without callers hand-rolling the conversion.
+ *
+ * @returns MultiProviderConfig if any provider has a configured apiKey, null otherwise.
+ *          Callers should check for null before passing to configureProviders().
+ */
+export function loadProviderConfig(): MultiProviderConfig | null {
+  const app = applyEnvOverrides(loadMergedConfig());
+  const multi = {} as MultiProviderConfig;
+  const types: ProviderType[] = [
+    "openai",
+    "anthropic",
+    "glm",
+    "openai-compatible",
+  ];
+  for (const t of types) {
+    const entry = app.models?.[t];
+    if (entry && "apiKey" in entry && entry.apiKey) {
+      (multi as unknown as Record<string, unknown>)[t] = entry;
+    }
+  }
+
+  const collected = Object.keys(multi) as ProviderType[];
+  if (collected.length === 0) return null;
+
+  // Derive `default`: config.provider → resolveActiveProviderType(), but only
+  // if that provider was actually collected above. Otherwise fall back to the
+  // first collected entry so `default` always points at a real provider.
+  const candidate =
+    (app.provider as ProviderType | undefined) ??
+    resolveActiveProviderType(app);
+  multi.default = collected.includes(candidate) ? candidate : collected[0];
+
+  return multi;
 }
 
 // ── Config-file resolution ───────────────────────────────────────────

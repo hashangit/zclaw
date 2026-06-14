@@ -39,7 +39,7 @@ Unlike "screen-seeing" agents (such as OpenClaw) that rely on visual interpretat
 - 🌐 **Web Search**: Integrated with Tavily for real-time information retrieval.
 - 🕒 **Time Accuracy**: Built-in tool to get precise system date and time for correct temporal context.
 - 📧 **Communication**: Send emails and push notifications to chat groups automatically.
-- 📦 **TypeScript SDK**: Programmatic access via `createAgent`, `createUseChat` (React hook), `streamText`, `generateText`.
+- 📦 **TypeScript SDK**: Programmatic access via `createAgent`, `streamText`, `generateText`.
 - 🖥 **Server Mode**: Standalone HTTP/WebSocket server with API key auth and session management.
 - 🛠 **Skills System**: Loadable skill packs from directories with `@path` file references and custom tool creation.
 - 🐚 **Shell Approval**: Interactive prompts or non-interactive modes via `ZCLAW_SHELL_APPROVE` env var.
@@ -86,8 +86,6 @@ npm install zclaw-core
 ```ts
 // Main exports
 import { createAgent, streamText, generateText } from 'zclaw-core';
-// React hook
-import { useAgent } from 'zclaw-core/react';
 // Server utilities
 import { createServer } from 'zclaw-core/server';
 ```
@@ -332,27 +330,24 @@ const result = await generateText('Extract the top 3 issues from these logs', {
 console.log(result.text);
 ```
 
-### React Hook
-```tsx
-import { createUseChat } from 'zclaw-core/react';
+### Getting Started (SDK)
 
-const useChat = await createUseChat();
+Before first use, configure providers from your CLI config (or env vars):
 
-function AgentPanel() {
-  const { messages, input, setInput, handleSubmit, isLoading } = useChat({
-    api: '/api/chat',
-  });
+```ts
+import { configureProviders, loadProviderConfig } from 'zclaw-core';
 
-  return (
-    <form onSubmit={handleSubmit}>
-      <input value={input} onChange={(e) => setInput(e.target.value)} />
-      <button type="submit" disabled={isLoading}>
-        {isLoading ? 'Thinking...' : 'Send'}
-      </button>
-    </form>
-  );
+const config = loadProviderConfig(); // reads ~/.zclaw/setting.json + .zclaw/setting.json + env
+if (config) {
+  configureProviders(config);
 }
+
+// Now safe to call
+import { generateText } from 'zclaw-core';
+const result = await generateText('Hello, world!');
 ```
+
+Without this step, `generateText` defaults to OpenAI using `OPENAI_API_KEY` if present, or throws a "no provider configured" error otherwise.
 
 ### Custom Tools
 ```ts

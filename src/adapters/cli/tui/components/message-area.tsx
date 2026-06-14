@@ -1,5 +1,5 @@
 import { Box, Static, Text, useStdout } from 'ink';
-import { theme } from '../theme.js';
+import { useTheme } from '../hooks/use-theme.js';
 import { HORIZONTAL_PADDING } from '../layout.js';
 import type { FeedEntry } from '../types.js';
 import { UserMessage } from './user-message.js';
@@ -38,6 +38,7 @@ function FeedItem({ entry, expanded }: { entry: FeedEntry; expanded: boolean }) 
  * count so resize reflows correctly.
  */
 export function MessageArea({ entries, staticKey, expanded }: { entries: FeedEntry[]; staticKey: number; expanded: boolean }) {
+  const theme = useTheme();
   const { stdout } = useStdout();
   const columns = stdout?.columns ?? 80;
   const itemWidth = Math.max(20, columns - HORIZONTAL_PADDING);

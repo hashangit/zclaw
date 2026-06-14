@@ -24,6 +24,7 @@ export type { ResolvedProviderConfig, AppConfig } from "./provider-config.js";
 export {
   provider,
   configureProviders,
+  loadProviderConfig,
   getProviderConfig,
   getDefaultProviderType,
   getDefaultProvider,

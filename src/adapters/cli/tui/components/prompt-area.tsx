@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { theme } from '../theme.js';
+import { useTheme } from '../hooks/use-theme.js';
 import { TextInput } from './text-input.js';
 import { Autocomplete, fuzzyFilter, type Suggestion } from './autocomplete.js';
 import { getFileIndex } from '../file-index.js';
@@ -41,6 +41,7 @@ function parseCompletion(value: string): ActiveCompletion | null {
  * accepts; a second Enter submits. Multi-line is P2 (PRD 19).
  */
 export function PromptArea({ value, onChange, onSubmit, onHistoryUp, onHistoryDown, commands, skills }: PromptAreaProps) {
+  const theme = useTheme();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [dismissed, setDismissed] = useState(false);
   const [files, setFiles] = useState<string[]>(() => getFileIndex());

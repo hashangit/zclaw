@@ -36,7 +36,7 @@ import * as path from 'path';
 export { createAgent } from "./agent.js";
 export { tool, CORE_TOOLS, COMM_TOOLS, ADVANCED_TOOLS, ALL_TOOLS } from "./tools.js";
 export { settings, SettingsError } from "./settings.js";
-export { configureProviders, provider } from "../../core/provider-resolver.js";
+export { configureProviders, loadProviderConfig, provider } from "../../core/provider-resolver.js";
 export { createSkillProviderSwitcher } from "../../core/skill-invoker.js";
 export type { SSEOptions } from "./http.js";
 
@@ -134,7 +134,8 @@ export async function generateText(
   const maxSteps = opts.maxSteps ?? 10;
 
   // Resolve provider
-  const { provider: llmProvider, model } = await getProvider(opts.provider);
+  const { provider: llmProvider, model: resolvedModel } = await getProvider(opts.provider);
+  const model = opts.model ?? resolvedModel;
 
   // Resolve tools
   const toolDefs = opts.tools ? resolveTools(opts.tools) : getAllToolDefinitions();
@@ -215,7 +216,8 @@ export async function streamText(
   const maxSteps = opts.maxSteps ?? 10;
 
   // Resolve provider
-  const { provider: llmProvider, model } = await getProvider(opts.provider);
+  const { provider: llmProvider, model: resolvedModel } = await getProvider(opts.provider);
+  const model = opts.model ?? resolvedModel;
 
   // Resolve tools
   const toolDefs = opts.tools ? resolveTools(opts.tools) : getAllToolDefinitions();

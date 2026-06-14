@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import { theme } from '../theme.js';
+import { useTheme } from '../hooks/use-theme.js';
 import type { CumulativeUsage, PermissionLevel } from '../../../../core/types.js';
 
 interface FooterProps {
@@ -30,6 +30,7 @@ function fmtContext(used: number, limit?: number): string {
 export function Footer({
   providerType, model, usage, permissionLevel, skillCount, gatewayOn, mcpCount, contextTokens, contextWindow,
 }: FooterProps) {
+  const theme = useTheme();
   const sep = <Text color={theme.fgGutter}> │ </Text>;
   return (
     <Box>

@@ -174,7 +174,7 @@ if ! pnpm test >/tmp/zclaw-publish-test.log 2>&1; then
 fi
 ok "Tests passed"
 
-# --- execute: bump, commit, tag, push -------------------------------------
+# --- execute: bump, generate notes, commit, tag, push ---------------------
 info "Bumping package.json to $TARGET_VERSION..."
 # already bumped if we went through npm version above; if explicit version arg,
 # set it now
@@ -182,8 +182,32 @@ if [[ "$BUMP" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   npm version "$TARGET_VERSION" --no-git-tag-version --silent >/dev/null
 fi
 
+# --- generate release notes via zclaw SDK (dogfooding) ---------------------
+NOTES_FILE="RELEASE_NOTES-v$TARGET_VERSION.md"
+info "Generating release notes (zclaw SDK, Keep a Changelog format)..."
+if pnpm exec tsx scripts/generate-release-notes.ts "$TARGET_VERSION" 2>&1 \
+    | sed 's/^/    /'; then
+  if [[ -f "$NOTES_FILE" ]]; then
+    ok "Generated $NOTES_FILE"
+    echo
+    echo "${DIM}--- preview ---${RESET}"
+    head -20 "$NOTES_FILE" | sed 's/^/  /'
+    echo "${DIM}--- end preview ---${RESET}"
+    echo
+    read -r -p "Edit $NOTES_FILE before publishing? [y/N] " edit_notes </dev/tty
+    if [[ "$edit_notes" =~ ^[Yy]$ ]]; then
+      ${EDITOR:-vi} "$NOTES_FILE"
+    fi
+  else
+    warn "Notes file not written. GitHub release will use auto-generated notes."
+  fi
+else
+  warn "Release notes generation failed. GitHub release will use auto-generated notes."
+fi
+
 info "Committing..."
 git add package.json
+[[ -f "$NOTES_FILE" ]] && git add "$NOTES_FILE"
 git commit -m "chore(release): v$TARGET_VERSION" --quiet
 
 info "Tagging v$TARGET_VERSION..."

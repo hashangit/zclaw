@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from 'ink';
-import { theme } from '../theme.js';
+import { useTheme } from '../hooks/use-theme.js';
 
 interface PermissionPromptProps {
   toolName: string;
@@ -21,6 +21,7 @@ function formatArgs(args: Record<string, unknown>): string {
  * (unlike the readline path's inquirer suspend/resume).
  */
 export function PermissionPrompt({ toolName, args, onResolve }: PermissionPromptProps) {
+  const theme = useTheme();
   useInput((input) => {
     const key = input.toLowerCase();
     if (key === 'y') onResolve(true);

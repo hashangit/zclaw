@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from 'ink';
-import { theme } from '../theme.js';
+import { useTheme } from '../hooks/use-theme.js';
 
 const KEYS: Array<[string, string]> = [
   ['Ctrl+P', 'Command palette'],
@@ -18,6 +18,7 @@ const KEYS: Array<[string, string]> = [
 
 /** Keybinding reference overlay. Esc (or ?) to close. */
 export function HelpDialog({ onClose }: { onClose: () => void }) {
+  const theme = useTheme();
   useInput((input, key) => {
     if (key.escape || input === '?') onClose();
   });

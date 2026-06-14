@@ -61,7 +61,9 @@ export function buildCommandRegistry(
   registry.register('settings', settingsHandler(), {
     description: 'View and edit configuration',
     aliases: ['config', 'setting'],
-    interactive: true, // inquirer wizard
+    // Not flagged interactive: read subcommands (list/get/reset/export/help)
+    // return output and work in the TUI. The wizard (no args) + `set` use
+    // inquirer and are intercepted by the TUI's handleUserInput.
   });
   registry.register('setup', async () => {
     await runSetup();

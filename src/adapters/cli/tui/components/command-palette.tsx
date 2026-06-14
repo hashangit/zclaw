@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { theme } from '../theme.js';
+import { useTheme } from '../hooks/use-theme.js';
 import { fuzzyFilter, type Suggestion } from './autocomplete.js';
 
 interface CommandPaletteProps {
@@ -19,6 +19,7 @@ const MAX_VISIBLE = 8;
  * while the palette is open).
  */
 export function CommandPalette({ commands, skills, onRun, onClose }: CommandPaletteProps) {
+  const theme = useTheme();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(0);
   const matches = fuzzyFilter([...commands, ...skills], query);

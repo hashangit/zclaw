@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import { theme } from '../theme.js';
+import { useTheme } from '../hooks/use-theme.js';
 
 export interface Suggestion {
   name: string;
@@ -70,6 +70,7 @@ export function Autocomplete({
   selectedIndex: number;
   prefix: '/' | '@';
 }) {
+  const theme = useTheme();
   if (suggestions.length === 0) return null;
   const half = Math.floor(MAX_VISIBLE / 2);
   const start = Math.max(0, Math.min(selectedIndex - half, suggestions.length - MAX_VISIBLE));
