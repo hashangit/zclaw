@@ -1,10 +1,7 @@
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import util from 'util';
-import { ToolModule } from './interface.js';
-
-const execAsync = util.promisify(exec);
+import { ToolModule, ToolExecExtra } from './interface.js';
 
 export const ShellTool: ToolModule = {
   name: "Shell Execution",
@@ -24,13 +21,34 @@ export const ShellTool: ToolModule = {
       }
     }
   },
-  handler: async (args: any, _config: any) => {
-    try {
-      const { stdout, stderr } = await execAsync(args.command);
-      return stdout + (stderr ? `\nStderr: ${stderr}` : '');
-    } catch (error: any) {
-      return `Command failed: ${error.message}\nStdout: ${error.stdout}\nStderr: ${error.stderr}`;
-    }
+  // Runs via `spawn(shell:true)` (same shell as the former `exec`) so stdout
+  // can stream live via onUpdate; the resolved string matches the old format
+  // (stdout + optional "Stderr:" suffix) so headless output is unchanged.
+  handler: async (args: any, _config: any, extra?: ToolExecExtra) => {
+    const onUpdate = extra?.onUpdate;
+    return new Promise<string>((resolve) => {
+      let stdout = '';
+      let stderr = '';
+      const child = spawn(args.command, { shell: true });
+      child.stdout?.on('data', (data: Buffer) => {
+        const chunk = data.toString();
+        stdout += chunk;
+        if (onUpdate) onUpdate({ message: chunk });
+      });
+      child.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+      child.on('error', (err: Error) => {
+        resolve(`Command failed: ${err.message}\nStdout: ${stdout}\nStderr: ${stderr}`);
+      });
+      child.on('close', (code: number | null) => {
+        if (code === 0) {
+          resolve(stdout + (stderr ? `\nStderr: ${stderr}` : ''));
+        } else {
+          resolve(`Command failed: ${args.command} (exit ${code ?? 'null'})\nStdout: ${stdout}\nStderr: ${stderr}`);
+        }
+      });
+    });
   }
 };
 

@@ -46,7 +46,7 @@ export interface ToolCall {
 // ── Steps ─────────────────────────────────────────────────────────────
 
 export interface StepResult {
-  type: "text" | "tool_call" | "text_delta";
+  type: "text" | "tool_call" | "text_delta" | "tool_progress";
   content?: string;
   toolCall?: {
     id: string;
@@ -55,6 +55,11 @@ export interface StepResult {
     result: string;
     duration: number;
   };
+  /** For tool_progress: identifies which in-flight tool call the chunk belongs to. */
+  toolCallId?: string;
+  /** For tool_progress: the tool name + args (so the UI can render the block). */
+  name?: string;
+  args?: Record<string, unknown>;
   timestamp: number;
 }
 
@@ -84,7 +89,7 @@ export interface UserToolDefinition {
 }
 
 export interface ToolContext {
-  onUpdate?: (progress: { percentage: number; message?: string }) => void;
+  onUpdate?: (progress: { percentage?: number; message?: string }) => void;
   signal?: AbortSignal;
   config?: Record<string, unknown>;
 }

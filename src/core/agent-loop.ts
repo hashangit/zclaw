@@ -377,6 +377,23 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
 
         await hooks.beforeToolCall({ name: tc.name, args: parsedArgs });
 
+        // Forward a tool's live progress (e.g. streaming shell stdout) to the
+        // adapter as a tool_progress step. Emitted via onStep only — not pushed
+        // to result.steps (chunks are transient presentation, not semantic).
+        const onUpdate = (progress: { percentage?: number; message?: string }): void => {
+          if (progress.message != null && onStep) {
+            onStep({
+              type: "tool_progress",
+              toolCallId: tc.id,
+              name: tc.name,
+              args: parsedArgs,
+              content: progress.message,
+              timestamp: now(),
+            });
+          }
+        };
+        const execExtra = { onUpdate, signal };
+
         // Check for dynamically injected tools (from semantic middleware)
         const injectedTools = config?.injectedTools;
         const injectedModule = injectedTools instanceof Map ? injectedTools.get(tc.name) : undefined;
@@ -392,7 +409,7 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
           try {
             output = injectedModule
               ? await injectedModule.handler(parsedArgs, config)
-              : await executeTool(tc.name, parsedArgs, config);
+              : await executeTool(tc.name, parsedArgs, config, execExtra);
           } catch (err) {
             output = `Error: ${err instanceof Error ? err.message : String(err)}`;
           }
@@ -405,7 +422,7 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
             try {
               output = injectedModule
                 ? await injectedModule.handler(parsedArgs, config)
-                : await executeTool(tc.name, parsedArgs, config);
+                : await executeTool(tc.name, parsedArgs, config, execExtra);
             } catch (err) {
               output = `Error: ${err instanceof Error ? err.message : String(err)}`;
             }
@@ -422,7 +439,7 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
               try {
                 output = injectedModule
                   ? await injectedModule.handler(parsedArgs, config)
-                  : await executeTool(tc.name, parsedArgs, config);
+                  : await executeTool(tc.name, parsedArgs, config, execExtra);
               } catch (err) {
                 output = `Error: ${err instanceof Error ? err.message : String(err)}`;
               }

@@ -6,7 +6,7 @@
  */
 
 import { builtInTools } from "../tools/index.js";
-import { ToolModule, ToolDefinition } from "../tools/interface.js";
+import { ToolModule, ToolDefinition, ToolExecExtra } from "../tools/interface.js";
 import {
   UserToolDefinition,
   ToolContext,
@@ -129,9 +129,11 @@ export function tool(definition: UserToolDefinition): ToolModule {
     },
   };
 
-  const handler: ToolModule["handler"] = async (args: unknown, config?: any) => {
+  const handler: ToolModule["handler"] = async (args: unknown, config?: any, extra?: ToolExecExtra) => {
     const context: ToolContext = {
       config: config ?? {},
+      onUpdate: extra?.onUpdate,
+      signal: extra?.signal,
     };
 
     const raw = await definition.execute(args, context);
@@ -187,6 +189,7 @@ export async function executeTool(
   name: string,
   args: Record<string, unknown>,
   config?: Record<string, unknown>,
+  extra?: ToolExecExtra,
 ): Promise<string> {
   const found = registry.find(
     (t) => t.definition.function.name === name,
@@ -198,7 +201,7 @@ export async function executeTool(
         .join(", ")}`,
     );
   }
-  return found.handler(args, config);
+  return found.handler(args, config, extra);
 }
 
 // ── getToolGroup ─────────────────────────────────────────────────────

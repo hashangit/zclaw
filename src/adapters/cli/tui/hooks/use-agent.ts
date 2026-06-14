@@ -24,11 +24,19 @@ export interface PendingPermissionView {
   args: Record<string, unknown>;
 }
 
+export interface StreamingToolView {
+  name: string;
+  args: Record<string, unknown>;
+  output: string;
+}
+
 export interface AgentApi {
   isRunning: boolean;
   pendingPermission: PendingPermissionView | null;
   /** Live, accumulating assistant text while streaming (empty when idle). */
   streamingText: string;
+  /** Live, accumulating tool output while a tool runs (null when idle). */
+  streamingTool: StreamingToolView | null;
   submit: (input: string) => Promise<void>;
   resolvePermission: (approve: boolean) => void;
   abort: () => void;
@@ -44,6 +52,7 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
   const [isRunning, setIsRunning] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<PendingPermissionView | null>(null);
   const [streamingText, setStreamingText] = useState('');
+  const [streamingTool, setStreamingTool] = useState<StreamingToolView | null>(null);
 
   // Refs hold the latest values so the stable callbacks never close over
   // stale state (CLAUDE.md §6: long-lived callbacks read through refs).
@@ -53,6 +62,7 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
   permissionLevelRef.current = permissionLevel;
   const resolverRef = useRef<((value: boolean) => void) | null>(null);
   const streamingTextRef = useRef('');
+  const streamingToolRef = useRef<StreamingToolView | null>(null);
 
   /** Commit accumulated streaming text to the feed history as an assistant entry. */
   const commitStreaming = useCallback((): void => {
@@ -70,6 +80,8 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
     setIsRunning(true);
     streamingTextRef.current = '';
     setStreamingText('');
+    streamingToolRef.current = null;
+    setStreamingTool(null);
     feedRef.current.appendEntry({ kind: 'user', content: trimmed });
 
     // Resolve @path file references at the caller, not inside Agent.chat (T022).
@@ -103,9 +115,25 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
         // Non-streaming fallback (defensive; stream mode emits text_delta).
         commitStreaming();
         feedRef.current.appendEntry({ kind: 'assistant', content: step.content });
+      } else if (step.type === 'tool_progress' && step.content != null) {
+        // Live tool output (e.g. streaming shell stdout). Accumulate into a
+        // streamingTool block rendered outside <Static> so it repaints per chunk.
+        if (streamingToolRef.current) {
+          streamingToolRef.current.output += step.content;
+        } else {
+          streamingToolRef.current = {
+            name: step.name ?? 'tool',
+            args: step.args ?? {},
+            output: step.content,
+          };
+        }
+        setStreamingTool(streamingToolRef.current ? { ...streamingToolRef.current } : null);
       } else if (step.type === 'tool_call' && step.toolCall) {
-        // Finalize the assistant message before rendering the tool block.
+        // Finalize the assistant message, then commit the tool result — the
+        // live streamingTool is superseded by this authoritative entry.
         commitStreaming();
+        streamingToolRef.current = null;
+        setStreamingTool(null);
         const tc = step.toolCall;
         feedRef.current.appendEntry({
           kind: 'tool',
@@ -163,5 +191,5 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
     agent.abort();
   }, [agent]);
 
-  return { isRunning, pendingPermission, streamingText, submit, resolvePermission, abort };
+  return { isRunning, pendingPermission, streamingText, streamingTool, submit, resolvePermission, abort };
 }

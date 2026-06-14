@@ -133,7 +133,7 @@ time; non-streaming providers fall back to `chat()`.
 
 - [X] T024 [P] [US2] Create src/adapters/cli/tui/components/autocomplete.tsx — fuzzy dropdown driven by Ink `useInput`; two sources: slash commands and files (`fs.readdir`/glob; `@alias/` scopes to a reference root). Slash-command source = the built-in command registry (`repl.ts:193-236`) + skill names; a `.zclaw/commands/` custom-command loader is added ONLY if that mechanism is introduced (it does not exist today)
 - [X] T025 [P] [US2] Create src/adapters/cli/tui/components/info-message.tsx — info/warning/status line entry
-- [ ] T026 [P] [US2] Create src/adapters/cli/tui/components/bash-output.tsx — live shell stdout streaming for `execute_shell_command` tool blocks
+- [X] T026 [P] [US2] ~~Create src/adapters/cli/tui/components/bash-output.tsx~~ **Implemented without a separate component**: execute_shell_command now spawn-based, streams stdout via `ToolContext.onUpdate`; the loop emits `tool_progress` steps; `use-agent` renders a live `streamingTool` block (reuses `ToolCallBlock` status=running) that's superseded by the committed entry on completion. Verified by an engine test. — live shell stdout streaming for `execute_shell_command` tool blocks
 - [X] T027 [US2] Extend src/adapters/cli/tui/components/prompt-area.tsx to wire autocomplete: type `/` → command dropdown, type `@` → file dropdown, fuzzy-filter as the user types (depends on T024)
 - [X] T028 [US2] Extend src/adapters/cli/tui/components/tool-call-block.tsx with expand/collapse (default collapsed; Ctrl+O expands all) and live output via bash-output (depends on T026)
 - [X] T029 [US2] Add an optional `chatStream()` method to the `LLMProvider` interface in src/providers/types.ts (returns an async iterator of streaming deltas)

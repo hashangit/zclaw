@@ -95,6 +95,33 @@ describe('runAgentLoop streaming', () => {
     expect(steps.filter((s) => s.type === 'text_delta')).toHaveLength(0);
     expect(steps.filter((s) => s.type === 'text').map((s) => s.content)).toEqual(['complete']);
   });
+
+  it('emits tool_progress steps while a streaming tool runs (T026)', async () => {
+    // Provider requests a real execute_shell_command; autoConfirm bypasses the
+    // permission gate so it actually runs and streams stdout.
+    const provider = streamProvider([
+      { type: 'tool_call_begin', index: 0, id: 'tc1', name: 'execute_shell_command' },
+      { type: 'tool_call_delta', index: 0, argumentsDelta: '{"command":"echo zclaw-t026","rationale":"x"}' },
+      { type: 'finish' },
+    ]);
+    const steps: StepResult[] = [];
+    await runAgentLoop({
+      provider,
+      model: 't',
+      messages: [userMsg('run it')],
+      toolDefs: [],
+      maxSteps: 3,
+      hooks: createHookExecutor(),
+      onStep: (s) => steps.push(s),
+      stream: true,
+      autoConfirm: true,
+    });
+    const progress = steps.filter((s) => s.type === 'tool_progress');
+    const toolCall = steps.find((s) => s.type === 'tool_call');
+    expect(progress.length).toBeGreaterThan(0);
+    expect(progress.some((s) => (s.content ?? '').includes('zclaw-t026'))).toBe(true);
+    expect(toolCall?.toolCall?.result).toContain('zclaw-t026');
+  });
 });
 
 describe('StreamingResponseAccumulator', () => {

@@ -7,6 +7,7 @@ import { MessageArea } from './components/message-area.js';
 import { PromptArea } from './components/prompt-area.js';
 import { PermissionPrompt } from './components/permission-prompt.js';
 import { AssistantMessage } from './components/assistant-message.js';
+import { ToolCallBlock } from './components/tool-call-block.js';
 import type { Suggestion } from './components/autocomplete.js';
 import type { Agent } from '../agent.js';
 import type { PermissionLevel } from '../../../core/types.js';
@@ -52,7 +53,7 @@ interface TuiAppProps {
  */
 export function TuiApp({ agent, permissionLevel, initialQuery, onExit, dispatchCommand, commands, skills, resetView }: TuiAppProps) {
   const feed = useFeed();
-  const { isRunning, pendingPermission, streamingText, submit, resolvePermission, abort } = useAgent({
+  const { isRunning, pendingPermission, streamingText, streamingTool, submit, resolvePermission, abort } = useAgent({
     agent,
     feed,
     permissionLevel,
@@ -143,6 +144,22 @@ export function TuiApp({ agent, permissionLevel, initialQuery, onExit, dispatchC
           repaints per token; committed to history when the turn/tool completes. */}
       {streamingText ? (
         <AssistantMessage entry={{ id: '__streaming', kind: 'assistant', content: streamingText }} />
+      ) : null}
+      {/* Live tool output (e.g. streaming shell stdout) — rendered here (not in
+          <Static>) so it repaints per chunk; superseded by the committed tool
+          entry when the call completes. */}
+      {streamingTool ? (
+        <ToolCallBlock
+          entry={{
+            id: '__running-tool',
+            kind: 'tool',
+            name: streamingTool.name,
+            args: streamingTool.args,
+            status: 'running',
+            output: streamingTool.output,
+          }}
+          expanded={true}
+        />
       ) : null}
       <Box flexDirection="column">
         {pendingPermission ? (
