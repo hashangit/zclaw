@@ -163,12 +163,12 @@ Themes apply consistently. A markdown response renders styled.
 
 ### Implementation for User Story 3
 
-- [ ] T038 [P] [US3] Create src/adapters/cli/tui/hooks/use-keybindings.ts — registers global shortcuts via Ink `useInput` (Ctrl+P palette, Ctrl+L clear, Ctrl+O expand, Ctrl+M model, Ctrl+E editor, Ctrl+C abort/clear, PageUp/Down scroll, ArrowUp history)
+- [X] T038 [P] [US3] Create src/adapters/cli/tui/hooks/use-keybindings.ts — registers global shortcuts via Ink `useInput` (Ctrl+P palette, Ctrl+L clear, Ctrl+O expand, Ctrl+M model, Ctrl+E editor, Ctrl+C abort/clear, PageUp/Down scroll, ArrowUp history)
 - [ ] T039 [P] [US3] Create src/adapters/cli/tui/hooks/use-theme.ts — exposes the Tokyo Night Moon tokens via React context (consumes theme.ts from T009)
-- [ ] T040 [P] [US3] Create src/adapters/cli/tui/components/footer.tsx — fixed bottom `<Box>` status bar: `provider | model | tokens | cost | permission | skills | gw`; live counters via `use-agent`. (Live token/cost counters depend on US2's streaming + provider usage data being threaded to the CLI — confirm usage plumbing exists before wiring.)
-- [ ] T041 [P] [US3] Create src/adapters/cli/tui/overlays/command-palette.tsx — Ctrl+P modal `<Box>` with fuzzy command matching
+- [X] T040 [P] [US3] Create src/adapters/cli/tui/components/footer.tsx — fixed bottom `<Box>` status bar: `provider | model | tokens | cost | permission | skills | gw`; live counters via `use-agent`. (Live token/cost counters depend on US2's streaming + provider usage data being threaded to the CLI — confirm usage plumbing exists before wiring.)
+- [X] T041 [P] [US3] Create src/adapters/cli/tui/overlays/command-palette.tsx — Ctrl+P modal `<Box>` with fuzzy command matching
 - [ ] T042 [P] [US3] Create src/adapters/cli/tui/overlays/model-selector.tsx — provider/model picker overlay (Ctrl+M)
-- [ ] T043 [P] [US3] Create src/adapters/cli/tui/overlays/help-dialog.tsx — keybinding reference overlay
+- [X] T043 [P] [US3] Create src/adapters/cli/tui/overlays/help-dialog.tsx — keybinding reference overlay
 - [ ] T044 [US3] Create a markdown renderer in src/adapters/cli/tui/components/markdown.tsx — inline code, bold, lists, links. Either a custom renderer (~100 lines for the CommonMark subset zClaw needs) or `marked` + `marked-terminal` if the peer-version conflict is resolved (downgrade to `marked@^15` if compatible). Decide at kickoff (depends on T039 for theme tokens)
 - [ ] T045 [US3] Wire `use-keybindings` + `footer` + overlays into `app.tsx` in src/adapters/cli/tui/app.tsx (depends on T038, T040, T041-T043)
 - [ ] T046 [US3] Apply theme tokens across all components via `use-theme()` in src/adapters/cli/tui/components/* (replace inline hex from US1 with the context) (depends on T039)

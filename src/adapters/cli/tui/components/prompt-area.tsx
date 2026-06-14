@@ -9,6 +9,9 @@ interface PromptAreaProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: (value: string) => void;
+  /** Recall previous/next prompt (↑ on the top line / ↓ on the bottom line). */
+  onHistoryUp?: () => void;
+  onHistoryDown?: () => void;
   /** `/command` source (built-in registry). */
   commands: Suggestion[];
   /** `/<skill-name>` source. */
@@ -31,28 +34,24 @@ function parseCompletion(value: string): ActiveCompletion | null {
 }
 
 /**
- * Single-line input (custom TextInput) with a fuzzy autocomplete dropdown:
- * typing `/` suggests slash commands + skills; typing `@` suggests project
- * files via a recursive index, fuzzy-matched against full paths (so `@index`
- * finds `src/.../index.tsx` anywhere). Tab/Enter accepts, ↑/↓ scroll, Esc
- * dismisses. A second Enter (dropdown closed) submits. Multi-line is P2 (PRD 19).
+ * Single-line input (custom TextInput) with a fuzzy autocomplete dropdown +
+ * input history. Typing `/` suggests slash commands + skills; typing `@`
+ * suggests project files (recursive index, fuzzy-matched). When the dropdown is
+ * open, ↑/↓ navigate it; when closed, ↑/↓ recall previous prompts. Tab/Enter
+ * accepts; a second Enter submits. Multi-line is P2 (PRD 19).
  */
-export function PromptArea({ value, onChange, onSubmit, commands, skills }: PromptAreaProps) {
+export function PromptArea({ value, onChange, onSubmit, onHistoryUp, onHistoryDown, commands, skills }: PromptAreaProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [dismissed, setDismissed] = useState(false);
-  // Project file list (refreshed on mount + whenever '@' is entered, so files
-  // created mid-session — e.g. by the agent — appear without a restart).
   const [files, setFiles] = useState<string[]>(() => getFileIndex());
 
   const active = parseCompletion(value);
 
-  // Reset selection/dismissal when the token target changes.
   useEffect(() => {
     setSelectedIndex(0);
     setDismissed(false);
   }, [active?.kind, active?.query]);
 
-  // Re-walk the project when '@' is entered (files may have changed since mount).
   useEffect(() => {
     if (active?.kind === '@') setFiles(getFileIndex());
   }, [active?.kind]);
@@ -66,11 +65,11 @@ export function PromptArea({ value, onChange, onSubmit, commands, skills }: Prom
 
   const showDropdown = !!active && !dismissed && matches.length > 0;
 
+  // ↑/↓ navigate the autocomplete dropdown when it's open; otherwise the
+  // TextInput owns ↑/↓ (line navigation + history at the top/bottom edge).
   useInput((inputChar, key) => {
-    if (!active || dismissed || matches.length === 0) return;
+    if (!showDropdown || !active) return;
     if (key.return || key.tab || inputChar === '\t') {
-      // Enter or Tab accepts the selection (dropdown is open); a subsequent
-      // Enter — with the dropdown closed — submits (handled by TextInput).
       const sel = matches[Math.min(selectedIndex, matches.length - 1)] ?? matches[0];
       if (sel) {
         const completed = (active.kind === '/' ? '/' : '@') + sel.name;
@@ -97,7 +96,10 @@ export function PromptArea({ value, onChange, onSubmit, commands, skills }: Prom
           onChange={onChange}
           onSubmit={onSubmit}
           ignoreReturn={showDropdown}
-          placeholder="Ask ZClaw — type / for commands, @ for files"
+          ignoreArrows={showDropdown}
+          onHistoryUp={onHistoryUp}
+          onHistoryDown={onHistoryDown}
+          placeholder="Ask ZClaw — type / for commands, @ for files (Shift+Enter newline)"
         />
       </Box>
     </Box>

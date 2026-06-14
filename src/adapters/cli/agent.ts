@@ -23,6 +23,7 @@ import type { Middleware } from '../../core/middleware.js';
 export interface ChatResult {
   finishReason: string;
   error?: string;
+  usage?: Usage;
 }
 
 export class Agent {
@@ -158,7 +159,7 @@ export class Agent {
         }
       }
 
-      return { finishReason: result.finishReason, error: result.error?.message };
+      return { finishReason: result.finishReason, error: result.error?.message, usage: result.usage };
     } catch (error: any) {
       spinner?.stop();
       if (error.name === 'AbortError' || signal?.aborted) {

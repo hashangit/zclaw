@@ -85,6 +85,10 @@ export async function startTui({ queryParts, options }: StartTuiArgs): Promise<v
       commands={commands}
       skills={skills}
       resetView={resetView}
+      providerType={activeProviderType}
+      gatewayOn={!!gatewayInstance}
+      skillCount={skills.length}
+      mcpCount={gatewayInstance?.getTargets ? Object.keys(gatewayInstance.getTargets()).length : 0}
     />,
     { exitOnCtrlC: false },
   );

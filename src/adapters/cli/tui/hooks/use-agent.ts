@@ -16,7 +16,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { Agent, type ChatResult } from '../../agent.js';
-import type { ApproveToolFn, PermissionLevel, StepResult } from '../../../../core/types.js';
+import type { ApproveToolFn, PermissionLevel, StepResult, CumulativeUsage } from '../../../../core/types.js';
 import type { FeedApi } from './use-feed.js';
 
 export interface PendingPermissionView {
@@ -37,6 +37,10 @@ export interface AgentApi {
   streamingText: string;
   /** Live, accumulating tool output while a tool runs (null when idle). */
   streamingTool: StreamingToolView | null;
+  /** Cumulative token/cost usage across the session (for the footer). */
+  usage: CumulativeUsage;
+  /** Last turn's input size in tokens — the current context-window usage. */
+  contextTokens: number;
   submit: (input: string) => Promise<void>;
   resolvePermission: (approve: boolean) => void;
   abort: () => void;
@@ -53,6 +57,13 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
   const [pendingPermission, setPendingPermission] = useState<PendingPermissionView | null>(null);
   const [streamingText, setStreamingText] = useState('');
   const [streamingTool, setStreamingTool] = useState<StreamingToolView | null>(null);
+  const [usage, setUsage] = useState<CumulativeUsage>({
+    totalPromptTokens: 0,
+    totalCompletionTokens: 0,
+    totalCost: 0,
+    requestCount: 0,
+  });
+  const [contextTokens, setContextTokens] = useState(0);
 
   // Refs hold the latest values so the stable callbacks never close over
   // stale state (CLAUDE.md §6: long-lived callbacks read through refs).
@@ -158,6 +169,15 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
       if (result.finishReason === 'error' && result.error) {
         feedRef.current.appendEntry({ kind: 'error', message: result.error });
       }
+      if (result.usage) {
+        setUsage((u) => ({
+          totalPromptTokens: u.totalPromptTokens + (result.usage?.promptTokens ?? 0),
+          totalCompletionTokens: u.totalCompletionTokens + (result.usage?.completionTokens ?? 0),
+          totalCost: u.totalCost + (result.usage?.cost ?? 0),
+          requestCount: u.requestCount + 1,
+        }));
+        setContextTokens(result.usage.promptTokens ?? 0);
+      }
     } catch (error) {
       commitStreaming();
       const message = error instanceof Error ? error.message : String(error);
@@ -191,5 +211,5 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
     agent.abort();
   }, [agent]);
 
-  return { isRunning, pendingPermission, streamingText, streamingTool, submit, resolvePermission, abort };
+  return { isRunning, pendingPermission, streamingText, streamingTool, usage, contextTokens, submit, resolvePermission, abort };
 }

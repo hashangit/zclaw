@@ -11,6 +11,7 @@ import type { Middleware, PipelineContext } from "./middleware.js";
 import { compose } from "./middleware.js";
 import { checkToolPermission, getToolRiskCategory } from "./permission.js";
 import { getAllToolModules } from "./tool-executor.js";
+import { getModelMeta } from "../models-catalog.js";
 
 // ProviderFactory for per-skill model switching
 export interface ProviderFactory {
@@ -507,11 +508,15 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
   // Calculate usage
   const promptTokens = Math.ceil(totalPromptChars / 4);
   const completionTokens = Math.ceil(totalCompletionChars / 4);
+  const pricing = getModelMeta(currentModel)?.pricing;
+  const cost = pricing
+    ? (promptTokens * pricing.input + completionTokens * pricing.output) / 1_000_000
+    : 0;
   const usage: Usage = {
     promptTokens,
     completionTokens,
     totalTokens: promptTokens + completionTokens,
-    cost: 0,    // TODO: Implement cost calculation based on provider/model
+    cost,
   };
 
   return {

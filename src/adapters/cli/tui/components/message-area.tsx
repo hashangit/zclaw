@@ -56,7 +56,7 @@ export function MessageArea({ entries, staticKey, expanded }: { entries: FeedEnt
     // duplicate history. Normal appends still render incrementally.
     <Static key={staticKey} items={entries}>
       {(entry) => (
-        <Box width={itemWidth} paddingLeft={HORIZONTAL_PADDING}>
+        <Box key={entry.id} width={itemWidth} paddingLeft={HORIZONTAL_PADDING}>
           <FeedItem entry={entry} expanded={expanded} />
         </Box>
       )}

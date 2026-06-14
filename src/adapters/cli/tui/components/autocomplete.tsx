@@ -77,7 +77,7 @@ export function Autocomplete({
   const end = start + visible.length;
 
   return (
-    <Box flexDirection="column" paddingLeft={1}>
+    <Box flexDirection="column" borderStyle="round" borderColor={theme.fgGutter} paddingLeft={1} paddingRight={1}>
       {start > 0 ? (
         <Text color={theme.fgDim}>  ↑ {start} more</Text>
       ) : null}
