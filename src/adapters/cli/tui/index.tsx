@@ -13,6 +13,7 @@ import { TuiApp, type TuiCommandOutcome } from './app.js';
 import type { Suggestion } from './components/autocomplete.js';
 import { bootstrapCliSession } from '../bootstrap.js';
 import { buildCommandRegistry } from '../commands/build-registry.js';
+import { warmInkReset, resetInkStatic } from './ink-reset.js';
 
 export interface StartTuiArgs {
   queryParts: string[];
@@ -57,10 +58,22 @@ export async function startTui({ queryParts, options }: StartTuiArgs): Promise<v
   // the TUI launches on a clean screen.
   process.stdout.write('\x1B[2J\x1B[1;1H');
 
+  // Pre-load Ink's internal instances store (absolute-path import; see
+  // ink-reset.ts) so resize/expand resets are synchronous.
+  await warmInkReset();
+
   let instance: ReturnType<typeof render>;
   const onExit = (): void => {
     instance.unmount();
     process.exit(0);
+  };
+  // Reset Ink's accumulated Static output + clear the screen before a `<Static>`
+  // remount (resize / expand-toggle), so history repaints cleanly without
+  // phantom duplicates. (Command Code's fullStaticOutput reset pattern.)
+  const resetView = (): void => {
+    resetInkStatic(process.stdout);
+    instance.clear();
+    process.stdout.write('\x1B[2J\x1B[3J\x1B[H');
   };
   instance = render(
     <TuiApp
@@ -71,6 +84,7 @@ export async function startTui({ queryParts, options }: StartTuiArgs): Promise<v
       dispatchCommand={dispatchCommand}
       commands={commands}
       skills={skills}
+      resetView={resetView}
     />,
     { exitOnCtrlC: false },
   );

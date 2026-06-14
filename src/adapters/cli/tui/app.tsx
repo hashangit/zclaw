@@ -40,6 +40,8 @@ interface TuiAppProps {
   /** Autocomplete sources built from the shared registry + loaded skills. */
   commands: Suggestion[];
   skills: Suggestion[];
+  /** Reset Ink's Static accumulator + clear screen before a `<Static>` remount. */
+  resetView: () => void;
 }
 
 /**
@@ -48,7 +50,7 @@ interface TuiAppProps {
  * (while a run is in flight), and the input prompt. ESC aborts the current
  * run; Ctrl+C aborts mid-run or exits when idle (FR-006).
  */
-export function TuiApp({ agent, permissionLevel, initialQuery, onExit, dispatchCommand, commands, skills }: TuiAppProps) {
+export function TuiApp({ agent, permissionLevel, initialQuery, onExit, dispatchCommand, commands, skills, resetView }: TuiAppProps) {
   const feed = useFeed();
   const { isRunning, pendingPermission, streamingText, submit, resolvePermission, abort } = useAgent({
     agent,
@@ -56,6 +58,24 @@ export function TuiApp({ agent, permissionLevel, initialQuery, onExit, dispatchC
     permissionLevel,
   });
   const [input, setInput] = useState('');
+
+  // Bumping `staticKey` remounts `<Static>` (in MessageArea) for a full repaint.
+  // On resize we reset Ink's accumulated Static output first (via resetView, see
+  // ink-reset.ts) so the remount doesn't duplicate history — this is what makes
+  // resize reflow work without phantom remnants. (T028 expand/collapse will bump
+  // the same key to re-render tool blocks.)
+  const [staticKey, setStaticKey] = useState(0);
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    const onResize = () => {
+      resetView();
+      setStaticKey((k) => k + 1);
+    };
+    process.stdout.on('resize', onResize);
+    return () => {
+      process.stdout.off('resize', onResize);
+    };
+  }, [resetView]);
 
   // Auto-submit a command-line prompt exactly once on mount.
   const didInit = useRef(false);
@@ -68,6 +88,15 @@ export function TuiApp({ agent, permissionLevel, initialQuery, onExit, dispatchC
   }, [initialQuery, submit]);
 
   useInput((inputChar, key) => {
+    // Ctrl+O: toggle expand/collapse of all tool blocks. Bumps staticKey so the
+    // frozen <Static> history re-renders with the new expanded state (resetView
+    // first so it repaints cleanly).
+    if (key.ctrl && (inputChar === 'o' || inputChar === '\x0f')) {
+      resetView();
+      setExpanded((e) => !e);
+      setStaticKey((k) => k + 1);
+      return;
+    }
     if (key.escape) {
       abort();
       return;
@@ -109,7 +138,7 @@ export function TuiApp({ agent, permissionLevel, initialQuery, onExit, dispatchC
 
   return (
     <Box flexDirection="column" paddingLeft={HORIZONTAL_PADDING} paddingRight={HORIZONTAL_PADDING}>
-      <MessageArea entries={feed.entries} />
+      <MessageArea entries={feed.entries} staticKey={staticKey} expanded={expanded} />
       {/* Live streaming assistant message — rendered here (not in <Static>) so it
           repaints per token; committed to history when the turn/tool completes. */}
       {streamingText ? (

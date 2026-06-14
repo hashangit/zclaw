@@ -9,14 +9,14 @@ import { ErrorMessage } from './error-message.js';
 import { InfoMessage } from './info-message.js';
 
 /** Renders one feed entry by kind. */
-function FeedItem({ entry }: { entry: FeedEntry }) {
+function FeedItem({ entry, expanded }: { entry: FeedEntry; expanded: boolean }) {
   switch (entry.kind) {
     case 'user':
       return <UserMessage entry={entry} />;
     case 'assistant':
       return <AssistantMessage entry={entry} />;
     case 'tool':
-      return <ToolCallBlock entry={entry} />;
+      return <ToolCallBlock entry={entry} expanded={expanded} />;
     case 'error':
       return <ErrorMessage entry={entry} />;
     case 'info':
@@ -37,7 +37,7 @@ function FeedItem({ entry }: { entry: FeedEntry }) {
  * gutter and keeping every line `< columns`. `useStdout` reads the live column
  * count so resize reflows correctly.
  */
-export function MessageArea({ entries }: { entries: FeedEntry[] }) {
+export function MessageArea({ entries, staticKey, expanded }: { entries: FeedEntry[]; staticKey: number; expanded: boolean }) {
   const { stdout } = useStdout();
   const columns = stdout?.columns ?? 80;
   const itemWidth = Math.max(20, columns - HORIZONTAL_PADDING);
@@ -50,10 +50,14 @@ export function MessageArea({ entries }: { entries: FeedEntry[] }) {
     );
   }
   return (
-    <Static items={entries}>
+    // `key={staticKey}`: bumping it (on resize / expand-toggle) remounts
+    // <Static> for a full repaint. The caller resets Ink's accumulated
+    // `fullStaticOutput` first (see ink-reset.ts) so the remount doesn't
+    // duplicate history. Normal appends still render incrementally.
+    <Static key={staticKey} items={entries}>
       {(entry) => (
         <Box width={itemWidth} paddingLeft={HORIZONTAL_PADDING}>
-          <FeedItem entry={entry} />
+          <FeedItem entry={entry} expanded={expanded} />
         </Box>
       )}
     </Static>

@@ -22,14 +22,20 @@ function truncate(text: string, max: number): string {
 
 /**
  * Bordered tool-execution block: status glyph + name/args header, then the
- * output buffer. Basic rendering here — expand/collapse and live stdout land
- * in US2 (T028).
+ * output buffer. Collapsed by default (truncated output + hint); `expanded`
+ * shows the full output. Ctrl+O (handled in app.tsx) toggles expand-all and
+ * bumps the `<Static>` key so this re-renders.
  */
-export function ToolCallBlock({ entry }: { entry: ToolCallEntry }) {
+export function ToolCallBlock({ entry, expanded }: { entry: ToolCallEntry; expanded: boolean }) {
   const glyph = STATUS_GLYPH[entry.status];
   const glyphColor =
     entry.status === 'fail' ? theme.red : entry.status === 'running' ? theme.yellow : theme.green;
   const argsPreview = formatArgs(entry.args);
+
+  const output = entry.output ?? '';
+  const limit = expanded ? 50000 : 400;
+  const shown = truncate(output, limit);
+  const hasMore = output.length > limit;
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={theme.fgGutter} paddingLeft={1} paddingRight={1}>
@@ -41,8 +47,13 @@ export function ToolCallBlock({ entry }: { entry: ToolCallEntry }) {
           <Text color={theme.fgDim}> ({entry.durationMs}ms)</Text>
         ) : null}
       </Box>
-      {entry.output ? (
-        <Text color={theme.fgDim}>{truncate(entry.output, 2000)}</Text>
+      {output ? (
+        <Text color={theme.fgDim}>{shown}</Text>
+      ) : null}
+      {hasMore ? (
+        <Text color={theme.fgDim}> … {output.length - limit} more chars (Ctrl+O to expand)</Text>
+      ) : output && expanded ? (
+        <Text color={theme.fgDim}> (Ctrl+O to collapse)</Text>
       ) : null}
     </Box>
   );

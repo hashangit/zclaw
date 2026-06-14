@@ -115,3 +115,45 @@ describe("SDK e2e — generateText with mock provider", () => {
     expect(systemMsg.content).toContain("You are a test assistant.");
   });
 });
+
+describe("SDK e2e — chatStream with a streaming provider", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it("streams text deltas through textStream + fullText", async () => {
+    const provider = {
+      chat: vi.fn(),
+      async *chatStream() {
+        yield { type: "text_delta", content: "Hel" };
+        yield { type: "text_delta", content: "lo" };
+        yield {
+          type: "finish",
+          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2, cost: 0 },
+        };
+      },
+    } as unknown as LLMProvider;
+
+    vi.doMock("../core/provider-resolver.js", () => ({
+      getProvider: vi.fn().mockResolvedValue({ provider, model: "mock-model" }),
+      configureProviders: vi.fn(),
+      provider: vi.fn(),
+      getProviderConfig: vi.fn(),
+      getDefaultProvider: vi.fn(),
+      getDefaultProviderType: vi.fn(),
+      saveConfig: vi.fn(),
+    }));
+
+    const { createAgent } = await import("../adapters/sdk/index.js");
+    const agent = await createAgent({ tools: [], maxSteps: 1 });
+
+    const result = await agent.chatStream("hi");
+    const chunks: string[] = [];
+    for await (const chunk of result.textStream) chunks.push(chunk);
+
+    expect(chunks.join("")).toBe("Hello");
+    expect(await result.fullText).toBe("Hello");
+    expect(await result.finishReason).toBe("stop");
+  });
+});

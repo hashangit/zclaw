@@ -135,7 +135,7 @@ time; non-streaming providers fall back to `chat()`.
 - [X] T025 [P] [US2] Create src/adapters/cli/tui/components/info-message.tsx — info/warning/status line entry
 - [ ] T026 [P] [US2] Create src/adapters/cli/tui/components/bash-output.tsx — live shell stdout streaming for `execute_shell_command` tool blocks
 - [X] T027 [US2] Extend src/adapters/cli/tui/components/prompt-area.tsx to wire autocomplete: type `/` → command dropdown, type `@` → file dropdown, fuzzy-filter as the user types (depends on T024)
-- [ ] T028 [US2] Extend src/adapters/cli/tui/components/tool-call-block.tsx with expand/collapse (default collapsed; Ctrl+O expands all) and live output via bash-output (depends on T026)
+- [X] T028 [US2] Extend src/adapters/cli/tui/components/tool-call-block.tsx with expand/collapse (default collapsed; Ctrl+O expands all) and live output via bash-output (depends on T026)
 - [X] T029 [US2] Add an optional `chatStream()` method to the `LLMProvider` interface in src/providers/types.ts (returns an async iterator of streaming deltas)
 - [X] T030 [P] [US2] Implement `chatStream()` in src/providers/openai.ts for OpenAI + OpenAI-compatible using the SDK's native streaming (~80 lines; depends on T029)
 - [X] T031 [P] [US2] Implement `chatStream()` in src/providers/anthropic.ts for Anthropic + GLM using the SDK's native streaming (~80 lines; depends on T029)
