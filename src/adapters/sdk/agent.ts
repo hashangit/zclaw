@@ -28,7 +28,7 @@ import { getProvider } from "../../core/provider-resolver.js";
 import { createHookExecutor } from "../../core/hooks.js";
 import { StreamManager } from "../../core/stream-manager.js";
 import { resolveTools, getAllToolDefinitions } from "./tools.js";
-import { createPersistenceBackend } from "../../core/session-store.js";
+import { createPersistenceBackend, persistSession } from "../../core/session-store.js";
 import { runAgentLoop } from "../../core/agent-loop.js";
 import type { AgentLoopOptions } from "../../core/agent-loop.js";
 import {
@@ -82,8 +82,7 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
   const opts = options ?? {};
 
   // Resolve provider
-  let { provider: llmProvider, model: resolvedModel } = await getProvider(opts.provider);
-  let model = opts.model ?? resolvedModel;
+  let { provider: llmProvider, model } = await getProvider(opts.provider, opts.model);
 
   // System prompt
   let systemPrompt = opts.systemPrompt ?? "You are a helpful assistant.";
@@ -158,12 +157,7 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
   // ── Helper: persist messages ────────────────────────────────────────────
   async function persistMessages(): Promise<void> {
     if (backend) {
-      await backend.save(sessionId, {
-        id: sessionId,
-        messages,
-        createdAt: messages[0]?.timestamp ?? Date.now(),
-        updatedAt: Date.now(),
-      });
+      await persistSession(backend, sessionId, messages);
     }
   }
 
@@ -349,9 +343,9 @@ export async function createAgent(options?: AgentCreateOptions): Promise<SdkAgen
   // ── switchProvider() ────────────────────────────────────────────────────
 
   async function switchProvider(providerType: string, newModel?: string): Promise<void> {
-    const result = await getProvider(providerType as any);
+    const result = await getProvider(providerType as any, newModel);
     llmProvider = result.provider;
-    model = newModel ?? result.model;
+    model = result.model;
   }
 
   // ── setSystemPrompt() ───────────────────────────────────────────────────

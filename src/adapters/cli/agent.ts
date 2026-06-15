@@ -11,7 +11,8 @@ import { generateId, now } from '../../core/message-convert.js';
 import { createHookExecutor } from '../../core/hooks.js';
 import { buildSkillCatalog } from '../../core/skill-catalog.js';
 import { DEFAULT_MODELS } from '../../models-catalog.js';
-import type { Message, StepResult, Usage, ToolCall, ApproveToolFn, PermissionLevel } from '../../core/types.js';
+import type { Message, StepResult, Usage, ToolCall, ApproveToolFn, PermissionLevel, ProviderType, PersistenceBackend } from '../../core/types.js';
+import { persistSession } from '../../core/session-store.js';
 import type { Middleware } from '../../core/middleware.js';
 
 /**
@@ -37,8 +38,18 @@ export class Agent {
   private abortController: AbortController | null = null;
   private _middleware: Middleware[] = [];
   private readonly systemPrompt: string;
+  private readonly providerType: ProviderType | undefined;
+  private readonly persistence: PersistenceBackend | null;
+  private sessionId: string;
 
-  constructor(provider: LLMProvider, model: string = DEFAULT_MODELS['openai-compatible'], config: any = {}, systemPrompt?: string) {
+  constructor(
+    provider: LLMProvider,
+    model: string = DEFAULT_MODELS['openai-compatible'],
+    config: any = {},
+    systemPrompt?: string,
+    persistence: PersistenceBackend | null = null,
+    providerType?: ProviderType,
+  ) {
     this.provider = provider;
     this.model = model;
     this.config = config;
@@ -47,6 +58,9 @@ export class Agent {
     // interactive prompt when launching in a TTY. Kept mode-agnostic here so
     // Core's runAgentLoop never needs to know about launch mode.
     this.systemPrompt = systemPrompt ?? buildSystemPrompt();
+    this.providerType = providerType;
+    this.persistence = persistence;
+    this.sessionId = generateId();
 
     this.messages = [{
       id: generateId(),
@@ -168,7 +182,46 @@ export class Agent {
       }
       if (!customSteps) console.error(chalk.red(error.message));
       return { finishReason: 'error', error: error.message };
+    } finally {
+      // Persist after every turn (success, abort, or error) so partial output
+      // survives a restart. Save is best-effort: a persistence failure must
+      // never crash the chat path. (Mirrors SDK agent.ts error handling.)
+      if (this.persistence) {
+        try {
+          await persistSession(this.persistence, this.sessionId, this.messages, {
+            provider: this.providerType,
+            model: this.model,
+          });
+        } catch { /* persistence is best-effort */ }
+      }
     }
+  }
+
+  /**
+   * Load a previously persisted session by id, replacing the in-memory history.
+   * Re-seeds the system message if the loaded set has none. No-op when no
+   * backend is configured.
+   */
+  async loadSession(sessionId: string): Promise<boolean> {
+    if (!this.persistence) return false;
+    const data = await this.persistence.load(sessionId);
+    if (!data) return false;
+    this.sessionId = sessionId;
+    const hasSystem = data.messages.some(m => m.role === 'system');
+    this.messages = hasSystem
+      ? data.messages
+      : [{ id: generateId(), role: 'system', content: this.systemPrompt, timestamp: now() }, ...data.messages];
+    return true;
+  }
+
+  /** Active session id (rotated by `clearConversation` when persistence is on). */
+  getSessionId(): string {
+    return this.sessionId;
+  }
+
+  /** Configured persistence backend, or null when persistence is disabled. */
+  getPersistence(): PersistenceBackend | null {
+    return this.persistence;
   }
 
   clearConversation(): void {
@@ -176,6 +229,11 @@ export class Agent {
     this.messages = systemPrompt
       ? [systemPrompt]
       : [{ id: generateId(), role: 'system', content: this.systemPrompt, timestamp: now() }];
+    // Rotate the session id so the next save writes a new file instead of
+    // overwriting the prior (now-superseded) session — it survives for resume.
+    if (this.persistence) {
+      this.sessionId = generateId();
+    }
   }
 
   /** Public accessor for the current message history. */

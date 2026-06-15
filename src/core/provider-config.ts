@@ -145,17 +145,19 @@ export function getDefaultProvider(): ProviderType {
  * If type is omitted, uses the default provider.
  *
  * @param type - Provider type. If omitted, uses the default provider.
+ * @param modelOverride - When set, overrides the resolved model before creating the provider.
  * @returns The initialized LLMProvider and the resolved model name.
  */
 export async function getProvider(
   type?: ProviderType,
+  modelOverride?: string,
 ): Promise<{ provider: LLMProvider; model: string }> {
   const config = getProviderConfig(type);
 
   const factoryConfig: ProviderConfig = {
     type: config.type,
     apiKey: config.apiKey,
-    model: config.model,
+    model: modelOverride ?? config.model,
     ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
   };
 
@@ -163,7 +165,7 @@ export async function getProvider(
 
   return {
     provider: llmProvider,
-    model: config.model,
+    model: modelOverride ?? config.model,
   };
 }
 
@@ -183,7 +185,7 @@ export function resolveProviderConfigFromApp(
   const apiKey = ("apiKey" in modelConfig) ? modelConfig.apiKey : config.apiKey;
   if (!apiKey) return null;
 
-  const model = "model" in modelConfig ? modelConfig.model : config.model || "gpt-4o";
+  const model = "model" in modelConfig ? modelConfig.model : config.model || DEFAULT_MODELS[providerType];
   const baseUrl = "baseUrl" in modelConfig ? modelConfig.baseUrl : config.baseUrl;
 
   return { type: providerType, apiKey, model, baseUrl };

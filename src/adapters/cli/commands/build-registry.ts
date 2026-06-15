@@ -58,6 +58,13 @@ export function buildCommandRegistry(
     aliases: ['model'],
     interactive: true, // inquirer wizard
   });
+  registry.register('sessions', async () => ({
+    output: 'Session selector is available in the TUI: run /sessions or Ctrl+P → sessions.',
+  }), {
+    description: 'Resume, switch, or delete a session',
+    aliases: ['session'],
+    interactive: true, // TUI overlay (intercepted by handleUserInput before dispatch)
+  });
   registry.register('settings', settingsHandler(), {
     description: 'View and edit configuration',
     aliases: ['config', 'setting'],

@@ -31,10 +31,10 @@ function mockEntryPoints(resolvedModel: string) {
   });
 
   vi.doMock('../../../core/provider-resolver.js', () => ({
-    getProvider: vi.fn().mockResolvedValue({
+    getProvider: vi.fn().mockImplementation((_type?: any, modelOverride?: string) => ({
       provider: mockProvider(),
-      model: resolvedModel,
-    }),
+      model: modelOverride ?? resolvedModel,
+    })),
     configureProviders: vi.fn(),
     provider: vi.fn(),
     getProviderConfig: vi.fn(),

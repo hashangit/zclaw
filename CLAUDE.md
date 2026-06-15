@@ -496,5 +496,11 @@ Keep `CONTEXT.md` under 20 lines total. Do NOT summarize the full conversation �
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
+shell commands, and other important information, read the current plan:
+`specs/005-fullscreen-tui/` — full-screen TUI (alt buffer + windowed feed +
+bottom-pinned input + in-app scroll). Build order: **005 → 003**.
+`specs/003-tui-input-and-logo/` (input box + Zoe Agent logo) depends on 005 and
+layers on top. Each spec dir has `plan.md`/`spec.md`/`research.md`/`data-model.md`/
+`contracts/`/`quickstart.md`; both 003 and 005 have `tasks.md`. Build order
+**005 → 003**; run `/speckit-implement` for 005 first.
 <!-- SPECKIT END -->

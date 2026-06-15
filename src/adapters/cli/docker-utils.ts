@@ -62,7 +62,8 @@ export function isNonInteractive(): boolean {
  * or the provided config. If so, the setup wizard can be safely skipped.
  *
  * Environment variable mappings:
- *   - openai-compatible / openai: OPENAI_API_KEY
+ *   - openai: OPENAI_API_KEY
+ *   - openai-compatible: OPENAI_COMPAT_API_KEY
  *   - anthropic: ANTHROPIC_API_KEY
  *   - glm: GLM_API_KEY
  *
@@ -74,14 +75,19 @@ export function hasRequiredProviderEnv(config: { models?: Record<string, any> })
   );
 
   if (!provider) {
-    // If any API key env var is set, consider it sufficient
-    return !!(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GLM_API_KEY);
+    return !!(
+      process.env.OPENAI_API_KEY ||
+      process.env.OPENAI_COMPAT_API_KEY ||
+      process.env.ANTHROPIC_API_KEY ||
+      process.env.GLM_API_KEY
+    );
   }
 
   switch (provider) {
-    case 'openai-compatible':
     case 'openai':
       return !!(process.env.OPENAI_API_KEY || config.models?.[provider]?.apiKey);
+    case 'openai-compatible':
+      return !!(process.env.OPENAI_COMPAT_API_KEY || config.models?.[provider]?.apiKey);
     case 'anthropic':
       return !!(process.env.ANTHROPIC_API_KEY || config.models?.[provider]?.apiKey);
     case 'glm':

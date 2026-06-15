@@ -11,6 +11,7 @@
 import { render } from 'ink';
 import { TuiApp, type TuiCommandOutcome } from './app.js';
 import type { Suggestion } from './components/autocomplete.js';
+import type { SessionListItem } from './overlays/session-selector.js';
 import { bootstrapCliSession } from '../bootstrap.js';
 import { buildCommandRegistry } from '../commands/build-registry.js';
 import { warmInkReset, resetInkStatic } from './ink-reset.js';
@@ -37,7 +38,7 @@ export interface StartTuiArgs {
 export async function startTui({ queryParts, options }: StartTuiArgs): Promise<void> {
   const initialQuery = queryParts.join(' ').trim();
   const ctx = await bootstrapCliSession(options);
-  const { agent, fullConfig, activeProviderType, gatewayInstance, permissionLevel } = ctx;
+  const { agent, fullConfig, activeProviderType, gatewayInstance, permissionLevel, persistence } = ctx;
 
   // Same registry the readline REPL uses — one owner of the command set.
   const registry = buildCommandRegistry(agent, fullConfig, activeProviderType, gatewayInstance);
@@ -103,6 +104,48 @@ export async function startTui({ queryParts, options }: StartTuiArgs): Promise<v
     await sm.set(dotKey, value);
   };
 
+  // ── Sessions ────────────────────────────────────────────────────────────
+  // list() returns bare ids; load() each to get metadata for the selector.
+  // N+1 I/O is fine for O(10s) of local sessions. Derive a preview from the
+  // first user message (SessionData has no title field). Forward-compatible:
+  // swap this closure for registry.sessionsForUser() once 002 lands (see
+  // specs/002-channels-integration migration note).
+  const PREVIEW_LEN = 80;
+  const listSessions = async (): Promise<SessionListItem[]> => {
+    const ids = await persistence.list();
+    const loaded = await Promise.all(ids.map((id) => persistence.load(id)));
+    return loaded
+      .filter((s): s is NonNullable<typeof s> => s != null)
+      .map((s) => {
+        const firstUser = s.messages.find((m) => m.role === 'user');
+        const preview = (firstUser?.content ?? s.id).split('\n')[0].trim();
+        return {
+          id: s.id,
+          preview: preview.length > PREVIEW_LEN ? preview.slice(0, PREVIEW_LEN - 1) + '…' : preview,
+          updatedAt: s.updatedAt,
+          messageCount: s.messages.length,
+          provider: s.provider,
+          model: s.model,
+        };
+      })
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  };
+
+  // Load the session into the agent and return a short summary for the info
+  // notice. The caller (TuiApp) rebuilds the feed from agent.getMessages().
+  const onSwitchSession = async (sessionId: string): Promise<{ preview: string; messageCount: number } | null> => {
+    const ok = await agent.loadSession(sessionId);
+    if (!ok) return null;
+    const msgs = agent.getMessages();
+    const firstUser = msgs.find((m) => m.role === 'user');
+    const preview = (firstUser?.content ?? sessionId).split('\n')[0].trim();
+    return { preview, messageCount: msgs.length };
+  };
+
+  const onDeleteSession = async (sessionId: string): Promise<void> => {
+    await persistence.delete(sessionId);
+  };
+
   // Bridge the registry to the TUI: defer interactive (stdin/stdout-owning)
   // commands; otherwise dispatch and surface the returned output.
   const dispatchCommand = async (input: string): Promise<TuiCommandOutcome> => {
@@ -157,6 +200,10 @@ export async function startTui({ queryParts, options }: StartTuiArgs): Promise<v
       onSwitchModel={onSwitchModel}
       getSettingsList={getSettingsList}
       onSetSetting={onSetSetting}
+      listSessions={listSessions}
+      onSwitchSession={onSwitchSession}
+      onDeleteSession={onDeleteSession}
+      getSessionId={() => agent.getSessionId()}
     />
     </ThemeProvider>,
     { exitOnCtrlC: false },

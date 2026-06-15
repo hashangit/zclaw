@@ -134,8 +134,7 @@ export async function generateText(
   const maxSteps = opts.maxSteps ?? 10;
 
   // Resolve provider
-  const { provider: llmProvider, model: resolvedModel } = await getProvider(opts.provider);
-  const model = opts.model ?? resolvedModel;
+  const { provider: llmProvider, model } = await getProvider(opts.provider, opts.model);
 
   // Resolve tools
   const toolDefs = opts.tools ? resolveTools(opts.tools) : getAllToolDefinitions();
@@ -216,8 +215,7 @@ export async function streamText(
   const maxSteps = opts.maxSteps ?? 10;
 
   // Resolve provider
-  const { provider: llmProvider, model: resolvedModel } = await getProvider(opts.provider);
-  const model = opts.model ?? resolvedModel;
+  const { provider: llmProvider, model } = await getProvider(opts.provider, opts.model);
 
   // Resolve tools
   const toolDefs = opts.tools ? resolveTools(opts.tools) : getAllToolDefinitions();

@@ -26,7 +26,7 @@ import {
   saveConfig,
   writeConfigToPath,
 } from './config-loader.js';
-import { isNonInteractive, hasRequiredProviderEnv } from './docker-utils.js';
+import { isNonInteractive } from './docker-utils.js';
 
 // ── Constants ──────────────────────────────────────────────────────────
 

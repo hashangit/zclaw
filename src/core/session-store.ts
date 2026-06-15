@@ -12,8 +12,10 @@ import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
+  Message,
   PersistenceBackend,
   PersistenceConfig,
+  ProviderType,
   SessionData,
   SessionStore,
 } from "./types.js";
@@ -201,6 +203,36 @@ export function createPersistenceBackend(config: PersistenceConfig): Persistence
     );
   }
   return factory(config);
+}
+
+// ── Save orchestration ──────────────────────────────────────────────────
+
+/**
+ * Persist a session's messages to the backend.
+ *
+ * Single source of truth for the save step shared by all adapters (SDK, CLI,
+ * Server). The backend owns `createdAt` (assigns it on first save, preserves
+ * it on overwrite — see FilePersistenceBackend / MemoryPersistenceBackend) and
+ * merges optional `provider`/`model`/`metadata` fields, so callers only pass
+ * what they know. Adapters that don't track provider/model (the SDK) omit them
+ * and the persisted values are left untouched.
+ */
+export async function persistSession(
+  backend: PersistenceBackend,
+  sessionId: string,
+  messages: Message[],
+  opts?: { provider?: ProviderType; model?: string; metadata?: Record<string, unknown> },
+): Promise<void> {
+  await backend.save(sessionId, {
+    id: sessionId,
+    messages,
+    // createdAt is required by the SessionData type but ignored by the
+    // backends — they assign it on first save and preserve it on overwrite.
+    updatedAt: Date.now(),
+    provider: opts?.provider,
+    model: opts?.model,
+    metadata: opts?.metadata,
+  } as SessionData);
 }
 
 // ── Deprecated legacy API ───────────────────────────────────────────────

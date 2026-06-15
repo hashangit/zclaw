@@ -16,7 +16,9 @@ import Spinner from 'ink-spinner';
 import { CommandPalette } from './components/command-palette.js';
 import { HelpDialog } from './overlays/help-dialog.js';
 import { ModelSelector, type ModelOption } from './overlays/model-selector.js';
+import { SessionSelector, type SessionListItem } from './overlays/session-selector.js';
 import { SettingsEditor, type SettingItem } from './overlays/settings-overlay.js';
+import { messagesToFeedEntries } from './feed-serializer.js';
 import type { Suggestion } from './components/autocomplete.js';
 import type { Agent } from '../agent.js';
 import type { PermissionLevel } from '../../../core/types.js';
@@ -34,7 +36,7 @@ export interface TuiCommandOutcome {
   exit?: boolean;
 }
 
-type Overlay = 'palette' | 'help' | 'model' | 'settings' | null;
+type Overlay = 'palette' | 'help' | 'model' | 'settings' | 'sessions' | null;
 
 /** Strip ANSI escapes — handler output is chalk-styled for the readline path. */
 function stripAnsi(text: string): string {
@@ -59,6 +61,10 @@ interface TuiAppProps {
   onSwitchModel: (providerType: string, modelId: string) => Promise<void>;
   getSettingsList: () => SettingItem[];
   onSetSetting: (dotKey: string, value: string) => Promise<void>;
+  listSessions: () => Promise<SessionListItem[]>;
+  onSwitchSession: (sessionId: string) => Promise<{ preview: string; messageCount: number } | null>;
+  onDeleteSession: (sessionId: string) => Promise<void>;
+  getSessionId: () => string;
 }
 
 /**
@@ -71,6 +77,7 @@ interface TuiAppProps {
 export function TuiApp({
   agent, permissionLevel, initialQuery, onExit, dispatchCommand, commands, skills, resetView,
   providerType, gatewayOn, skillCount, mcpCount, modelOptions, onSwitchModel, getSettingsList, onSetSetting,
+  listSessions, onSwitchSession, onDeleteSession, getSessionId,
 }: TuiAppProps) {
   const theme = useTheme();
   const feed = useFeed();
@@ -82,6 +89,7 @@ export function TuiApp({
   const [input, setInput] = useState('');
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [settingsList, setSettingsList] = useState<SettingItem[]>([]);
+  const [sessionsList, setSessionsList] = useState<SessionListItem[]>([]);
 
   // File-watcher: notifies when project files change externally while idle.
   const { changedFile, clear: clearFileChange } = useFileWatcher(!isRunning);
@@ -147,6 +155,11 @@ export function TuiApp({
       setOverlay('model');
       return;
     }
+    if (trimmed === '/sessions' || trimmed === '/session') {
+      setSessionsList(await listSessions());
+      setOverlay('sessions');
+      return;
+    }
     // /settings wizard (no args) → open the settings overlay.
     // /settings set <key> (no value) → guide (would inquirer).
     // /settings set <key> <value> + list/get/reset/export/help → dispatch.
@@ -202,6 +215,7 @@ export function TuiApp({
     { name: 'shortcuts', description: 'Keyboard reference' },
     { name: 'model', description: 'Switch model' },
     { name: 'settings', description: 'View settings' },
+    { name: 'sessions', description: 'Resume / delete a session' },
   ];
   const onPaletteRun = (name: string): void => {
     setOverlay(null);
@@ -212,6 +226,11 @@ export function TuiApp({
     } else if (name === 'settings') {
       setSettingsList(getSettingsList());
       setOverlay('settings');
+    } else if (name === 'sessions') {
+      void (async () => {
+        setSessionsList(await listSessions());
+        setOverlay('sessions');
+      })();
     } else {
       void runSlash('/' + name);
     }
@@ -222,6 +241,31 @@ export function TuiApp({
   const handleSetSetting = async (dotKey: string, value: string): Promise<void> => {
     await onSetSetting(dotKey, value);
     setSettingsList(getSettingsList());
+  };
+
+  // Resume a session: load messages into the agent, rebuild the visual feed
+  // (full reconstruction incl. tool blocks), and remount <Static> so history
+  // repaints without phantom duplicates (same pattern as /clear).
+  const handleSelectSession = async (sessionId: string): Promise<void> => {
+    const summary = await onSwitchSession(sessionId);
+    setOverlay(null);
+    if (!summary) {
+      feed.appendEntry({ kind: 'info', content: `Session ${sessionId.slice(0, 8)} could not be loaded.` });
+      return;
+    }
+    feed.clear();
+    resetTodos();
+    const entries = messagesToFeedEntries(agent.getMessages());
+    for (const entry of entries) feed.appendEntry(entry);
+    resetView();
+    setStaticKey((k) => k + 1);
+    feed.appendEntry({ kind: 'info', content: `Resumed session: ${summary.preview} (${summary.messageCount} messages)` });
+  };
+
+  // Delete a session, then refresh the selector so the row disappears.
+  const handleDeleteSession = async (sessionId: string): Promise<void> => {
+    await onDeleteSession(sessionId);
+    setSessionsList(await listSessions());
   };
 
   useKeybindings(
@@ -269,6 +313,14 @@ export function TuiApp({
           />
         ) : overlay === 'settings' ? (
           <SettingsEditor settings={settingsList} onSet={handleSetSetting} onClose={() => setOverlay(null)} />
+        ) : overlay === 'sessions' ? (
+          <SessionSelector
+            sessions={sessionsList}
+            currentSessionId={getSessionId()}
+            onSelect={(id) => { void handleSelectSession(id); }}
+            onDelete={(id) => { void handleDeleteSession(id); }}
+            onClose={() => setOverlay(null)}
+          />
         ) : pendingPermission ? (
           <PermissionPrompt toolName={pendingPermission.toolName} args={pendingPermission.args} onResolve={resolvePermission} />
         ) : isRunning && !streamingText ? (

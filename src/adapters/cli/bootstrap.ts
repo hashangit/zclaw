@@ -31,8 +31,9 @@ import {
   getConfigPaths,
 } from './config-loader.js';
 import { runSetup } from './setup.js';
-import { isNonInteractive, hasRequiredProviderEnv } from './docker-utils.js';
-import type { PermissionLevel } from '../../core/types.js';
+import { isNonInteractive } from './docker-utils.js';
+import type { PermissionLevel, PersistenceBackend, ProviderType } from '../../core/types.js';
+import { createPersistenceBackend } from '../../core/session-store.js';
 import { resolvePermissionLevel } from '../../core/permission.js';
 import { SettingsManager } from '../../core/settings-manager.js';
 import { loadMergedConfig } from './config-loader.js';
@@ -44,6 +45,7 @@ export interface CliSessionContext {
   providerConfig: any;
   permissionLevel: PermissionLevel | undefined;
   gatewayInstance: any;
+  persistence: PersistenceBackend;
 }
 
 export async function bootstrapCliSession(options: any): Promise<CliSessionContext> {
@@ -83,11 +85,13 @@ export async function bootstrapCliSession(options: any): Promise<CliSessionConte
     console.warn(`Warning: --headless overrides ${flag}. All tools will be auto-approved.`);
   }
 
-  // 3. Apply env var overrides for tool settings
-  fullConfig = applyEnvOverrides(fullConfig);
-
-  // 4. Auto-migrate legacy config format (top-level apiKey/baseUrl/model)
+  // 3. Auto-migrate legacy config format (top-level apiKey/baseUrl/model)
+  //    Must run BEFORE applyEnvOverrides, which initializes models={} and would
+  //    block the !config.models guard in migrateLegacyFormat.
   fullConfig = migrateLegacyFormat(fullConfig, { model: options.model });
+
+  // 4. Apply env var overrides for tool settings
+  fullConfig = applyEnvOverrides(fullConfig);
 
   // 5. Load provider config via unified resolution
   const cliProvider = options.provider;
@@ -97,13 +101,8 @@ export async function bootstrapCliSession(options: any): Promise<CliSessionConte
     console.log(chalk.yellow("No provider configuration found."));
 
     if (isNonInteractive()) {
-      if (hasRequiredProviderEnv(fullConfig)) {
-        multiConfig = loadProviderConfig(fullConfig, cliProvider);
-      }
-      if (!multiConfig) {
-        console.error(chalk.red("No provider configured. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or GLM_API_KEY env vars, or provide a config file."));
-        process.exit(1);
-      }
+      console.error(chalk.red("No provider configured. Set API key env vars (OPENAI_API_KEY / ANTHROPIC_API_KEY / GLM_API_KEY) or provide a config file."));
+      process.exit(1);
     } else {
       const inquirer = await import('inquirer');
       const { doSetup } = await inquirer.default.prompt([
@@ -137,17 +136,19 @@ export async function bootstrapCliSession(options: any): Promise<CliSessionConte
   // Active provider: CLI --provider flag → multiConfig.default
   const activeProviderType = (cliProvider as string) ?? multiConfig.default;
 
-  const { provider, model: resolvedModel } = await getProvider(activeProviderType as any);
-
-  // CLI --model override
-  const model = options.model ?? resolvedModel;
+  // getProvider handles model override so it's baked into the provider instance
+  const { provider, model } = await getProvider(activeProviderType as any, options.model);
   const providerConfig = { type: activeProviderType, model };
   // Select system prompt by launch mode: interactive (TUI/readline in a TTY)
   // gets the interactive coding-agent prompt; headless/docker/piped keep
   // the Docker-native prompt unchanged.
   const launchMode = resolveLaunchMode(options);
   const systemPrompt = selectSystemPrompt(launchMode);
-  const agent = new Agent(provider, providerConfig.model, fullConfig, systemPrompt);
+  // Session persistence — single file backend shared by the REPL, TUI, and the
+  // session selector overlay. Default path is ~/.zclaw/sessions (see Core's
+  // defaultSessionPath()). Disabled backends can be added via registerBackend().
+  const persistence = createPersistenceBackend({ type: 'file' });
+  const agent = new Agent(provider, model, fullConfig, systemPrompt, persistence, activeProviderType as ProviderType);
 
   // Initialize skills system
   await agent.initializeSkills();
@@ -197,5 +198,5 @@ export async function bootstrapCliSession(options: any): Promise<CliSessionConte
     }
   }
 
-  return { agent, fullConfig, activeProviderType, providerConfig, permissionLevel, gatewayInstance };
+  return { agent, fullConfig, activeProviderType, providerConfig, permissionLevel, gatewayInstance, persistence };
 }
