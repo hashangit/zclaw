@@ -135,8 +135,10 @@ export function tool(definition: UserToolDefinition): ToolModule {
       onUpdate: extra?.onUpdate,
       signal: extra?.signal,
     };
-    const raw = await definition.execute(args, context);
-    return normalizeToolResult(raw);
+    // Passthrough — normalization (string | ToolResult → ToolResult) happens once
+    // at the executeTool boundary. Direct handler callers get back exactly what
+    // `execute` returned (a string in the common case → backward compatible).
+    return definition.execute(args, context);
   };
 
   return {

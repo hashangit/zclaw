@@ -158,7 +158,7 @@ Env vars per provider: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GLM_API_KEY`, `OP
 
 - **No bundler** — plain `tsc` to ES2022 NodeNext. Dev via `tsx`.
 - **Package exports** — `zclaw` (SDK), `zclaw/react`, `zclaw/server`. Binaries: `zclaw` (CLI), `zclaw-server`.
-- **Vitest test suite (partial)** — 317 tests across 33 files covering P0/P1 areas; CI gates publish on test pass
+- **Vitest test suite (partial)** — 322 tests across 33 files covering P0/P1 areas; CI gates publish on test pass
 - **Errors carry metadata** — `code` (machine-readable) + `retryable` flag on all `ZclawError` subclasses.
 - **Hook errors are non-fatal** — never crash the agent loop.
 - **Dynamic provider imports** — unused provider SDKs stay out of memory.

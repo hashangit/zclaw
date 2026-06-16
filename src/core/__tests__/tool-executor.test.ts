@@ -4,6 +4,8 @@ import {
   getAllToolDefinitions,
   registerTool,
   tool,
+  executeTool,
+  normalizeToolResult,
   CORE_TOOLS,
   COMM_TOOLS,
   ADVANCED_TOOLS,
@@ -115,7 +117,7 @@ describe("tool() factory", () => {
     expect(mod.definition.function.description).toBe("Says hi");
   });
 
-  it("handler wraps a string return as a ToolResult", async () => {
+  it("handler passes a string execute result through verbatim", async () => {
     const mod = tool({
       name: "echo",
       description: "echo",
@@ -123,10 +125,12 @@ describe("tool() factory", () => {
       execute: async () => "pong",
     });
     const result = await mod.handler({}, undefined);
-    expect(result).toEqual({ output: "pong", success: true });
+    // Direct handler callers get the raw string (backward compatible);
+    // normalization to a ToolResult happens once at the executeTool boundary.
+    expect(result).toBe("pong");
   });
 
-  it("handler passes a ToolResult through, preserving metadata", async () => {
+  it("handler passes a ToolResult through verbatim, preserving metadata", async () => {
     const mod = tool({
       name: "structured",
       description: "returns structured",
@@ -137,15 +141,30 @@ describe("tool() factory", () => {
     expect(result).toEqual({ output: "structured result", success: true, metadata: { path: "/x", delta: 3 } });
   });
 
-  it("handler coerces an unexpected return to a ToolResult", async () => {
-    const mod = tool({
-      name: "weird",
-      description: "returns number",
-      parameters: { type: "object", properties: {} },
-      execute: async () => 42 as any,
+  it("executeTool normalizes a string-returning handler to a ToolResult", async () => {
+    registerTool({
+      name: "str-handler",
+      risk: "safe",
+      definition: { type: "function", function: { name: "str-handler-t051", description: "x", parameters: { type: "object", properties: {}, required: [] } } },
+      handler: async () => "hello",
     });
-    const result = await mod.handler({}, undefined);
-    expect(result).toEqual({ output: "42", success: true });
+    const result = await executeTool("str-handler-t051", {});
+    expect(result).toEqual({ output: "hello", success: true });
+  });
+});
+
+describe("normalizeToolResult", () => {
+  it("wraps a bare string", () => {
+    expect(normalizeToolResult("done")).toEqual({ output: "done", success: true });
+  });
+
+  it("passes a ToolResult through with metadata preserved", () => {
+    const tr = { output: "ok", success: true, metadata: { a: 1 } };
+    expect(normalizeToolResult(tr)).toBe(tr);
+  });
+
+  it("coerces an unexpected return to a string output", () => {
+    expect(normalizeToolResult(42 as any)).toEqual({ output: "42", success: true });
   });
 });
 

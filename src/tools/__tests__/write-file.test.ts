@@ -96,6 +96,19 @@ describe("WriteFileTool (safe atomic write)", () => {
     await expect(fs.readFile(file, "utf-8")).resolves.toBe("tiny");
   });
 
+  it("skips the diff when the existing file has too many lines (under the byte cap)", async () => {
+    // 2500 very short lines — well under the 64KB byte cap but over the 2000-line cap.
+    const file = path.join(dir, "many-lines.txt");
+    await fs.writeFile(file, "l\n".repeat(2500), "utf-8");
+
+    const result: any = await run(file, "x");
+
+    expect(result.metadata.diffSkipped).toBe(true);
+    expect(result.metadata.oldContent).toBeUndefined();
+    expect(result.metadata.isNewFile).toBe(false);
+    await expect(fs.readFile(file, "utf-8")).resolves.toBe("x");
+  });
+
   it("sweeps a same-path temp orphaned by a prior hard kill", async () => {
     const file = path.join(dir, "sweep.txt");
     await fs.writeFile(file, "ORIGINAL", "utf-8");

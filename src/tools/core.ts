@@ -162,23 +162,35 @@ export const WriteFileTool: ToolModule = {
     const filePath: string = args.path;
     const newContent: string = args.content;
 
-    // 1. Capture old content (best-effort) for the diff. Stat first so a huge
-    //    existing file is never slurped into memory just to be diffed — if it
-    //    exceeds the cap we skip the read entirely and mark the diff skipped.
-    let oldContent: string | null = null;
-    let oldBytes = 0;
+    // 1. Stat the target (size only — never slurp a huge file). Read the old
+    //    content ONLY when neither side already exceeds the byte/line caps, so a
+    //    large write doesn't pay for a pointless read. The line cap applies to
+    //    BOTH sides — a small-but-thousands-of-lines file diffs just as badly.
     let fileExists = false;
+    let oldBytes = 0;
     try {
       const st = await fs.stat(filePath);
       fileExists = true;
       oldBytes = st.size;
-      if (st.size <= DIFF_BYTE_CAP) {
-        oldContent = await fs.readFile(filePath, "utf-8");
-      }
     } catch {
       // absent ⇒ new file
     }
     const isNewFile = !fileExists;
+    const newBytes = Buffer.byteLength(newContent, "utf-8");
+    const newOverCap = newBytes > DIFF_BYTE_CAP || lineCount(newContent) > DIFF_LINE_CAP;
+    const oldByteOverCap = oldBytes > DIFF_BYTE_CAP;
+
+    let oldContent: string | null = null;
+    let oldLineOverCap = false;
+    if (!newOverCap && !oldByteOverCap) {
+      try {
+        oldContent = await fs.readFile(filePath, "utf-8");
+        oldLineOverCap = lineCount(oldContent) > DIFF_LINE_CAP;
+      } catch {
+        // absent ⇒ new file (oldContent stays null)
+      }
+    }
+    const overCap = newOverCap || oldByteOverCap || oldLineOverCap;
 
     // 2. Atomic write: temp file in the SAME directory (same filesystem ⇒
     //    fs.rename is atomic on POSIX), then rename. On any failure the temp
@@ -196,15 +208,10 @@ export const WriteFileTool: ToolModule = {
       return { output: `Error writing file: ${error.message}`, success: false };
     }
 
-    // 3. Build metadata for the diff viewer. The cap considers BOTH sides — a
-    //    small edit to a large file must skip too, else we'd store the whole
-    //    old file in the step. Full content is omitted when over cap.
-    const newBytes = Buffer.byteLength(newContent, "utf-8");
-    const overCap =
-      newBytes > DIFF_BYTE_CAP ||
-      oldBytes > DIFF_BYTE_CAP ||
-      lineCount(newContent) > DIFF_LINE_CAP;
-
+    // 3. Build metadata for the diff viewer. `overCap` already accounts for both
+    //    sides (byte AND line), so a small edit to a large/many-line file skips
+    //    the diff instead of storing/rendering the whole old file. Full content
+    //    is omitted when over cap.
     const metadata: FileWriteMetadata = overCap
       ? {
           path: filePath,
