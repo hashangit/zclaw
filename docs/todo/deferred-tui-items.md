@@ -7,7 +7,14 @@
 
 ---
 
-## T051 — Inline Diff Viewer + Safe Write Infrastructure
+## T051 — Inline Diff Viewer + Safe Write Infrastructure — ✅ DONE
+
+**Implemented 2026-06-17** (`specs/006-inline-diff-viewer/`). `write_file` now writes
+atomically (same-dir temp + `fs.rename`) and captures old content as `FileWriteMetadata`
+on the tool step; the TUI renders an inline unified diff (`tui/diff/` + `diff-viewer.tsx`)
+via the `diff` package, with Pi-style context-collapse and a size cap. The metadata channel
+threads `executeTool` → `agent-loop` → `StepResult.metadata` → TUI without entering LLM
+context. 317 tests green.
 
 ### Problem
 Two problems, tightly coupled:

@@ -5,7 +5,7 @@ import type { LLMProvider, ProviderMessage, ProviderToolCall, ProviderResponse }
 import type { ToolDefinition } from "../tools/interface.js";
 import { generateId, now, toZclawError, messageToProviderMessage, providerToolCallToToolCall } from "./message-convert.js";
 import { StreamingResponseAccumulator } from "./stream-accumulator.js";
-import { executeTool } from "./tool-executor.js";
+import { executeTool, normalizeToolResult } from "./tool-executor.js";
 import type { HookExecutor } from "./hooks.js";
 import type { Middleware, PipelineContext } from "./middleware.js";
 import { compose } from "./middleware.js";
@@ -401,32 +401,35 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
 
         const start = now();
         let output: string;
+        let metadata: Record<string, unknown> | undefined;
+
+        // Runs the tool (injected module or registry), normalizing both branches
+        // into { output, metadata } and turning throws into an error output.
+        // Shared by all three permission paths below so the try/catch lives once.
+        const runToolSafely = async (): Promise<{ output: string; metadata?: Record<string, unknown> }> => {
+          try {
+            const result = injectedModule
+              ? normalizeToolResult(await injectedModule.handler(parsedArgs, config))
+              : await executeTool(tc.name, parsedArgs, config, execExtra);
+            return { output: result.output, metadata: result.metadata };
+          } catch (err) {
+            return { output: `Error: ${err instanceof Error ? err.message : String(err)}` };
+          }
+        };
 
         // Permission pre-filter + adapter-level tool approval
         const effectiveLevel: PermissionLevel = permissionLevel ?? "moderate";
 
         if (autoConfirm) {
           // --headless mode: bypass permission matrix, auto-approve everything
-          try {
-            output = injectedModule
-              ? await injectedModule.handler(parsedArgs, config)
-              : await executeTool(tc.name, parsedArgs, config, execExtra);
-          } catch (err) {
-            output = `Error: ${err instanceof Error ? err.message : String(err)}`;
-          }
+          ({ output, metadata } = await runToolSafely());
         } else {
           const riskCategory: ToolRiskCategory = injectedModule?.risk
             ?? getToolRiskCategory(tc.name, getAllToolModules());
           const decision = checkToolPermission(effectiveLevel, riskCategory);
 
           if (decision === "auto") {
-            try {
-              output = injectedModule
-                ? await injectedModule.handler(parsedArgs, config)
-                : await executeTool(tc.name, parsedArgs, config, execExtra);
-            } catch (err) {
-              output = `Error: ${err instanceof Error ? err.message : String(err)}`;
-            }
+            ({ output, metadata } = await runToolSafely());
           } else if (approveTool) {
             let approved: boolean;
             try {
@@ -437,13 +440,7 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
             if (!approved) {
               output = "User denied tool execution.";
             } else {
-              try {
-                output = injectedModule
-                  ? await injectedModule.handler(parsedArgs, config)
-                  : await executeTool(tc.name, parsedArgs, config, execExtra);
-              } catch (err) {
-                output = `Error: ${err instanceof Error ? err.message : String(err)}`;
-              }
+              ({ output, metadata } = await runToolSafely());
             }
           } else {
             output = "Tool execution denied.";
@@ -474,6 +471,7 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
             result: output,
             duration,
           },
+          metadata,
           timestamp: now(),
         };
         steps.push(toolStep);

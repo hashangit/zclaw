@@ -2,6 +2,8 @@ import { Box, Text } from 'ink';
 import { useTheme } from '../hooks/use-theme.js';
 import { Markdown } from './markdown.js';
 import { GoalStatus, type Todo } from './goal-status.js';
+import { DiffViewer } from './diff-viewer.js';
+import { isFileWriteMetadata } from '../diff/file-write-meta.js';
 import type { ToolCallEntry } from '../types.js';
 
 const STATUS_GLYPH: Record<ToolCallEntry['status'], string> = {
@@ -25,11 +27,29 @@ function truncate(text: string, max: number): string {
   return `${text.slice(0, max)} … (${text.length - max} more chars)`;
 }
 
+type Theme = ReturnType<typeof useTheme>;
+
+/** Status glyph + tool name + args preview + duration — shared by every block. */
+function BlockHeader({ entry, theme }: { entry: ToolCallEntry; theme: Theme }) {
+  const glyph = STATUS_GLYPH[entry.status];
+  const glyphColor =
+    entry.status === 'fail' ? theme.red : entry.status === 'running' ? theme.yellow : theme.green;
+  const argsPreview = formatArgs(entry.args);
+  return (
+    <Box>
+      <Text color={glyphColor} bold>{glyph} </Text>
+      <Text color={theme.purple} bold>{entry.name}</Text>
+      {argsPreview ? <Text color={theme.fgDim}> {truncate(argsPreview, 120)}</Text> : null}
+      {entry.durationMs != null ? <Text color={theme.fgDim}> ({entry.durationMs}ms)</Text> : null}
+    </Box>
+  );
+}
+
 /**
- * Bordered tool-execution block: status glyph + name/args header, then the
- * output buffer. Collapsed by default (truncated output + hint); `expanded`
- * shows the full output. Ctrl+O (handled in app.tsx) toggles expand-all and
- * bumps the `<Static>` key so this re-renders.
+ * Bordered tool-execution block: shared header, then the output buffer (or an
+ * inline diff for `write_file`). Collapsed by default (truncated output + hint);
+ * `expanded` shows the full output. Ctrl+O (handled in app.tsx) toggles
+ * expand-all and bumps the `<Static>` key so this re-renders.
  */
 export function ToolCallBlock({ entry, expanded }: { entry: ToolCallEntry; expanded: boolean }) {
   const theme = useTheme();
@@ -43,10 +63,21 @@ export function ToolCallBlock({ entry, expanded }: { entry: ToolCallEntry; expan
     } catch { /* fall through to generic block */ }
   }
 
-  const glyph = STATUS_GLYPH[entry.status];
-  const glyphColor =
-    entry.status === 'fail' ? theme.red : entry.status === 'running' ? theme.yellow : theme.green;
-  const argsPreview = formatArgs(entry.args);
+  // write_file with captured diff metadata → inline unified diff (collapsed by
+  // default; expanded via the global Ctrl+O toggle). Falls through to the
+  // generic block when there's no metadata (e.g. on session resume) or when the
+  // write was oversized (diffSkipped) — in which case the plain output shows.
+  if (entry.name === 'write_file') {
+    const meta = isFileWriteMetadata(entry.metadata) ? entry.metadata : null;
+    if (meta && !meta.diffSkipped && meta.newContent !== undefined) {
+      return (
+        <Box flexDirection="column" borderStyle="round" borderColor={theme.fgGutter} paddingLeft={1} paddingRight={1}>
+          <BlockHeader entry={entry} theme={theme} />
+          <DiffViewer oldContent={meta.oldContent ?? null} newContent={meta.newContent} expanded={expanded} />
+        </Box>
+      );
+    }
+  }
 
   const output = entry.output ?? '';
   const isMarkdown = MARKDOWN_TOOLS.has(entry.name);
@@ -56,14 +87,7 @@ export function ToolCallBlock({ entry, expanded }: { entry: ToolCallEntry; expan
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={theme.fgGutter} paddingLeft={1} paddingRight={1}>
-      <Box>
-        <Text color={glyphColor} bold>{glyph} </Text>
-        <Text color={theme.purple} bold>{entry.name}</Text>
-        {argsPreview ? <Text color={theme.fgDim}> {truncate(argsPreview, 120)}</Text> : null}
-        {entry.durationMs != null ? (
-          <Text color={theme.fgDim}> ({entry.durationMs}ms)</Text>
-        ) : null}
-      </Box>
+      <BlockHeader entry={entry} theme={theme} />
       {output ? (
         MARKDOWN_TOOLS.has(entry.name) ? (
           <Markdown content={shown} />

@@ -221,6 +221,7 @@ In a TTY the CLI launches a full-screen Ink/React TUI (`src/adapters/cli/tui/`, 
 | Zoe Agent logo | A figlet "Zoe Agent" wordmark (`ANSI Compact`) with a Tokyo Night 45° rainbow gradient + `by hashangit · v…` descriptor; the first feed entry, scrolls away as you chat, re-seeded on `/clear`. |
 | Persistent task panel | The `manage_todos` tool drives a persistent todo panel (status glyphs); the agent replaces the full list each call, and it survives session resume. |
 | Streaming feed | Assistant responses stream token-by-token; tool calls render as live bordered blocks with streaming output; Markdown rendering for messages. |
+| Inline write diffs | `write_file` renders a unified diff (green added / red removed, context-collapse) inside the tool block. Writes are atomic (same-dir temp + `fs.rename`), so a crash mid-write never corrupts the file; oversized writes skip the diff and show a plain summary. |
 | Overlays | Command palette (Ctrl+P), model selector (`/models`), settings editor (`/settings`), session selector (`/sessions`), help (`/?`). |
 | Session manager | List / resume / delete / rename / export (JSON) / transcript (Markdown) sessions; resume rebuilds the feed **and** the todo panel from persisted messages. |
 | Message queue + `/steer` | Type during a run to queue follow-up messages; `/steer <msg>` interrupts the current run and redirects. |

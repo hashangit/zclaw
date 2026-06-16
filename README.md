@@ -43,6 +43,7 @@ Unlike "screen-seeing" agents (such as OpenClaw) that rely on visual interpretat
 - 🖥 **Server Mode**: Standalone HTTP/WebSocket server with API key auth and session management.
 - 🛠 **Skills System**: Loadable skill packs from directories with `@path` file references and custom tool creation.
 - 🐚 **Shell Approval**: Interactive prompts or non-interactive modes via `ZCLAW_SHELL_APPROVE` env var.
+- 🖥️ **Interactive TUI**: In a TTY, a full-screen Ink/React UI — bordered always-on input, streaming feed, session manager, message queue/`/steer`, and inline `write_file` diffs (atomic, crash-safe writes).
 
 ## Tech Stack
 - **Runtime**: Node.js
@@ -130,6 +131,10 @@ Simply run `zclaw` to enter the chat loop.
 zclaw
 > List all TypeScript files in the src folder.
 ```
+
+### Interactive TUI
+
+In a terminal (TTY), `zclaw` launches a full-screen Ink/React TUI instead of the readline loop: a bordered always-visible input, a streaming message feed, a persistent task panel (`manage_todos`), session list/resume/export, and inline diffs for `write_file`. File writes are atomic (same-dir temp + `fs.rename`, so a crash never corrupts the file) and render as a green/red unified diff in the tool block; Ctrl+O expands collapsed blocks, and `/clear` starts a fresh session. It falls back to the readline REPL when piped or run with `--no-interactive`.
 
 ### Headless Mode (One-Shot)
 Run a single command and exit.

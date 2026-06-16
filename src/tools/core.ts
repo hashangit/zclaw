@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { ToolModule, ToolExecExtra } from './interface.js';
@@ -79,6 +80,66 @@ export const ReadFileTool: ToolModule = {
   }
 };
 
+/** Diff-viewer payload for `write_file`. Owned by the producer (this module);
+ *  the TUI parses it via `isFileWriteMetadata`. `oldContent`/`newContent` are
+ *  omitted when `diffSkipped` (oversized) so we don't hold large strings. */
+export interface FileWriteMetadata {
+  path: string;
+  isNewFile: boolean;
+  byteDelta: number;
+  oldContent?: string | null;   // null ⇒ new file; omitted when diffSkipped
+  newContent?: string;          // omitted when diffSkipped
+  diffSkipped?: boolean;
+  skipReason?: string;
+  /** Index signature so this typed payload satisfies ToolResult.metadata's
+   *  Record<string, unknown> without a cast at the producer site. */
+  [key: string]: unknown;
+}
+
+/** Files larger than this (bytes OR lines) skip the inline diff to avoid
+ *  dumping a huge render into the TUI. */
+const DIFF_BYTE_CAP = 64 * 1024;
+const DIFF_LINE_CAP = 2000;
+
+/** Line count that treats a trailing newline as the end of the last line, not
+ *  the start of an empty one: "a\nb\n" is 2 lines, "a\nb" is 2, "a\n" is 1. */
+const lineCount = (text: string): number => {
+  if (text === "") return 0;
+  const newlines = text.split("\n").length - 1;
+  return text.endsWith("\n") ? newlines : newlines + 1;
+};
+
+/** Temps younger than this are assumed to belong to a live write (possibly a
+ *  concurrent process) and are left alone; only older orphans are swept. */
+const STALE_TEMP_AGE_MS = 60_000;
+
+/** Remove orphaned `.zclaw-*.tmp` write temps for `basename` in `dir` — left
+ *  behind by a hard kill (SIGKILL/power loss) in the window between temp-write
+ *  and rename, which the handler's catch block can't reach. Only temps older
+ *  than STALE_TEMP_AGE_MS are removed, so a peer's in-flight temp is never
+ *  touched (no cross-process race). Best-effort; errors swallowed. */
+async function cleanStaleTemps(dir: string, basename: string): Promise<void> {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(dir);
+  } catch {
+    return; // dir doesn't exist yet (new file in a new dir) — nothing to sweep
+  }
+  const prefix = `${basename}.zclaw-`;
+  const cutoff = Date.now() - STALE_TEMP_AGE_MS;
+  await Promise.all(
+    entries
+      .filter((e) => e.startsWith(prefix) && e.endsWith(".tmp"))
+      .map(async (e) => {
+        const full = path.join(dir, e);
+        try {
+          const st = await fs.stat(full);
+          if (st.mtimeMs < cutoff) await fs.unlink(full);
+        } catch { /* raced with another sweeper or already gone — ignore */ }
+      }),
+  );
+}
+
 export const WriteFileTool: ToolModule = {
   name: "File Writer",
   risk: "edit",
@@ -98,13 +159,73 @@ export const WriteFileTool: ToolModule = {
     }
   },
   handler: async (args: any) => {
+    const filePath: string = args.path;
+    const newContent: string = args.content;
+
+    // 1. Capture old content (best-effort) for the diff. Stat first so a huge
+    //    existing file is never slurped into memory just to be diffed — if it
+    //    exceeds the cap we skip the read entirely and mark the diff skipped.
+    let oldContent: string | null = null;
+    let oldBytes = 0;
+    let fileExists = false;
     try {
-      await fs.mkdir(path.dirname(args.path), { recursive: true });
-      await fs.writeFile(args.path, args.content, 'utf-8');
-      return `Successfully wrote to ${args.path}`;
-    } catch (error: any) {
-      return `Error writing file: ${error.message}`;
+      const st = await fs.stat(filePath);
+      fileExists = true;
+      oldBytes = st.size;
+      if (st.size <= DIFF_BYTE_CAP) {
+        oldContent = await fs.readFile(filePath, "utf-8");
+      }
+    } catch {
+      // absent ⇒ new file
     }
+    const isNewFile = !fileExists;
+
+    // 2. Atomic write: temp file in the SAME directory (same filesystem ⇒
+    //    fs.rename is atomic on POSIX), then rename. On any failure the temp
+    //    is unlinked and the original is never partially written. A same-path
+    //    temp orphaned by a prior hard kill is swept first.
+    const dir = path.dirname(filePath);
+    const tmpPath = `${filePath}.zclaw-${randomUUID().slice(0, 8)}.tmp`;
+    await cleanStaleTemps(dir, path.basename(filePath));
+    try {
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(tmpPath, newContent, "utf-8");
+      await fs.rename(tmpPath, filePath);
+    } catch (error: any) {
+      try { await fs.unlink(tmpPath); } catch { /* temp may not have been created */ }
+      return { output: `Error writing file: ${error.message}`, success: false };
+    }
+
+    // 3. Build metadata for the diff viewer. The cap considers BOTH sides — a
+    //    small edit to a large file must skip too, else we'd store the whole
+    //    old file in the step. Full content is omitted when over cap.
+    const newBytes = Buffer.byteLength(newContent, "utf-8");
+    const overCap =
+      newBytes > DIFF_BYTE_CAP ||
+      oldBytes > DIFF_BYTE_CAP ||
+      lineCount(newContent) > DIFF_LINE_CAP;
+
+    const metadata: FileWriteMetadata = overCap
+      ? {
+          path: filePath,
+          isNewFile,
+          byteDelta: newBytes - oldBytes,
+          diffSkipped: true,
+          skipReason: `file exceeds ${DIFF_BYTE_CAP} bytes or ${DIFF_LINE_CAP} lines`,
+        }
+      : {
+          path: filePath,
+          oldContent,
+          newContent,
+          isNewFile,
+          byteDelta: newBytes - oldBytes,
+        };
+
+    return {
+      output: `Successfully wrote to ${filePath} (${lineCount(oldContent ?? "")} -> ${lineCount(newContent)} lines)`,
+      success: true,
+      metadata,
+    };
   }
 };
 

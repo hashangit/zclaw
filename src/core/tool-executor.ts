@@ -135,21 +135,8 @@ export function tool(definition: UserToolDefinition): ToolModule {
       onUpdate: extra?.onUpdate,
       signal: extra?.signal,
     };
-
     const raw = await definition.execute(args, context);
-
-    // The execute function may return a plain string or a structured ToolResult
-    if (typeof raw === "string") {
-      return raw;
-    }
-
-    const result = raw as ToolResult;
-    if (result && typeof result === "object" && "output" in result) {
-      return result.output;
-    }
-
-    // Unexpected return shape — coerce to string
-    return String(raw);
+    return normalizeToolResult(raw);
   };
 
   return {
@@ -177,12 +164,24 @@ export function registerTool(module: ToolModule): void {
 // ── executeTool ───────────────────────────────────────────────────────
 
 /**
+ * Coerce a tool handler's `string | ToolResult` return into a `ToolResult`.
+ * Plain strings (the common case) become `{ output, success: true }` with no
+ * metadata. Structured ToolResults pass through with `metadata` preserved.
+ */
+export function normalizeToolResult(raw: string | ToolResult): ToolResult {
+  if (typeof raw === "string") return { output: raw, success: true };
+  if (raw && typeof raw === "object" && "output" in raw) return raw;
+  return { output: String(raw), success: true };
+}
+
+/**
  * Execute a tool by name with the given arguments and optional config.
  *
  * @param name    Tool function name (e.g. "execute_shell_command")
  * @param args    Arguments object for the tool
  * @param config  Optional runtime config passed to the tool handler
- * @returns       Tool output as a string
+ * @returns       ToolResult — `output` (what the LLM sees) + optional `metadata`
+ *                for adapters (e.g. write_file's FileWriteMetadata for the diff)
  * @throws        Error if the tool name is not found in the registry
  */
 export async function executeTool(
@@ -190,7 +189,7 @@ export async function executeTool(
   args: Record<string, unknown>,
   config?: Record<string, unknown>,
   extra?: ToolExecExtra,
-): Promise<string> {
+): Promise<ToolResult> {
   const found = registry.find(
     (t) => t.definition.function.name === name,
   );
@@ -201,7 +200,8 @@ export async function executeTool(
         .join(", ")}`,
     );
   }
-  return found.handler(args, config, extra);
+  const raw = await found.handler(args, config, extra);
+  return normalizeToolResult(raw);
 }
 
 // ── getToolGroup ─────────────────────────────────────────────────────

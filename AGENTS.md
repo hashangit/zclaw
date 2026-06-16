@@ -81,7 +81,7 @@ All three adapters delegate to a single `runAgentLoop` in `src/core/agent-loop.t
 | Provider interface | `src/providers/types.ts` | `LLMProvider.chat()` — re-exports `ProviderType` from core |
 | Provider factory | `src/providers/factory.ts` | Dynamic import per provider type |
 | Provider resolver | `src/core/provider-resolver.ts` | Re-export hub for `provider-env.ts` + `provider-config.ts` |
-| Tool executor | `src/core/tool-executor.ts` | Registry, `tool()` factory, `resolveTools()`, groups |
+| Tool executor | `src/core/tool-executor.ts` | Registry, `tool()` factory, `resolveTools()`, groups; `executeTool` → `ToolResult` (metadata passthrough) |
 | Tool registry | `src/tools/index.ts` | Built-in tool modules + `executeToolHandler()` |
 | Skill system | `src/skills/` | Registry, loader, parser, args, `@path` resolver |
 | Skill catalog | `src/core/skill-catalog.ts` | `buildSkillCatalog()` for system prompt injection |
@@ -99,6 +99,7 @@ All three adapters delegate to a single `runAgentLoop` in `src/core/agent-loop.t
 | CLI TUI | `src/adapters/cli/tui/` | Ink/React TUI (lazy, TTY only): `<Static>` + `ink-reset`; bordered input, figlet logo, todo panel, session manager, queue/`/steer` |
 | TUI logo | `src/adapters/cli/tui/logo/gradient.ts` | Tokyo Night 45° rainbow for the logo |
 | Todo tool | `src/tools/todos.ts` | `manage_todos` — persistent TUI task panel |
+| Safe write + diff | `src/tools/core.ts` (`WriteFileTool`) + `tui/diff/` | Atomic `write_file` (temp + `fs.rename`); emits `FileWriteMetadata` → `StepResult.metadata` → TUI inline diff |
 | Feed rebuild | `src/adapters/cli/tui/feed-serializer.ts` | Resume: messages → feed + todos |
 | System prompts | `src/adapters/cli/system-prompts.ts` | Interactive vs non-interactive (+ `manage_todos` nudge) |
 | Server entry | `src/adapters/server/index.ts` | HTTP + WebSocket, delegates to core directly |
@@ -157,7 +158,7 @@ Env vars per provider: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GLM_API_KEY`, `OP
 
 - **No bundler** — plain `tsc` to ES2022 NodeNext. Dev via `tsx`.
 - **Package exports** — `zclaw` (SDK), `zclaw/react`, `zclaw/server`. Binaries: `zclaw` (CLI), `zclaw-server`.
-- **Vitest test suite (partial)** — 161 tests across 10 files covering P0/P1 areas; CI gates publish on test pass
+- **Vitest test suite (partial)** — 317 tests across 33 files covering P0/P1 areas; CI gates publish on test pass
 - **Errors carry metadata** — `code` (machine-readable) + `retryable` flag on all `ZclawError` subclasses.
 - **Hook errors are non-fatal** — never crash the agent loop.
 - **Dynamic provider imports** — unused provider SDKs stay out of memory.

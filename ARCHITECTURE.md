@@ -117,9 +117,10 @@ src/
 │   │       ├── session-export.ts  # JSON + Markdown transcript export
 │   │       ├── types.ts     # FeedEntry union (…/info/logo)
 │   │       ├── components/  # message-area, prompt-area (bordered), logo-banner,
-│   │       │                # tool-call-block, goal-status (todo panel), footer, …
+│   │       │                # tool-call-block (+ inline diff-viewer), goal-status, footer, …
 │   │       ├── hooks/       # use-agent (run state, todos, queue), use-feed, use-keybindings, …
 │   │       ├── overlays/    # command-palette, model-selector, settings, session-selector, help
+│   │       ├── diff/        # line-diff.ts (diff pkg, CRLF-normalized) + file-write-meta.ts guard
 │   │       └── logo/        # gradient.ts — Tokyo Night 45° rainbow for the logo
 │   ├── sdk/                 # Programmatic library (npm package)
 │   │   ├── index.ts         # generateText, streamText, createAgent, settings
@@ -234,6 +235,8 @@ Tools organized in four tiers:
 | **Gateway** | `gateway_route`, `gateway_call_tool`, `gateway_call_rest`, `gateway_capabilities`, `gateway_read_resource`, `gateway_get_prompt`, `gateway_import_openapi`, `gateway_register_target`, `gateway_audit_log`, `gateway_usage_stats` |
 
 Resolution accepts: group names (`"all"`, `"core"`), built-in tool names, or `UserToolDefinition` objects (via `tool()` factory). Deduplicates by name. Gateway proxy tools are registered in the static tool registry at startup (only when `gateway.enabled` is true). Additionally, semantic middleware can dynamically inject gateway-discovered tools into the agent's tool context per request (see [Gateway System](#gateway-system)).
+
+**Tool results & metadata**: `executeTool` returns a `ToolResult` (`{ output, success, metadata? }`) rather than a bare string. Handlers may attach structured `metadata` (e.g. `write_file`'s `FileWriteMetadata` carrying old/new content) which the agent loop attaches to the `tool_call` `StepResult` for adapters to render — it never enters the `role: 'tool'` message sent to the provider (no LLM context pollution). SDK `streamText` step consumers also receive `step.metadata` (the server forwards only a narrow `{type, content, timestamp}` step subset, so it does not). `write_file` writes atomically (same-dir temp file + `fs.rename`, original untouched on failure) and captures the previous content; the TUI renders the change as an inline unified diff (`tui/diff/` + `components/diff-viewer.tsx`), computed with the `diff` package.
 
 ### Permission Pre-Filter (`permission.ts`)
 

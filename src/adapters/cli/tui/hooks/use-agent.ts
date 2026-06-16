@@ -166,6 +166,7 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
           status: 'ok',
           output: tc.result,
           durationMs: tc.duration,
+          metadata: step.metadata,
         });
       }
     };

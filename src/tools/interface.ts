@@ -1,4 +1,4 @@
-import type { ToolRiskCategory, ToolContext } from "../core/types.js";
+import type { ToolRiskCategory, ToolContext, ToolResult } from "../core/types.js";
 
 /** Optional execution context pieces a caller (the agent loop) can pass in. */
 export type ToolExecExtra = Pick<ToolContext, "onUpdate" | "signal">;
@@ -22,5 +22,7 @@ export interface ToolModule {
   risk?: ToolRiskCategory;
   definition: ToolDefinition; // OpenAI Tool Definition
   // Implementation. `extra` carries optional onUpdate (live progress) + signal.
-  handler: (args: any, config?: any, extra?: ToolExecExtra) => Promise<string>;
+  // May return a structured ToolResult to carry metadata (e.g. write_file's
+  // old/new content for the diff viewer); plain strings still work everywhere.
+  handler: (args: any, config?: any, extra?: ToolExecExtra) => Promise<string | ToolResult>;
 }

@@ -60,6 +60,10 @@ export interface StepResult {
   /** For tool_progress: the tool name + args (so the UI can render the block). */
   name?: string;
   args?: Record<string, unknown>;
+  /** Tool-specific structured payload (e.g. write_file's FileWriteMetadata) for
+   *  adapters to render. Populated only on `tool_call` steps whose handler
+   *  returned a ToolResult with metadata. NEVER enters message history. */
+  metadata?: Record<string, unknown>;
   timestamp: number;
 }
 

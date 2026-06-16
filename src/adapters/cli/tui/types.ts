@@ -30,6 +30,9 @@ export interface ToolCallEntry {
   status: 'running' | 'ok' | 'fail';
   output?: string;
   durationMs?: number;
+  /** Tool-specific structured payload (e.g. write_file's FileWriteMetadata)
+   *  for richer rendering. Opaque here; parsed at the component boundary. */
+  metadata?: unknown;
 }
 
 export interface ErrorEntry {

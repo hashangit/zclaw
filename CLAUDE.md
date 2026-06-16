@@ -496,7 +496,10 @@ Keep `CONTEXT.md` under 20 lines total. Do NOT summarize the full conversation �
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current spec state:
+shell commands, and other important information, read the current plan:
+- **ACTIVE PLAN**: `specs/006-inline-diff-viewer/plan.md` — T051 inline diff
+  viewer + safe atomic `write_file` (diff via the `diff` pkg, learned from Pi;
+  safe-write zclaw-original). Phase artifacts ready; run `/speckit-tasks` next.
 - `specs/003-tui-input-and-logo/` — ✅ IMPLEMENTED. Bordered persistent input +
   Zoe Agent figlet logo, on the `<Static>` + `ink-reset` foundation (native
   terminal scroll; no full-screen / mouse capture).

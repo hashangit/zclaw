@@ -115,7 +115,7 @@ describe("tool() factory", () => {
     expect(mod.definition.function.description).toBe("Says hi");
   });
 
-  it("handler returns string from execute", async () => {
+  it("handler wraps a string return as a ToolResult", async () => {
     const mod = tool({
       name: "echo",
       description: "echo",
@@ -123,21 +123,21 @@ describe("tool() factory", () => {
       execute: async () => "pong",
     });
     const result = await mod.handler({}, undefined);
-    expect(result).toBe("pong");
+    expect(result).toEqual({ output: "pong", success: true });
   });
 
-  it("handler extracts output from ToolResult object", async () => {
+  it("handler passes a ToolResult through, preserving metadata", async () => {
     const mod = tool({
       name: "structured",
       description: "returns structured",
       parameters: { type: "object", properties: {} },
-      execute: async () => ({ output: "structured result", success: true }),
+      execute: async () => ({ output: "structured result", success: true, metadata: { path: "/x", delta: 3 } }),
     });
     const result = await mod.handler({}, undefined);
-    expect(result).toBe("structured result");
+    expect(result).toEqual({ output: "structured result", success: true, metadata: { path: "/x", delta: 3 } });
   });
 
-  it("handler coerces unexpected return to string", async () => {
+  it("handler coerces an unexpected return to a ToolResult", async () => {
     const mod = tool({
       name: "weird",
       description: "returns number",
@@ -145,7 +145,7 @@ describe("tool() factory", () => {
       execute: async () => 42 as any,
     });
     const result = await mod.handler({}, undefined);
-    expect(result).toBe("42");
+    expect(result).toEqual({ output: "42", success: true });
   });
 });
 
