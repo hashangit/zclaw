@@ -51,6 +51,8 @@ interface TuiAppProps {
   dispatchCommand: (input: string) => Promise<TuiCommandOutcome>;
   commands: Suggestion[];
   skills: Suggestion[];
+  /** Reset Ink's accumulated Static output + clear screen before a `<Static>`
+   *  remount (resize / expand / session-resume) so history repaints cleanly. */
   resetView: () => void;
   /** Footer status info from the session. */
   providerType: string;
@@ -62,26 +64,30 @@ interface TuiAppProps {
   getSettingsList: () => SettingItem[];
   onSetSetting: (dotKey: string, value: string) => Promise<void>;
   listSessions: () => Promise<SessionListItem[]>;
-  onSwitchSession: (sessionId: string) => Promise<{ preview: string; messageCount: number } | null>;
+  onSwitchSession: (sessionId: string) => Promise<{ preview: string; userMessageCount: number; toolCallCount: number } | null>;
   onDeleteSession: (sessionId: string) => Promise<void>;
+  onExportSession: (sessionId: string) => Promise<string | null>;
+  onTranscriptSession: (sessionId: string) => Promise<string | null>;
+  onRenameSession: (sessionId: string, title: string) => Promise<boolean>;
   getSessionId: () => string;
 }
 
 /**
- * TuiApp — full-screen root. `<MessageArea>` grows the scrollback; the live
- * region swaps between modal overlays (palette/help), the inline permission
- * prompt, a "working" indicator, and the input prompt. A status footer is
- * always pinned at the bottom. ESC aborts; Ctrl+C aborts mid-run or exits when
- * idle (FR-006); Ctrl+P/L/O are global shortcuts (see use-keybindings).
+ * TuiApp — Ink `<Static>` + native terminal scroll (like Command Code: the wheel
+ * scrolls the terminal's own scrollback, so no mouse capture / no gibberish).
+ * `<MessageArea>` grows the scrollback; the live region swaps between modal
+ * overlays, the inline permission prompt, a "working" indicator, and the input
+ * prompt. A status footer is always at the bottom of the written content.
+ * `ink-reset.ts` (`resetView`) keeps resize/expand repaints artifact-free.
  */
 export function TuiApp({
   agent, permissionLevel, initialQuery, onExit, dispatchCommand, commands, skills, resetView,
   providerType, gatewayOn, skillCount, mcpCount, modelOptions, onSwitchModel, getSettingsList, onSetSetting,
-  listSessions, onSwitchSession, onDeleteSession, getSessionId,
+  listSessions, onSwitchSession, onDeleteSession, onExportSession, onTranscriptSession, onRenameSession, getSessionId,
 }: TuiAppProps) {
   const theme = useTheme();
   const feed = useFeed();
-  const { isRunning, pendingPermission, streamingText, streamingTool, usage, contextTokens, latestTodos, submit, resolvePermission, abort, resetTodos } = useAgent({
+  const { isRunning, pendingPermission, streamingText, streamingTool, usage, contextTokens, latestTodos, submit, resolvePermission, abort, resetTodos, restoreTodos } = useAgent({
     agent,
     feed,
     permissionLevel,
@@ -98,14 +104,23 @@ export function TuiApp({
   // unmounting during a run — otherwise every turn wiped the history.
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
-  // The in-progress prompt, saved on first ↑ so ↓ back to the present restores
-  // it (instead of wiping what the user was typing).
+  // The in-progress prompt, saved on first ↑ so ↓ back to the present restores it.
   const draftRef = useRef('');
+
+  // Queue: chat messages typed during a run are buffered and drained one per
+  // run completion (like other AI coding TUIs). isRunningRef mirrors state for
+  // synchronous reads inside the handleUserInput event handler.
+  const isRunningRef = useRef(false);
+  isRunningRef.current = isRunning;
+  const queueRef = useRef<string[]>([]);
+  const [queuedCount, setQueuedCount] = useState(0);
 
   const [staticKey, setStaticKey] = useState(0);
   const [expanded, setExpanded] = useState(false);
+
+  // Resize → reset Ink's Static buffer + remount <Static> for a clean repaint.
   useEffect(() => {
-    const onResize = () => {
+    const onResize = (): void => {
       resetView();
       setStaticKey((k) => k + 1);
     };
@@ -119,10 +134,22 @@ export function TuiApp({
   useEffect(() => {
     if (didInit.current) return;
     didInit.current = true;
+    feed.appendEntry({ kind: 'logo' });
     if (initialQuery && initialQuery.trim()) {
       void submit(initialQuery);
     }
-  }, [initialQuery, submit]);
+  }, [initialQuery, submit, feed]);
+
+  // Drain the queue when a run finishes — submit the next queued message.
+  // Each submission's completion (isRunning→false) re-fires this effect,
+  // draining one message at a time until the queue is empty.
+  useEffect(() => {
+    if (!isRunning && queueRef.current.length > 0) {
+      const next = queueRef.current.shift()!;
+      setQueuedCount(queueRef.current.length);
+      void submit(next);
+    }
+  }, [isRunning, submit]);
 
   // Run a /command via the shared registry; surface its output in the feed.
   const runSlash = async (raw: string): Promise<void> => {
@@ -147,6 +174,37 @@ export function TuiApp({
     }
     setInput('');
     clearFileChange();
+
+    // /steer <message> — interrupt the current run and send a new message.
+    if (trimmed === '/steer' || trimmed.startsWith('/steer ')) {
+      const steerMsg = trimmed.slice('/steer'.length).trim();
+      if (!steerMsg) {
+        feed.appendEntry({ kind: 'info', content: 'Usage: /steer <message> — interrupts the current run and sends a new message.' });
+        return;
+      }
+      if (isRunningRef.current) {
+        abort();
+        queueRef.current.unshift(steerMsg);
+        setQueuedCount(queueRef.current.length);
+        feed.appendEntry({ kind: 'info', content: 'Steering — current run aborted, sending next.' });
+      } else {
+        void submit(steerMsg);
+      }
+      return;
+    }
+
+    // During an active run, queue chat messages and block all other commands.
+    if (isRunningRef.current) {
+      if (trimmed.startsWith('/')) {
+        feed.appendEntry({ kind: 'info', content: 'Command unavailable during a run — use /steer <message> to interrupt, or wait for the run to finish.' });
+      } else if (trimmed) {
+        queueRef.current.push(trimmed);
+        setQueuedCount(queueRef.current.length);
+        feed.appendEntry({ kind: 'info', content: `Queued (${queueRef.current.length}) — will submit when the run finishes. /steer to send now.` });
+      }
+      return;
+    }
+
     if (trimmed === '/?') {
       setOverlay('help');
       return;
@@ -160,9 +218,6 @@ export function TuiApp({
       setOverlay('sessions');
       return;
     }
-    // /settings wizard (no args) → open the settings overlay.
-    // /settings set <key> (no value) → guide (would inquirer).
-    // /settings set <key> <value> + list/get/reset/export/help → dispatch.
     {
       const parts = trimmed.split(/\s+/);
       const cmd = parts[0]?.toLowerCase();
@@ -189,9 +244,7 @@ export function TuiApp({
   const onHistoryUp = (): void => {
     const h = historyRef.current;
     if (h.length === 0) return;
-    if (historyIndexRef.current === -1) {
-      draftRef.current = input; // save the in-progress prompt before navigating
-    }
+    if (historyIndexRef.current === -1) draftRef.current = input; // save in-progress prompt
     const next = historyIndexRef.current === -1 ? h.length - 1 : Math.max(0, historyIndexRef.current - 1);
     historyIndexRef.current = next;
     setInput(h[next]);
@@ -202,14 +255,14 @@ export function TuiApp({
     const next = historyIndexRef.current + 1;
     if (next >= h.length) {
       historyIndexRef.current = -1;
-      setInput(draftRef.current); // restore the in-progress prompt
+      setInput(draftRef.current); // restore in-progress prompt
     } else {
       historyIndexRef.current = next;
       setInput(h[next]);
     }
   };
 
-  // Palette includes a synthetic "shortcuts" entry that opens the help dialog.
+  // Palette includes synthetic entries that open overlays.
   const paletteCommands: Suggestion[] = [
     ...commands,
     { name: 'shortcuts', description: 'Keyboard reference' },
@@ -236,16 +289,13 @@ export function TuiApp({
     }
   };
 
-  // Save a setting via the settings editor, then refresh the list so the new
-  // value is immediately visible.
   const handleSetSetting = async (dotKey: string, value: string): Promise<void> => {
     await onSetSetting(dotKey, value);
     setSettingsList(getSettingsList());
   };
 
-  // Resume a session: load messages into the agent, rebuild the visual feed
-  // (full reconstruction incl. tool blocks), and remount <Static> so history
-  // repaints without phantom duplicates (same pattern as /clear).
+  // Resume a session: load messages into the agent, rebuild the visual feed,
+  // and remount <Static> so history repaints without phantom duplicates.
   const handleSelectSession = async (sessionId: string): Promise<void> => {
     const summary = await onSwitchSession(sessionId);
     setOverlay(null);
@@ -255,17 +305,33 @@ export function TuiApp({
     }
     feed.clear();
     resetTodos();
-    const entries = messagesToFeedEntries(agent.getMessages());
+    const { entries, latestTodos: sessionTodos } = messagesToFeedEntries(agent.getMessages());
     for (const entry of entries) feed.appendEntry(entry);
+    restoreTodos(sessionTodos);
     resetView();
     setStaticKey((k) => k + 1);
-    feed.appendEntry({ kind: 'info', content: `Resumed session: ${summary.preview} (${summary.messageCount} messages)` });
+    feed.appendEntry({ kind: 'info', content: `Resumed session: ${summary.preview} (${summary.userMessageCount} turns, ${summary.toolCallCount} tool calls)` });
   };
 
-  // Delete a session, then refresh the selector so the row disappears.
   const handleDeleteSession = async (sessionId: string): Promise<void> => {
     await onDeleteSession(sessionId);
     setSessionsList(await listSessions());
+  };
+
+  const handleExportSession = async (sessionId: string): Promise<void> => {
+    const outPath = await onExportSession(sessionId);
+    feed.appendEntry({ kind: 'info', content: outPath ? `Exported session to ${outPath}` : `Session ${sessionId.slice(0, 8)} could not be exported.` });
+  };
+
+  const handleTranscriptSession = async (sessionId: string): Promise<void> => {
+    const outPath = await onTranscriptSession(sessionId);
+    feed.appendEntry({ kind: 'info', content: outPath ? `Transcript written to ${outPath}` : `Session ${sessionId.slice(0, 8)} could not be exported.` });
+  };
+
+  const handleRenameSession = async (sessionId: string, title: string): Promise<boolean> => {
+    const ok = await onRenameSession(sessionId, title);
+    if (ok) setSessionsList(await listSessions());
+    return ok;
   };
 
   useKeybindings(
@@ -278,11 +344,39 @@ export function TuiApp({
         agent.clearConversation();
         feed.clear();
         resetTodos();
+        feed.appendEntry({ kind: 'logo' });
         resetView();
         setStaticKey((k) => k + 1);
       },
     },
     { enabled: overlay === null, isRunning },
+  );
+
+  const showSpinner = isRunning && !streamingText && !pendingPermission;
+  // The bordered input is always visible (003 US1). While a tool needs approval
+  // the inline prompt replaces it; otherwise the spinner (with queued count)
+  // renders ABOVE the input — the input stays active so queued/steered messages
+  // can be typed during a run.
+  const inputAreaSlot = pendingPermission ? (
+    <PermissionPrompt toolName={pendingPermission.toolName} args={pendingPermission.args} onResolve={resolvePermission} />
+  ) : (
+    <Box flexDirection="column">
+      {showSpinner ? (
+        <Box>
+          <Text color={theme.yellow}><Spinner type="dots" /> ZClaw is working </Text>
+          <Text color={theme.fgDim}>(Esc to abort){queuedCount > 0 ? ` · ${queuedCount} queued` : ''}</Text>
+        </Box>
+      ) : null}
+      <PromptArea
+        value={input}
+        onChange={setInput}
+        onSubmit={(v) => { void handleUserInput(v); }}
+        onHistoryUp={onHistoryUp}
+        onHistoryDown={onHistoryDown}
+        commands={commands}
+        skills={skills}
+      />
+    </Box>
   );
 
   return (
@@ -319,18 +413,14 @@ export function TuiApp({
             currentSessionId={getSessionId()}
             onSelect={(id) => { void handleSelectSession(id); }}
             onDelete={(id) => { void handleDeleteSession(id); }}
+            onExport={(id) => { void handleExportSession(id); }}
+            onTranscript={(id) => { void handleTranscriptSession(id); }}
+            onRename={(id, title) => handleRenameSession(id, title)}
             onClose={() => setOverlay(null)}
           />
-        ) : pendingPermission ? (
-          <PermissionPrompt toolName={pendingPermission.toolName} args={pendingPermission.args} onResolve={resolvePermission} />
-        ) : isRunning && !streamingText ? (
-          <Box>
-            <Text color={theme.yellow}><Spinner type="dots" /> ZClaw is working </Text>
-            <Text color={theme.fgDim}>(Esc to abort)</Text>
-          </Box>
-        ) : !isRunning ? (
-          <PromptArea value={input} onChange={setInput} onSubmit={(v) => { void handleUserInput(v); }} onHistoryUp={onHistoryUp} onHistoryDown={onHistoryDown} commands={commands} skills={skills} />
-        ) : null}
+        ) : (
+          inputAreaSlot
+        )}
       </Box>
       {changedFile ? (
         <Text color={theme.yellow}>~ {changedFile} changed externally</Text>

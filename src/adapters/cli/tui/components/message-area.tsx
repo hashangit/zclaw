@@ -7,6 +7,7 @@ import { AssistantMessage } from './assistant-message.js';
 import { ToolCallBlock } from './tool-call-block.js';
 import { ErrorMessage } from './error-message.js';
 import { InfoMessage } from './info-message.js';
+import { LogoBanner } from './logo-banner.js';
 
 /** Renders one feed entry by kind. */
 function FeedItem({ entry, expanded }: { entry: FeedEntry; expanded: boolean }) {
@@ -21,6 +22,8 @@ function FeedItem({ entry, expanded }: { entry: FeedEntry; expanded: boolean }) 
       return <ErrorMessage entry={entry} />;
     case 'info':
       return <InfoMessage entry={entry} />;
+    case 'logo':
+      return <LogoBanner />;
   }
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { useTheme } from '../hooks/use-theme.js';
+import { TextInput } from '../components/text-input.js';
 
 /** A saved session, projected for the selector. */
 export interface SessionListItem {
@@ -9,7 +10,14 @@ export interface SessionListItem {
   preview: string;
   /** Epoch ms of the last update. */
   updatedAt: number;
-  messageCount: number;
+  /** role:"user" count — a proxy for "turns". */
+  userMessageCount: number;
+  /** role:"tool" count — how many tool calls executed. */
+  toolCallCount: number;
+  /** role:"assistant" count — model responses (≈ turns). */
+  assistantMessageCount: number;
+  /** Optional user-set title (metadata.title); takes precedence over preview. */
+  title?: string;
   provider?: string;
   model?: string;
 }
@@ -19,28 +27,35 @@ interface SessionSelectorProps {
   currentSessionId: string;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  onExport: (id: string) => void;
+  onTranscript: (id: string) => void;
+  onRename: (id: string, title: string) => Promise<boolean>;
   onClose: () => void;
 }
 
 const MAX_VISIBLE = 10;
 const PREVIEW_LEN = 60;
 
-/** `/sessions` overlay: fuzzy search to filter, ↑/↓ navigate, Enter resumes,
- *  `d` deletes (stays in overlay), Esc closes. Mirrors model-selector windowing
- *  + command-palette char-by-char input. */
-export function SessionSelector({ sessions, currentSessionId, onSelect, onDelete, onClose }: SessionSelectorProps) {
+/**
+ * `/sessions` overlay: fuzzy search to filter, ↑/↓ navigate, Enter resumes,
+ * `d` deletes, `e` exports JSON, `t` writes transcript, `r` renames,
+ * Esc closes. Rename mode shows a TextInput inline; Enter commits, Esc cancels.
+ */
+export function SessionSelector({ sessions, currentSessionId, onSelect, onDelete, onExport, onTranscript, onRename, onClose }: SessionSelectorProps) {
   const theme = useTheme();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(() => {
     const idx = sessions.findIndex((s) => s.id === currentSessionId);
     return idx >= 0 ? idx : 0;
   });
-  const [deletedHint, setDeletedHint] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
+  const [renameMode, setRenameMode] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
 
   // Subsequence match on preview (case-insensitive). Keeps the component
   // self-contained — sessions carry their own id, no projection needed.
   const matches = query
-    ? sessions.filter((s) => isSubsequence(s.preview.toLowerCase(), query.toLowerCase()))
+    ? sessions.filter((s) => isSubsequence((s.title ?? s.preview).toLowerCase(), query.toLowerCase()))
     : sessions;
 
   // Clamp the cursor when the list shrinks (delete, filter) so it never points
@@ -49,23 +64,72 @@ export function SessionSelector({ sessions, currentSessionId, onSelect, onDelete
     setSelected((i) => Math.min(i, Math.max(0, matches.length - 1)));
   }, [matches.length]);
 
+  const currentMatch = (): SessionListItem | undefined =>
+    matches[Math.min(selected, matches.length - 1)] ?? matches[0];
+
+  // Rename mode owns input entirely (TextInput component).
+  if (renameMode) {
+    const submitRename = async (): Promise<void> => {
+      const title = renameValue.trim();
+      const m = currentMatch();
+      if (m && title) {
+        const ok = await onRename(m.id, title);
+        setHint(ok ? `Renamed to "${title}"` : `Rename failed.`);
+      }
+      setRenameMode(false);
+      setRenameValue('');
+    };
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor={theme.purple} paddingLeft={1} paddingRight={1}>
+        <Text color={theme.purple} bold>Rename session</Text>
+        <TextInput
+          value={renameValue}
+          onChange={setRenameValue}
+          onSubmit={() => { void submitRename(); }}
+          placeholder="Enter new title…"
+        />
+        <Text color={theme.fgDim}>Enter to confirm · Esc to cancel</Text>
+      </Box>
+    );
+  }
+
   useInput((input, key) => {
-    if (deletedHint) setDeletedHint(null);
+    if (hint) setHint(null);
     if (key.escape) { onClose(); return; }
     if (key.return) {
-      const m = matches[Math.min(selected, matches.length - 1)] ?? matches[0];
+      const m = currentMatch();
       if (m) onSelect(m.id);
       return;
     }
     if (key.upArrow) { setSelected((i) => Math.max(0, i - 1)); return; }
     if (key.downArrow) { setSelected((i) => Math.min(matches.length - 1, i + 1)); return; }
-    if (input === 'd' && !key.ctrl && !key.meta) {
-      const m = matches[Math.min(selected, matches.length - 1)] ?? matches[0];
-      if (m && m.id !== currentSessionId) {
-        onDelete(m.id);
-        setDeletedHint(`Deleted session ${m.id.slice(0, 8)}`);
+    // Action keys (d/e/t/r) only fire when NOT searching — so typing those
+    // letters into the query box works normally. When the query is empty,
+    // they operate on the selected row.
+    if (!query && input && !key.ctrl && !key.meta) {
+      if (input === 'd') {
+        const m = currentMatch();
+        if (m && m.id !== currentSessionId) {
+          onDelete(m.id);
+          setHint(`Deleted session ${m.id.slice(0, 8)}`);
+        }
+        return;
       }
-      return;
+      if (input === 'e') {
+        const m = currentMatch();
+        if (m) { onExport(m.id); setHint(`Exported ${m.id.slice(0, 8)} to JSON`); }
+        return;
+      }
+      if (input === 't') {
+        const m = currentMatch();
+        if (m) { onTranscript(m.id); setHint(`Transcript of ${m.id.slice(0, 8)} written`); }
+        return;
+      }
+      if (input === 'r') {
+        const m = currentMatch();
+        if (m) { setRenameValue(m.title ?? ''); setRenameMode(true); }
+        return;
+      }
     }
     if (key.backspace || key.delete) {
       setQuery((q) => q.slice(0, -1));
@@ -88,9 +152,9 @@ export function SessionSelector({ sessions, currentSessionId, onSelect, onDelete
       <Box>
         <Text color={theme.purple} bold>❯ </Text>
         <Text color={theme.fg}>{query}</Text>
-        <Text color={theme.fgDim}> {matches.length > 0 ? '(↑↓ select, Enter resume, d delete, Esc close)' : '— no matches'}</Text>
+        <Text color={theme.fgDim}> {matches.length > 0 ? '(↑↓ select · Enter resume · type to search · d/e/t/r delete/export/transcript/rename · Esc)' : '— no matches'}</Text>
       </Box>
-      {deletedHint ? <Text color={theme.yellow}>  {deletedHint}</Text> : null}
+      {hint ? <Text color={theme.yellow}>  {hint}</Text> : null}
       {visible.length === 0 ? (
         <Text color={theme.fgDim}>  No saved sessions yet. Chat to create one.</Text>
       ) : (
@@ -98,15 +162,19 @@ export function SessionSelector({ sessions, currentSessionId, onSelect, onDelete
           const absIdx = start + i;
           const sel = absIdx === selected;
           const isCurrent = s.id === currentSessionId;
-          const preview = truncate(s.preview, PREVIEW_LEN);
+          const label = s.title ?? truncate(s.preview, PREVIEW_LEN);
+          const subLabel = s.title ? truncate(s.preview, PREVIEW_LEN) : null;
           return (
             <Box key={s.id} flexDirection="column">
               <Box>
                 <Text backgroundColor={sel ? theme.blue : undefined} color={sel ? theme.bg : isCurrent ? theme.green : theme.fg}>
-                  {sel ? '▶ ' : '  '}{isCurrent ? '✓ ' : '  '}{preview}
+                  {sel ? '▶ ' : '  '}{isCurrent ? '✓ ' : '  '}{label}
                 </Text>
               </Box>
-              <Text color={theme.fgDim}>      {relativeTime(s.updatedAt)} · {s.messageCount} msg{s.model ? ` · ${s.model}` : ''}</Text>
+              {subLabel ? (
+                <Text color={theme.fgDim}>      {subLabel}</Text>
+              ) : null}
+              <Text color={theme.fgDim}>      {relativeTime(s.updatedAt)} · {s.userMessageCount} turns · {s.toolCallCount} tools{s.model ? ` · ${s.model}` : ''}</Text>
             </Box>
           );
         })

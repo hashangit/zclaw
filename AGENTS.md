@@ -94,8 +94,13 @@ All three adapters delegate to a single `runAgentLoop` in `src/core/agent-loop.t
 | Settings schema | `src/core/settings-schema.ts` | 31 dot-key settings, validation, env vars, 5 categories |
 | Settings manager | `src/core/settings-manager.ts` | `SettingsManager` with get/set/reset/list, persistence, masking |
 | SDK entry | `src/adapters/sdk/index.ts` | `generateText`, `streamText`, `createAgent`, `settings` |
-| CLI entry | `src/adapters/cli/index.ts` | Commander setup, delegates to `repl.ts` |
-| CLI REPL | `src/adapters/cli/repl.ts` | Interrupt handling, `runChat()`, command registry builder |
+| CLI entry | `src/adapters/cli/index.ts` | Commander setup; dispatches TUI (TTY) vs readline REPL |
+| CLI REPL | `src/adapters/cli/repl.ts` | Readline fallback (`runChat()`), non-interactive / piped / `--docker` |
+| CLI TUI | `src/adapters/cli/tui/` | Ink/React TUI (lazy, TTY only): `<Static>` + `ink-reset`; bordered input, figlet logo, todo panel, session manager, queue/`/steer` |
+| TUI logo | `src/adapters/cli/tui/logo/gradient.ts` | Tokyo Night 45° rainbow for the logo |
+| Todo tool | `src/tools/todos.ts` | `manage_todos` — persistent TUI task panel |
+| Feed rebuild | `src/adapters/cli/tui/feed-serializer.ts` | Resume: messages → feed + todos |
+| System prompts | `src/adapters/cli/system-prompts.ts` | Interactive vs non-interactive (+ `manage_todos` nudge) |
 | Server entry | `src/adapters/server/index.ts` | HTTP + WebSocket, delegates to core directly |
 
 ## Providers
@@ -115,11 +120,12 @@ Provider resolution chain: explicit config → env vars → legacy env vars → 
 
 ## Tools
 
-12 built-in tools in 3 tiers:
+13 built-in tools in 4 tiers:
 
 - **Core**: `execute_shell_command`, `read_file`, `write_file`, `get_current_datetime`
 - **Comm**: `send_email`, `web_search`, `send_notification`
 - **Advanced**: `read_website`, `take_screenshot`, `generate_image`, `optimize_prompt`, `use_skill`
+- **Presentation**: `manage_todos` — drives the TUI's persistent task panel (the agent replaces the full list each call; the TUI renders it via `GoalStatus`, excluded from the scrolling feed)
 
 Custom tools: `tool({ description, parameters, execute })` → `ToolModule` registered via `registerTool()`.
 
@@ -131,7 +137,7 @@ File-based plugin system. YAML frontmatter + body. Skills can specify allowed to
 
 ### CLI (`src/adapters/cli/`)
 
-Interactive REPL. Commander.js args → `loadMergedConfig()` → setup wizard → `Agent` class → REPL loop. Slash commands via registry (`/help`, `/clear`, `/exit`, `/compact`, `/settings`, `/setup`). ESC key triggers `AbortSignal`.
+Two modes via `resolveLaunchMode()`: the **Ink/React TUI** (`tui/`, default in a TTY — bordered always-visible input, figlet "Zoe Agent" logo, persistent todo panel, session manager, message queue + `/steer`) and the **readline REPL** fallback (non-interactive / piped / `--docker`). Commander.js args → `loadMergedConfig()` → setup → `bootstrapCliSession()` → TUI or REPL. The TUI renders via `<Static>` + native scrollback (no mouse capture → no gibberish) with `ink-reset.ts` (Ink-internals poke) for artifact-free resize. Slash commands via registry (`/help`, `/clear`, `/sessions`, `/settings`, `/models`, …). ESC/Ctrl+C → `agent.abort()`.
 
 ### SDK (`src/adapters/sdk/`)
 

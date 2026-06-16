@@ -65,6 +65,12 @@ export function buildCommandRegistry(
     aliases: ['session'],
     interactive: true, // TUI overlay (intercepted by handleUserInput before dispatch)
   });
+  registry.register('steer', async () => ({
+    output: '/steer <message> interrupts the current run and sends a new message. Available in the TUI.',
+  }), {
+    description: 'Interrupt the run and send a new message',
+    interactive: true, // TUI-intercepted (works during a run — its purpose)
+  });
   registry.register('settings', settingsHandler(), {
     description: 'View and edit configuration',
     aliases: ['config', 'setting'],

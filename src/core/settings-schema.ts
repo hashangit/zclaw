@@ -15,7 +15,8 @@ export type SettingsCategory =
   | 'tools'
   | 'notifications'
   | 'skills'
-  | 'gateway';
+  | 'gateway'
+  | 'sessions';
 
 export interface SettingsMapEntry {
   dotKey: string;
@@ -72,6 +73,11 @@ export const SETTINGS_CATEGORIES: {
     label: 'Gateway',
     description: 'MCP gateway, REST proxy, and OpenAPI adapter settings',
   },
+  {
+    key: 'sessions',
+    label: 'Sessions',
+    description: 'Session persistence and cleanup settings',
+  },
 ];
 
 // ── Settings Map ───────────────────────────────────────────────────────
@@ -125,6 +131,9 @@ const entries: [string, SettingsMapEntry][] = [
   ['gateway.semanticTopK', { dotKey: 'gateway.semanticTopK', configPath: ['gatewaySemanticTopK'], category: 'gateway', label: 'Semantic Injection Top-K' }],
   ['gateway.defaultRateLimitPerMin', { dotKey: 'gateway.defaultRateLimitPerMin', configPath: ['gatewayRateLimit'], category: 'gateway', label: 'Gateway Rate Limit (per min)' }],
   ['gateway.maxAuditLogs', { dotKey: 'gateway.maxAuditLogs', configPath: ['gatewayMaxAuditLogs'], category: 'gateway', label: 'Max Audit Log Records' }],
+
+  // Sessions
+  ['sessions.maxAgeDays', { dotKey: 'sessions.maxAgeDays', configPath: ['sessions', 'maxAgeDays'], category: 'sessions', label: 'Max Session Age (days)' }],
 ];
 
 export const SETTINGS_MAP: Map<string, SettingsMapEntry> = new Map(entries);
@@ -186,6 +195,9 @@ const schemaEntries: [string, SettingsSchemaEntry][] = [
   ['gateway.semanticTopK', { type: 'number', secret: false, default: 3, min: 1, max: 10, restartRequired: false }],
   ['gateway.defaultRateLimitPerMin', { type: 'number', secret: false, default: 60, min: 0, restartRequired: false, envVar: 'ZCLAW_GATEWAY_RATE_LIMIT' }],
   ['gateway.maxAuditLogs', { type: 'number', secret: false, default: 1000, min: 10, max: 10000, restartRequired: false }],
+
+  // Sessions
+  ['sessions.maxAgeDays', { type: 'number', secret: false, default: 30, min: 0, restartRequired: false }],
 ];
 
 export const SETTINGS_SCHEMA: Map<string, SettingsSchemaEntry> = new Map(schemaEntries);

@@ -90,7 +90,7 @@ export function PromptArea({ value, onChange, onSubmit, onHistoryUp, onHistoryDo
       {showDropdown && active ? (
         <Autocomplete suggestions={matches} selectedIndex={selectedIndex} prefix={active.kind} />
       ) : null}
-      <Box>
+      <Box borderStyle="round" borderColor={theme.fgGutter} paddingLeft={1} paddingRight={1}>
         <Text color={theme.green} bold>› </Text>
         <TextInput
           value={value}

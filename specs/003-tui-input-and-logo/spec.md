@@ -4,7 +4,15 @@
 
 **Created**: 2026-06-15 (revised post-scrutinize)
 
-**Status**: Draft
+**Status**: ✅ IMPLEMENTED — on the `<Static>` model (see deviations below).
+
+> Implementation notes (the spec was written for a full-screen model that was
+> later reverted — 005). Actual build: the input border lives inside `PromptArea`
+> (not a separate `InputBox`); the input is always visible with the spinner above
+> it (queue / `/steer`-active, not dimmed); the logo is a figlet wordmark
+> (`ANSI Compact`) with a Tokyo Night 45° rainbow gradient + `by hashangit · v…`
+> descriptor, rendered as a `kind: 'logo'` feed entry that scrolls away. Rename is
+> logo-only (the full zClaw → Zoe rename is a separate, future task).
 
 **Predecessor**: `specs/001-tui-upgrade` (the Ink/React TUI this builds on, US1-US4 shipped)
 

@@ -4,7 +4,11 @@
 
 **Created**: 2026-06-15
 
-**Status**: Draft
+**Status**: ⚠️ SUPERSEDED — reverted. The full-screen / alt-buffer approach caused
+mouse-capture gibberish (Ink has no native mouse) and lost native scrollback;
+investigating Command Code showed it uses `<Static>` + Ink-internals-poke, so we
+reverted to that model. 003 (input border + logo) was implemented on the
+`<Static>` foundation instead. Kept for the decision record; do NOT implement.
 
 **Predecessor / unblocks**: `specs/001-tui-upgrade` (shipped Ink TUI). Unblocks
 `specs/003-tui-input-and-logo` (its "pinned to the bottom" requirement is only

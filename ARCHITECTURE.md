@@ -96,16 +96,31 @@ src/
 │   ├── search.ts            # Tavily web search
 │   ├── notify.ts            # Feishu/DingTalk/WeCom notifications
 │   ├── image.ts             # DALL-E image generation
-│   └── prompt-optimizer.ts  # Prompt enhancement via GPT
+│   ├── prompt-optimizer.ts  # Prompt enhancement via GPT
+│   └── todos.ts             # manage_todos — persistent task list (rendered as the TUI GoalStatus panel)
 ├── adapters/
 │   ├── cli/                 # Interactive terminal agent
-│   │   ├── index.ts         # Commander setup, delegation to repl.ts
-│   │   ├── repl.ts          # Interrupt handling, runChat loop, command registry builder
+│   │   ├── index.ts         # Commander setup; dispatches TUI (TTY) vs readline REPL
+│   │   ├── repl.ts          # Readline fallback (non-interactive / piped / --docker)
 │   │   ├── agent.ts         # Agent class (REPL state, skill catalog)
+│   │   ├── bootstrap.ts     # Shared session setup (TUI + REPL)
+│   │   ├── system-prompts.ts # Interactive vs non-interactive prompts (+ manage_todos nudge)
 │   │   ├── setup.ts         # Interactive setup wizard
 │   │   ├── config-loader.ts # Multi-source config loading
 │   │   ├── docker-utils.ts  # Docker/non-interactive detection
-│   │   └── commands/        # Slash commands (/help, /clear, /exit, /compact, /skills, /models, /settings, /gateway)
+│   │   ├── commands/        # Slash commands (/help, /clear, /exit, /compact, /sessions, /models, /settings, /gateway, …)
+│   │   └── tui/             # Ink/React TUI (lazy-loaded, interactive only)
+│   │       ├── index.tsx    # startTui — render + ink-reset lifecycle
+│   │       ├── app.tsx      # TuiApp root (<Static> feed, live region, overlays, queue/steer)
+│   │       ├── ink-reset.ts # Ink-internals reset (fullStaticOutput) → artifact-free resize
+│   │       ├── feed-serializer.ts # Rebuild feed + todos from persisted messages (resume)
+│   │       ├── session-export.ts  # JSON + Markdown transcript export
+│   │       ├── types.ts     # FeedEntry union (…/info/logo)
+│   │       ├── components/  # message-area, prompt-area (bordered), logo-banner,
+│   │       │                # tool-call-block, goal-status (todo panel), footer, …
+│   │       ├── hooks/       # use-agent (run state, todos, queue), use-feed, use-keybindings, …
+│   │       ├── overlays/    # command-palette, model-selector, settings, session-selector, help
+│   │       └── logo/        # gradient.ts — Tokyo Night 45° rainbow for the logo
 │   ├── sdk/                 # Programmatic library (npm package)
 │   │   ├── index.ts         # generateText, streamText, createAgent, settings
 │   │   ├── settings.ts      # SDK settings facade (get/set/reset/list/onChange)
@@ -215,6 +230,7 @@ Tools organized in four tiers:
 | **Core** | `execute_shell_command`, `read_file`, `write_file`, `get_current_datetime` |
 | **Comm** | `send_email`, `web_search`, `send_notification` |
 | **Advanced** | `read_website`, `take_screenshot`, `generate_image`, `optimize_prompt`, `use_skill` |
+| **Presentation** | `manage_todos` — drives the TUI's persistent task panel; the agent replaces the full list each call and the TUI renders it via `GoalStatus` (excluded from the scrolling feed) |
 | **Gateway** | `gateway_route`, `gateway_call_tool`, `gateway_call_rest`, `gateway_capabilities`, `gateway_read_resource`, `gateway_get_prompt`, `gateway_import_openapi`, `gateway_register_target`, `gateway_audit_log`, `gateway_usage_stats` |
 
 Resolution accepts: group names (`"all"`, `"core"`), built-in tool names, or `UserToolDefinition` objects (via `tool()` factory). Deduplicates by name. Gateway proxy tools are registered in the static tool registry at startup (only when `gateway.enabled` is true). Additionally, semantic middleware can dynamically inject gateway-discovered tools into the agent's tool context per request (see [Gateway System](#gateway-system)).
@@ -305,14 +321,23 @@ Providers are created via dynamic import in the factory, keeping unused provider
 
 ### CLI Adapter
 
-Interactive REPL built on Commander.js.
+Two interactive modes, chosen by `resolveLaunchMode()` (the same predicate that selects the system prompt):
 
-**Entry flow**: `index.ts` → parse args → `loadMergedConfig()` → `runSetup()` (if needed) → create `Agent` → REPL loop.
+- **TUI (default in a TTY)** — a full Ink/React app in `src/adapters/cli/tui/`, lazy-loaded via dynamic `import('./tui/index.js')` so headless/SDK/Server builds never pull in React/Ink/figlet.
+- **Readline REPL (fallback)** — for non-interactive / piped / `--docker` / `--no-interactive`; byte-identical to the pre-TUI CLI.
+
+**Entry flow**: `index.ts` → parse args → `loadMergedConfig()` → `runSetup()` (if needed) → `bootstrapCliSession()` → `resolveLaunchMode()` → TUI (`startTui`) or REPL (`runChat`).
+
+**TUI rendering model** — Ink `<Static>` + native terminal scrollback (the same model Command Code uses): completed feed entries are painted once into the terminal's own scrollback, so the mouse wheel scrolls natively (no mouse capture → no gibberish, no alternate-screen buffer). `ink-reset.ts` pokes Ink's internal `instances.js` to reset `fullStaticOutput`/`lastOutput` before a `<Static>` remount, keeping resize / expand / session-resume repaints artifact-free.
+
+**TUI features**: bordered, always-visible prompt (input row in a rounded box; `/` + `@` autocomplete floats above it); a "Zoe Agent" figlet logo (Tokyo Night 45° rainbow gradient) as the first feed entry that scrolls away; a persistent task panel driven by `manage_todos`; overlays (command palette, model selector, settings editor, session selector, help); live token/cost footer; message queue + `/steer` (type during a run to queue, or `/steer <msg>` to interrupt + redirect).
+
+**Session management**: list / resume / delete / rename / export (JSON) / transcript (Markdown) via the session-selector overlay. Resume rebuilds the feed **and** the todo panel from persisted messages (`feed-serializer.ts` routes `manage_todos` to the persistent panel, not the feed).
 
 - **Config loading**: Global (`~/.zclaw/setting.json`) + local (`.zclaw/setting.json`) + env overrides
-- **Interrupt handling**: ESC key via raw stdin → `AbortSignal` → provider HTTP cancellation
-- **Slash commands**: Registry-based dispatch (`/help`, `/clear`, `/exit`, `/compact`)
-- **Docker mode**: Detects `.dockerenv`, switches to non-interactive + auto-approve shell
+- **Interrupt handling**: ESC/Ctrl+C → `agent.abort()` (TUI owns raw stdin in TTY mode; the readline REPL uses `setupInterrupt()`)
+- **Slash commands**: registry-based dispatch (`/help`, `/clear`, `/exit`, `/compact`, `/sessions`, `/settings`, `/models`, …)
+- **Docker mode**: detects `.dockerenv`, switches to non-interactive + auto-approve shell
 
 ### SDK Adapter
 

@@ -198,5 +198,52 @@ export async function bootstrapCliSession(options: any): Promise<CliSessionConte
     }
   }
 
+  // Session TTL cleanup — sweep expired sessions on startup (once, no timer).
+  // Runs before --resume so an expired target is gone before we try to load it.
+  try {
+    const settingsManager = new SettingsManager({
+      config: applyEnvOverrides(loadMergedConfig()),
+      projectConfigPath: LOCAL_CONFIG_FILE,
+      globalConfigPath: GLOBAL_CONFIG_FILE,
+    });
+    const maxAgeDays = settingsManager.get('sessions.maxAgeDays').value as number;
+    if (maxAgeDays && maxAgeDays > 0) {
+      const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000;
+      const cutoff = Date.now() - maxAgeMs;
+      const ids = await persistence.list();
+      await Promise.all(ids.map(async (id) => {
+        const data = await persistence.load(id);
+        if (data && data.updatedAt < cutoff) await persistence.delete(id);
+      }));
+    }
+  } catch { /* best-effort — never block startup on cleanup */ }
+
+  // --resume <id|last> — load a session before the REPL/TUI starts.
+  if (options.resume) {
+    let resumeId = options.resume as string;
+    if (resumeId === 'last') {
+      const ids = await persistence.list();
+      if (ids.length === 0) {
+        console.error(chalk.red('No saved sessions to resume.'));
+        process.exit(1);
+      }
+      const loaded = await Promise.all(ids.map((id) => persistence.load(id)));
+      const mostRecent = loaded
+        .filter((s): s is NonNullable<typeof s> => s != null)
+        .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      if (!mostRecent) {
+        console.error(chalk.red('No saved sessions to resume.'));
+        process.exit(1);
+      }
+      resumeId = mostRecent.id;
+    }
+    const ok = await agent.loadSession(resumeId);
+    if (!ok) {
+      console.error(chalk.red(`Session "${resumeId}" not found. Use /sessions in the TUI to list available sessions.`));
+      process.exit(1);
+    }
+    if (options.interactive !== false) console.log(chalk.dim(`Resumed session ${resumeId.slice(0, 8)}.`));
+  }
+
   return { agent, fullConfig, activeProviderType, providerConfig, permissionLevel, gatewayInstance, persistence };
 }

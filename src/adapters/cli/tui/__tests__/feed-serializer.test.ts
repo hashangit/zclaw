@@ -17,17 +17,17 @@ function msg(role: Message["role"], content: string, extra: Partial<Message> = {
 
 describe("messagesToFeedEntries", () => {
   it("skips system messages", () => {
-    const entries = messagesToFeedEntries([msg("system", "you are an agent")]);
+    const { entries } = messagesToFeedEntries([msg("system", "you are an agent")]);
     expect(entries).toEqual([]);
   });
 
   it("maps a user message to a user entry", () => {
-    const entries = messagesToFeedEntries([msg("user", "hello there")]);
+    const { entries } = messagesToFeedEntries([msg("user", "hello there")]);
     expect(entries).toEqual([{ kind: "user", content: "hello there" }]);
   });
 
   it("maps assistant text to an assistant entry", () => {
-    const entries = messagesToFeedEntries([msg("assistant", "hi!")]);
+    const { entries } = messagesToFeedEntries([msg("assistant", "hi!")]);
     expect(entries).toEqual([{ kind: "assistant", content: "hi!" }]);
   });
 
@@ -44,7 +44,7 @@ describe("messagesToFeedEntries", () => {
       msg("tool", "contents of /a", { toolCallId: "tc1" }),
       msg("tool", "file1\nfile2", { toolCallId: "tc2" }),
     ];
-    const entries = messagesToFeedEntries(messages);
+    const { entries } = messagesToFeedEntries(messages);
     expect(entries).toEqual([
       { kind: "assistant", content: "running it" },
       { kind: "tool", name: "read_file", args: { path: "/a" }, status: "ok", output: "contents of /a" },
@@ -59,7 +59,7 @@ describe("messagesToFeedEntries", () => {
       }),
       // No role:"tool" message for tc1 — e.g. the loop was aborted mid-execution.
     ];
-    const entries = messagesToFeedEntries(messages);
+    const { entries } = messagesToFeedEntries(messages);
     expect(entries).toEqual([
       { kind: "tool", name: "boom", args: {}, status: "fail", output: undefined },
     ]);
@@ -74,7 +74,7 @@ describe("messagesToFeedEntries", () => {
       }),
       msg("tool", "role-tool result", { toolCallId: "tc1" }),
     ];
-    const entries = messagesToFeedEntries(messages);
+    const { entries } = messagesToFeedEntries(messages);
     expect(entries[0]).toMatchObject({ output: "inline result", status: "ok" });
   });
 
@@ -86,10 +86,31 @@ describe("messagesToFeedEntries", () => {
       msg("user", "second"),
       msg("assistant", "reply two"),
     ];
-    const entries = messagesToFeedEntries(messages);
+    const { entries } = messagesToFeedEntries(messages);
     expect(entries.map((e) => e.kind)).toEqual(["user", "assistant", "user", "assistant"]);
     expect(entries.map((e) => ("content" in e ? e.content : ""))).toEqual([
       "first", "reply one", "second", "reply two",
     ]);
+  });
+
+  it("routes manage_todos to latestTodos, not the feed (mirrors the live intercept)", () => {
+    const messages: Message[] = [
+      msg("user", "plan it"),
+      msg("assistant", "", {
+        toolCalls: [{ id: "tc1", name: "manage_todos", arguments: {}, result: JSON.stringify([{ description: "step 1", status: "pending" }]) }],
+      }),
+    ];
+    const { entries, latestTodos } = messagesToFeedEntries(messages);
+    expect(entries).toEqual([{ kind: "user", content: "plan it" }]);
+    expect(latestTodos).toEqual([{ description: "step 1", status: "pending" }]);
+  });
+
+  it("keeps the most-recent manage_todos as latestTodos", () => {
+    const messages: Message[] = [
+      msg("assistant", "", { toolCalls: [{ id: "tc1", name: "manage_todos", arguments: {}, result: JSON.stringify([{ description: "old", status: "completed" }]) }] }),
+      msg("assistant", "", { toolCalls: [{ id: "tc2", name: "manage_todos", arguments: {}, result: JSON.stringify([{ description: "new", status: "in_progress" }]) }] }),
+    ];
+    const { latestTodos } = messagesToFeedEntries(messages);
+    expect(latestTodos).toEqual([{ description: "new", status: "in_progress" }]);
   });
 });

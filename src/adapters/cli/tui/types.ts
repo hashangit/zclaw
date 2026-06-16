@@ -44,12 +44,18 @@ export interface InfoEntry {
   content: string;
 }
 
+export interface LogoEntry {
+  id: string;
+  kind: 'logo';
+}
+
 export type FeedEntry =
   | UserMessageEntry
   | AssistantMessageEntry
   | ToolCallEntry
   | ErrorEntry
-  | InfoEntry;
+  | InfoEntry
+  | LogoEntry;
 
 // `Omit<FeedEntry, 'id'>` collapses the union (it omits from the merged shape,
 // losing each kind's fields). This distributes Omit per member so callers can

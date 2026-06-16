@@ -12,6 +12,9 @@ import { render } from 'ink';
 import { TuiApp, type TuiCommandOutcome } from './app.js';
 import type { Suggestion } from './components/autocomplete.js';
 import type { SessionListItem } from './overlays/session-selector.js';
+import { formatJson, formatTranscript } from './session-export.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { bootstrapCliSession } from '../bootstrap.js';
 import { buildCommandRegistry } from '../commands/build-registry.js';
 import { warmInkReset, resetInkStatic } from './ink-reset.js';
@@ -123,7 +126,10 @@ export async function startTui({ queryParts, options }: StartTuiArgs): Promise<v
           id: s.id,
           preview: preview.length > PREVIEW_LEN ? preview.slice(0, PREVIEW_LEN - 1) + '…' : preview,
           updatedAt: s.updatedAt,
-          messageCount: s.messages.length,
+          userMessageCount: s.messages.filter((m) => m.role === 'user').length,
+          toolCallCount: s.messages.filter((m) => m.role === 'tool').length,
+          assistantMessageCount: s.messages.filter((m) => m.role === 'assistant').length,
+          title: s.metadata?.title as string | undefined,
           provider: s.provider,
           model: s.model,
         };
@@ -133,17 +139,53 @@ export async function startTui({ queryParts, options }: StartTuiArgs): Promise<v
 
   // Load the session into the agent and return a short summary for the info
   // notice. The caller (TuiApp) rebuilds the feed from agent.getMessages().
-  const onSwitchSession = async (sessionId: string): Promise<{ preview: string; messageCount: number } | null> => {
+  const onSwitchSession = async (sessionId: string): Promise<{ preview: string; userMessageCount: number; toolCallCount: number } | null> => {
     const ok = await agent.loadSession(sessionId);
     if (!ok) return null;
     const msgs = agent.getMessages();
     const firstUser = msgs.find((m) => m.role === 'user');
     const preview = (firstUser?.content ?? sessionId).split('\n')[0].trim();
-    return { preview, messageCount: msgs.length };
+    return {
+      preview,
+      userMessageCount: msgs.filter((m) => m.role === 'user').length,
+      toolCallCount: msgs.filter((m) => m.role === 'tool').length,
+    };
   };
 
   const onDeleteSession = async (sessionId: string): Promise<void> => {
     await persistence.delete(sessionId);
+  };
+
+  // Export: write full SessionData as JSON to ./<short-id>.json. Returns the
+  // written path so the app can show a confirmation notice.
+  const onExportSession = async (sessionId: string): Promise<string | null> => {
+    const data = await persistence.load(sessionId);
+    if (!data) return null;
+    const outPath = path.join(process.cwd(), `${sessionId.slice(0, 8)}.json`);
+    await fs.promises.writeFile(outPath, formatJson(data), 'utf-8');
+    return outPath;
+  };
+
+  // Transcript: write a human-readable Markdown render to ./<short-id>.md.
+  const onTranscriptSession = async (sessionId: string): Promise<string | null> => {
+    const data = await persistence.load(sessionId);
+    if (!data) return null;
+    const outPath = path.join(process.cwd(), `${sessionId.slice(0, 8)}.md`);
+    await fs.promises.writeFile(outPath, formatTranscript(data), 'utf-8');
+    return outPath;
+  };
+
+  // Rename: set metadata.title via a full round-trip (load → set title → save).
+  // The backend's metadata merge (`data.metadata ?? existing.metadata`) means
+  // regular chat saves (which pass metadata: undefined) preserve the title.
+  const onRenameSession = async (sessionId: string, title: string): Promise<boolean> => {
+    const data = await persistence.load(sessionId);
+    if (!data) return false;
+    await persistence.save(sessionId, {
+      ...data,
+      metadata: { ...data.metadata, title },
+    });
+    return true;
   };
 
   // Bridge the registry to the TUI: defer interactive (stdin/stdout-owning)
@@ -203,6 +245,9 @@ export async function startTui({ queryParts, options }: StartTuiArgs): Promise<v
       listSessions={listSessions}
       onSwitchSession={onSwitchSession}
       onDeleteSession={onDeleteSession}
+      onExportSession={onExportSession}
+      onTranscriptSession={onTranscriptSession}
+      onRenameSession={onRenameSession}
       getSessionId={() => agent.getSessionId()}
     />
     </ThemeProvider>,

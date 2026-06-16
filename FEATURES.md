@@ -8,7 +8,7 @@
 
 ## Overview
 
-ZClaw is an engineering-first headless AI agent framework designed for scalable automation in containerized environments. It combines LLM-powered decision making with 22 specialized tools to automate system administration, web operations, communications, media generation, and external API integration tasks.
+ZClaw is an engineering-first headless AI agent framework designed for scalable automation in containerized environments. It combines LLM-powered decision making with 23 specialized tools to automate system administration, web operations, communications, media generation, and external API integration tasks.
 
 ---
 
@@ -210,6 +210,25 @@ ZClaw is an engineering-first headless AI agent framework designed for scalable 
 
 ---
 
+## TUI & Interactive Experience (Interactive Mode)
+
+In a TTY the CLI launches a full-screen Ink/React TUI (`src/adapters/cli/tui/`, lazy-loaded — headless/SDK/Server never import React/Ink/figlet). The readline REPL remains as the non-interactive fallback (`--no-interactive` / piped / `--docker`). The TUI renders via Ink `<Static>` + the terminal's native scrollback (no mouse capture → no gibberish; no alternate-screen buffer), with an Ink-internals reset (`ink-reset.ts`) for artifact-free resize/expand.
+
+| Feature | Description |
+|---------|-------------|
+| Bordered persistent input | The prompt row is wrapped in a rounded box and is always visible; during a run the spinner renders above it (not in place of it) and the input stays active. |
+| `/` + `@` autocomplete | Fuzzy slash-command/skill dropdown (`/`) and project-file dropdown (`@`) floating above the input border; ↑/↓ navigate, Tab/Enter accept, multi-line via Shift+Enter. |
+| Zoe Agent logo | A figlet "Zoe Agent" wordmark (`ANSI Compact`) with a Tokyo Night 45° rainbow gradient + `by hashangit · v…` descriptor; the first feed entry, scrolls away as you chat, re-seeded on `/clear`. |
+| Persistent task panel | The `manage_todos` tool drives a persistent todo panel (status glyphs); the agent replaces the full list each call, and it survives session resume. |
+| Streaming feed | Assistant responses stream token-by-token; tool calls render as live bordered blocks with streaming output; Markdown rendering for messages. |
+| Overlays | Command palette (Ctrl+P), model selector (`/models`), settings editor (`/settings`), session selector (`/sessions`), help (`/?`). |
+| Session manager | List / resume / delete / rename / export (JSON) / transcript (Markdown) sessions; resume rebuilds the feed **and** the todo panel from persisted messages. |
+| Message queue + `/steer` | Type during a run to queue follow-up messages; `/steer <msg>` interrupts the current run and redirects. |
+| Live footer | Provider · model · context-window usage · cost · permission · skills · gateway status, updating live. |
+| Tokyo Night theme | Consistent Tokyo Night Moon palette across all components from a single theme source. |
+
+---
+
 ## Feature Summary Statistics
 
 | Category | Count |
@@ -252,6 +271,7 @@ ZClaw is an engineering-first headless AI agent framework designed for scalable 
 | `generate_image` | Media | No | Yes (Image API) |
 | `optimize_prompt` | Media | No | No (uses chat API) |
 | `use_skill` | Skills | No | No |
+| `manage_todos` | Presentation | No | No |
 | `gateway_route` | Gateway | No | No |
 | `gateway_call_tool` | Gateway | No | No |
 | `gateway_call_rest` | Gateway | No | No |

@@ -52,7 +52,8 @@ program
   .option('--headless', 'Bypass permission matrix: auto-approve all tools (for CI/Docker/scripts)')
   .option('--strict', 'Permission level: auto-approve safe tools only')
   .option('--moderate', 'Permission level: auto-approve safe + edit + communications (default)')
-  .option('--yolo', 'Permission level: auto-approve all tools');
+  .option('--yolo', 'Permission level: auto-approve all tools')
+  .option('-r, --resume <id>', 'Resume a previous session by id (or "last")');
 
 program
   .command('setup')

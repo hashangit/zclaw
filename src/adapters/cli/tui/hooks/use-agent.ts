@@ -48,6 +48,8 @@ export interface AgentApi {
   resolvePermission: (approve: boolean) => void;
   abort: () => void;
   resetTodos: () => void;
+  /** Restore the persistent todo panel (e.g. from a resumed session). */
+  restoreTodos: (todos: Todo[] | null) => void;
 }
 
 export interface UseAgentArgs {
@@ -223,6 +225,7 @@ export function useAgent({ agent, feed, permissionLevel }: UseAgentArgs): AgentA
   }, [agent]);
 
   const resetTodos = useCallback((): void => setLatestTodos(null), []);
+  const restoreTodos = useCallback((todos: Todo[] | null): void => setLatestTodos(todos), []);
 
-  return { isRunning, pendingPermission, streamingText, streamingTool, usage, contextTokens, latestTodos, submit, resolvePermission, abort, resetTodos };
+  return { isRunning, pendingPermission, streamingText, streamingTool, usage, contextTokens, latestTodos, submit, resolvePermission, abort, resetTodos, restoreTodos };
 }
