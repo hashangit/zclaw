@@ -151,6 +151,18 @@ export function TuiApp({
     }
   }, [isRunning, submit]);
 
+  // Full clear — start a new session (the agent rotates the session id) + a
+  // fresh TUI: empty the feed, reset todos, re-seed the logo, clear the screen
+  // and remount <Static>. Shared by the `/clear` command and the Ctrl+L binding.
+  const clearAll = (): void => {
+    agent.clearConversation();
+    feed.clear();
+    resetTodos();
+    feed.appendEntry({ kind: 'logo' });
+    resetView();
+    setStaticKey((k) => k + 1);
+  };
+
   // Run a /command via the shared registry; surface its output in the feed.
   const runSlash = async (raw: string): Promise<void> => {
     const name = raw.split(/\s+/)[0];
@@ -216,6 +228,12 @@ export function TuiApp({
     if (trimmed === '/sessions' || trimmed === '/session') {
       setSessionsList(await listSessions());
       setOverlay('sessions');
+      return;
+    }
+    // `/clear` starts a fresh session + TUI (logo, empty feed) — handled here,
+    // not via the registry (which only clears the agent, not the visible feed).
+    if (trimmed === '/clear') {
+      clearAll();
       return;
     }
     {
@@ -340,14 +358,7 @@ export function TuiApp({
       onExit,
       onExpandToggle: () => { resetView(); setExpanded((e) => !e); setStaticKey((k) => k + 1); },
       onPalette: () => setOverlay('palette'),
-      onClear: () => {
-        agent.clearConversation();
-        feed.clear();
-        resetTodos();
-        feed.appendEntry({ kind: 'logo' });
-        resetView();
-        setStaticKey((k) => k + 1);
-      },
+      onClear: clearAll,
     },
     { enabled: overlay === null, isRunning },
   );
