@@ -82,7 +82,7 @@ Top → bottom (within the live region):
     : overlay==='model'   ? <ModelSelector/>
     : overlay==='settings'? <SettingsEditor/>
     : pendingPermission   ? <PermissionPrompt/>
-    : (isRunning && !streamingText) ? <Spinner "ZClaw is working"/>
+    : (isRunning && !streamingText) ? <Spinner "Zoe is working"/>
     : null
 }
 <InputBox disabled={isRunning || overlay !== null || !!pendingPermission} …/>

@@ -121,8 +121,8 @@ stays `< columns` (same discipline as `message-area.tsx`). Recompute from live
 ## R6. "Logo only" rename — boundary (intentional mixed branding)
 
 **Decision**: `"Zoe Agent"` appears **only** in `LogoBanner`. Placeholder
-("Ask ZClaw …"), spinner ("ZClaw is working"), footer, help, binary name
-(`zclaw`), package name, and docs stay zClaw. Both names are visible on screen
+("Ask Zoe …"), spinner ("Zoe is working"), footer, help, binary name
+(`zoe`), package name, and docs stay Zoe. Both names are visible on screen
 at once during the rename window — this is **intentional** (the user is still
 planning the rename; the logo is forward-looking branding). The full rename is a
 separate task.

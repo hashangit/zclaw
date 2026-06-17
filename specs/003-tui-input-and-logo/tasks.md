@@ -55,7 +55,7 @@ either story after Setup.
 the footer on every frame; disabled (dimmed, inert) while running or while an
 overlay/permission prompt is open; spinner above the box while running.
 
-**Independent Test** (quickstart S1–S2): `zclaw` → rounded box above the footer;
+**Independent Test** (quickstart S1–S2): `zoe` → rounded box above the footer;
 trigger a long shell command → box stays dimmed with spinner above it, keystrokes
 ignored; Ctrl+P → box stays visible but keys go to the palette, not the box.
 
@@ -64,7 +64,7 @@ ignored; Ctrl+P → box stays visible but keys go to the palette, not the box.
 - [ ] T002 [P] [US1] Add an optional `enabled` prop (default `true`) to `TextInput` in `src/adapters/cli/tui/components/text-input.tsx`: when `false`, the `useInput` callback early-returns (no keystrokes) and rendered text/placeholder uses `theme.fgDim`. No other input logic changes.
 - [ ] T003 [US1] Forward an optional `enabled` prop through `PromptArea` in `src/adapters/cli/tui/components/prompt-area.tsx` to the inner `TextInput`. Default `true`. (depends on T002)
 - [ ] T004 [US1] Create `InputBox` in `src/adapters/cli/tui/components/input-box.tsx`: rounded box (`╭─╮`/`│`/`╰─╯`) at `min(stdout.columns, MAX) - 2*HORIZONTAL_PADDING` (recompute on resize via `useStdout`), wrapping the existing `PromptArea` row. `disabled` dims border+text (`theme.fgDim`) and passes `enabled={!disabled}` to `PromptArea`. Multi-line input grows the box; bottom border closes around N rows. (depends on T003)
-- [ ] T005 [US1] Restructure the live region in `src/adapters/cli/tui/app.tsx`: render `<InputBox disabled={isRunning || overlay !== null || !!pendingPermission} …/>` **unconditionally** directly above `<Footer/>`; move the `"ZClaw is working"` spinner into the mutually-exclusive live slot **above** the box (it must no longer replace the input). The composite `disabled` keeps an open overlay/palette as the sole live stdin owner. Verify the box is present in idle, running, overlay, and permission frames.
+- [ ] T005 [US1] Restructure the live region in `src/adapters/cli/tui/app.tsx`: render `<InputBox disabled={isRunning || overlay !== null || !!pendingPermission} …/>` **unconditionally** directly above `<Footer/>`; move the `"Zoe is working"` spinner into the mutually-exclusive live slot **above** the box (it must no longer replace the input). The composite `disabled` keeps an open overlay/palette as the sole live stdin owner. Verify the box is present in idle, running, overlay, and permission frames.
 
 **Checkpoint**: User Story 1 fully functional and independently testable.
 
@@ -76,7 +76,7 @@ ignored; Ctrl+P → box stays visible but keys go to the palette, not the box.
 gradient (45° axis, HSL) renders as the first feed entry and scrolls away as the
 user chats.
 
-**Independent Test** (quickstart S3): `zclaw` on a fresh session → large gradient
+**Independent Test** (quickstart S3): `zoe` on a fresh session → large gradient
 "Zoe Agent", vivid red→…→purple sweep; send a message → banner scrolls up out of
 view; resize → reflows without breaking.
 
@@ -100,7 +100,7 @@ view; resize → reflows without breaking.
 
 ## Phase 5: Polish & Cross-Cutting
 
-- [ ] T012 [P] Verify the lazy-load invariant: `echo hi | zclaw`, `zclaw -n "hi"`, `zclaw --docker …` never statically import any new `.tsx`. Run any existing CI guard.
+- [ ] T012 [P] Verify the lazy-load invariant: `echo hi | zoe`, `zoe -n "hi"`, `zoe --docker …` never statically import any new `.tsx`. Run any existing CI guard.
 - [ ] T013 Run `quickstart.md` S1–S6 in a real TTY: fix box-border reflow at 80 cols / on resize; **visually confirm the gradient is a vivid rainbow (not muddy)**; confirm the box is disabled (inert) while running/overlay/permission; confirm positioning is content-flow (last live element above footer) and **flag to the user** if viewport-bottom pinning was actually expected (separate task).
 - [ ] T014 Run `pnpm test` (baseline count still passes **plus** T006) and `pnpm build`.
 

@@ -79,7 +79,7 @@ budget.
 | II. Single Source of Truth | ✅ Compliant | `theme.ts` is the only palette. `app.tsx` remains the single owner of `input`/`isRunning`/`overlay`/`pendingPermission`; `InputBox.disabled` is *composed* from them, not duplicated. `FeedEntry` (one owner: `tui/types.ts`) gains the logo variant. |
 | III. Simplicity First | ✅ Compliant | No new dependency. No transition state machine (banner scrolls via `<Static>`). Input logic reused. The composite disable (`isRunning‖overlay‖permission`) is one boolean expression, not a state machine. Wordmark deferred rather than force-fit. |
 | IV. Surgical Changes | ✅ Compliant | `text-input.tsx` +1 optional prop; `prompt-area.tsx` forwards it; `types.ts`/`message-area.tsx` add one union variant + one switch case; `app.tsx` reorders the live region and seeds one feed entry. Headless/SDK/Server/`repl.ts` untouched. |
-| V. Safe by Default & Verifiable | ✅ Compliant | Every `quickstart.md` scenario is a Verify gate. `pnpm test` baseline holds; gradient fn unit-tested (with a saturation guard). Non-interactive `zclaw -n`/piped/`--docker` stay byte-identical. |
+| V. Safe by Default & Verifiable | ✅ Compliant | Every `quickstart.md` scenario is a Verify gate. `pnpm test` baseline holds; gradient fn unit-tested (with a saturation guard). Non-interactive `zoe -n`/piped/`--docker` stay byte-identical. |
 
 *Post-Phase-1 re-check*: compliant — no schema, no new state owner, no boundary
 handler, no long-running work. The scrutinize pass corrected the inaccurate

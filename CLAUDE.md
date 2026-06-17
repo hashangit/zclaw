@@ -506,5 +506,5 @@ shell commands, and other important information, read the current plan:
 - `specs/005-fullscreen-tui/` — ⚠️ SUPERSEDED (reverted). Decision record only;
   do not implement.
 - Next (separate sessions): `specs/002-channels-integration/` (2-way messaging).
-  (The zClaw → Zoe Agent rename refactor is now complete.)
+  (The Zoe → Zoe Agent rename refactor is now complete.)
 <!-- SPECKIT END -->

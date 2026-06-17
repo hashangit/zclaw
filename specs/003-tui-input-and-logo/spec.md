@@ -12,7 +12,7 @@
 > it (queue / `/steer`-active, not dimmed); the logo is a figlet wordmark
 > (`ANSI Compact`) with a Tokyo Night 45° rainbow gradient + `by hashangit · v…`
 > descriptor, rendered as a `kind: 'logo'` feed entry that scrolls away. Rename is
-> logo-only (the full zClaw → Zoe rename is a separate, future task).
+> logo-only (the full Zoe → Zoe rename is a separate, future task).
 
 **Predecessor**: `specs/001-tui-upgrade` (the Ink/React TUI this builds on, US1-US4 shipped)
 
@@ -37,10 +37,10 @@ input box, and a brand logo.
 | Input positioning | **Last live element, directly above the Footer, in content flow.** NOT viewport-bottom-pinned — see *Constraints* |
 | Future: queue / steer mid-run | **Out of scope** — only noted as a follow-up |
 | Logo placement | **Large welcome banner on launch**, rendered as the first feed entry so it scrolls away as the feed grows |
-| Logo text | **"Zoe Agent"** (the product is being renamed zClaw → Zoe) |
+| Logo text | **"Zoe Agent"** (the product is being renamed Zoe → Zoe) |
 | Logo color | **Tokyo Night rainbow** across all letters, sampled along a **45° axis**, interpolated in **HSL** (hue rotation) so mid-tones stay vivid |
 | Persistent compact wordmark | **Deferred** to a later task |
-| Rename width | **Logo only.** Placeholder, spinner, footer, binary name, package stay **zClaw** — mixed branding is **intentional** during the rename window |
+| Rename width | **Logo only.** Placeholder, spinner, footer, binary name, package stay **Zoe** — mixed branding is **intentional** during the rename window |
 
 ## Constraints (read before judging "pinned to the bottom")
 
@@ -71,7 +71,7 @@ sits lower — a partial, incidental mitigation only.
 The prompt renders inside a rounded-border box, directly above the status footer
 as the last live element, and is present on **every** frame. While the agent
 runs, the box stays visible but dimmed and stops accepting keystrokes; the
-"ZClaw is working" spinner sits immediately above the box instead of replacing
+"Zoe is working" spinner sits immediately above the box instead of replacing
 it. While an overlay (palette/help/model/settings) or a permission prompt is
 open, the box also stays visible but inert (the overlay owns stdin).
 
@@ -80,7 +80,7 @@ mutually-exclusive options in the live region (see `app.tsx`) — while running 
 is replaced by the spinner, so it vanishes, and it has no border so it reads as
 just another line of the feed.
 
-**Independent Test**: Run `zclaw`, submit a prompt that triggers a long shell
+**Independent Test**: Run `zoe`, submit a prompt that triggers a long shell
 command — the rounded input box stays (dimmed) with the spinner above it; when
 the run finishes the box is live again. Open Ctrl+P — the box stays visible but
 keystrokes go to the palette, not the box.
@@ -115,7 +115,7 @@ gradient running across all the letters along a 45° axis. It renders as the
 **Why this priority**: Brand presence + visual identity parity with peer agent
 CLIs. Pure presentation; touches only the TUI presentation layer.
 
-**Independent Test**: Run `zclaw` on a fresh session — see the large gradient
+**Independent Test**: Run `zoe` on a fresh session — see the large gradient
 "Zoe Agent". Send a message — the banner scrolls up out of view. Confirm the
 sweep is a vivid rainbow (red → orange → yellow → green → cyan → blue → purple).
 
@@ -131,7 +131,7 @@ sweep is a vivid rainbow (red → orange → yellow → green → cyan → blue 
    axis — no muddy RGB mid-tones, no new dependency.
 4. **Given** the rename is logo-only, **When** scanning the rest of the UI,
    **Then** the placeholder, spinner, footer, binary, and package still say
-   zClaw — only the logo says "Zoe Agent" (intentional mixed branding).
+   Zoe — only the logo says "Zoe Agent" (intentional mixed branding).
 
 ---
 
@@ -173,7 +173,7 @@ sweep is a vivid rainbow (red → orange → yellow → green → cyan → blue 
   start so it scrolls away with the feed via `<Static>`. No special-case element,
   no `as any`.
 - **FR-006**: Rename is logo-only. Every other user-visible string, the binary
-  name, and the package name MUST remain zClaw. Mixed branding is intentional.
+  name, and the package name MUST remain Zoe. Mixed branding is intentional.
 - **FR-007**: Non-interactive launch paths MUST never import the new components;
   the lazy-load invariant MUST hold.
 - **FR-008**: `pnpm test` MUST pass. The gradient function MUST have unit tests.
@@ -199,9 +199,9 @@ sweep is a vivid rainbow (red → orange → yellow → green → cyan → blue 
 - **SC-002**: Spinner appears above the input box during runs — vs replacing it.
 - **SC-003**: "Zoe Agent" logo with a vivid 45° Tokyo Night rainbow shows on
   launch and scrolls away as the feed grows.
-- **SC-004**: Only the logo text changed to "Zoe Agent"; binary/package/zClaw
+- **SC-004**: Only the logo text changed to "Zoe Agent"; binary/package/Zoe
   strings elsewhere unchanged.
-- **SC-005**: `zclaw -n`, SDK, Server, and `pnpm test` unaffected.
+- **SC-005**: `zoe -n`, SDK, Server, and `pnpm test` unaffected.
 
 ## Assumptions
 

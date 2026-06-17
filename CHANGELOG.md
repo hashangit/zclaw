@@ -7,34 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed — Project rename: zClaw → Zoe Agent
-
-The project has been renamed from **zClaw** to **Zoe Agent**. This is a
-**breaking change** across all surfaces. There are no backward-compatibility
-fallbacks — existing deployments must migrate.
-
-- **Package**: `zclaw-core` → `zoe-agent` (npm)
-- **Binaries**: `zclaw` → `zoe`, `zclaw-server` → `zoe-server`
-- **Environment variables**: all `ZCLAW_*` → `ZOE_*` (e.g. `ZOE_PERMISSION`,
-  `ZOE_SKILLS_PATH`, `ZOE_SESSION_DIR`, `ZOE_PORT`, `ZOE_API_KEY` legacy alias)
-- **Config directory**: `~/.zclaw/` → `~/.zoe/` (and project `.zclaw/` → `.zoe/`)
-- **Workspace**: `~/zclaw_documents` → `~/zoe_documents` (and `@zclaw_documents/`
-  → `@zoe_documents/` reference sigil)
-- **Legacy config file**: `~/.zclawrc.json` → `~/.zoerc.json`
-- **Error class**: `ZclawError` → `ZoeError` (and `toZclawError` → `toZoeError`)
-- **API key prefix**: `sk_zclaw_` → `sk_zoe_`
-- **Auth header**: `X-Zclaw-API-Key` → `X-Zoe-API-Key`
-- **MCP server name**: `zclaw-gateway` → `zoe-gateway`
-
-**Migration:** rename env vars (`ZCLAW_` → `ZOE_`), move
-`~/.zclaw` → `~/.zoe` and `~/zclaw_documents` → `~/zoe_documents`, update
-imports from `zclaw-core` to `zoe-agent`, re-issue API keys (old `sk_zclaw_`
-keys are no longer accepted), and update any `ZclawError` references to
-`ZoeError`.
-
 ## [v0.3.0] - 2026-06-10
 
-Major release adding the **Gateway subsystem** — a universal API hub that makes ZClaw act as an MCP client, secure REST proxy, and OpenAPI auto-adapter. This release also includes two security fixes found during code scrutiny, a new middleware pipeline, and 10 new agent-facing gateway tools.
+Major release adding the **Gateway subsystem** — a universal API hub that makes Zoe act as an MCP client, secure REST proxy, and OpenAPI auto-adapter. This release also includes two security fixes found during code scrutiny, a new middleware pipeline, and 10 new agent-facing gateway tools.
 
 ### Added
 
@@ -43,8 +18,8 @@ Major release adding the **Gateway subsystem** — a universal API hub that make
 - **Agent-Loop Bridge** (`src/core/agent-loop.ts`): FinalHandler rebuilds options from `ctx` to capture middleware mutations; inline injected-tools lookup dispatches to injected handlers or falls through to static tool registry. ~21 lines total.
 - **10 Gateway Proxy Tools** (`src/gateway/tool-factory.ts`): `gateway_route`, `gateway_call_tool`, `gateway_call_rest`, `gateway_capabilities`, `gateway_read_resource`, `gateway_get_prompt`, `gateway_import_openapi`, `gateway_register_target`, `gateway_audit_log`, `gateway_usage_stats`.
 - **OpenAPI Spec Importer** (`src/gateway/openapi-importer.ts`): Fetches OpenAPI specs (JSON/YAML), parses paths/operations, and auto-registers as a REST target. Supports tag filtering and base URL override.
-- **Gateway Settings Adapter** (`src/gateway/settings-adapter.ts`): Dedicated file-based storage (`~/.zclaw/gateway/`) for targets, credentials, routes, and admin-target registry. Atomic writes with temp-file+rename pattern. Credential files written with `mode: 0o600`.
-- **Gateway Settings Schema** (`src/core/settings-schema.ts`): 4 typed settings (`gateway.enabled`, `gateway.semanticTopK`, `gateway.defaultRateLimitPerMin`, `gateway.maxAuditLogs`) in a new "Gateway" category. Env vars: `ZCLAW_GATEWAY_ENABLED`, `ZCLAW_GATEWAY_RATE_LIMIT`.
+- **Gateway Settings Adapter** (`src/gateway/settings-adapter.ts`): Dedicated file-based storage (`~/.zoe/gateway/`) for targets, credentials, routes, and admin-target registry. Atomic writes with temp-file+rename pattern. Credential files written with `mode: 0o600`.
+- **Gateway Settings Schema** (`src/core/settings-schema.ts`): 4 typed settings (`gateway.enabled`, `gateway.semanticTopK`, `gateway.defaultRateLimitPerMin`, `gateway.maxAuditLogs`) in a new "Gateway" category. Env vars: `ZOE_GATEWAY_ENABLED`, `ZOE_GATEWAY_RATE_LIMIT`.
 - **Semantic Scorer** (`src/gateway/semantic-scorer.ts`): Zero-dependency keyword-based relevance scoring with 80+ stop words for filtering noise.
 - **Gateway REST Routes** (`src/adapters/server/rest-gateway.ts`): 11 REST endpoints under `/v1/gateway/*` for target CRUD, credentials, routes, OpenAPI import, audit logs, and usage stats. Proper auth scoping (`agent:read` for reads, `admin` for mutations).
 - **Server-Core Extraction** (`src/adapters/server/server-core.ts`): Extracted `serverGenerateText`/`serverStreamText` from `server/index.ts`. Both accept optional `middleware` parameter for gateway semantic injection.
@@ -103,7 +78,7 @@ This release fixes five bugs found during a holistic system audit — two that c
 - `/settings` with no arguments now launches the wizard (was a plain list).
 - Removed `/settings edit` and `/settings wizard` subcommands.
 - All 12 built-in tools now carry a `risk` field (`safe`, `edit`, `communications`, or `destructive`).
-- `--headless` flag replaces the binary `ZCLAW_SHELL_APPROVE` approval mechanism.
+- `--headless` flag replaces the binary `ZOE_SHELL_APPROVE` approval mechanism.
 - Unknown and custom tools default to `destructive` risk category, requiring approval in all modes except `permissive`.
 - `ToolModule` interface now includes optional `risk` field.
 - `permissionMode` option removed from `AgentCreateOptions` (replaced by `permissionLevel`).
@@ -118,7 +93,7 @@ This release fixes five bugs found during a holistic system audit — two that c
 - CLI flags: `--headless`, `--strict`, `--moderate`, `--yolo` for controlling tool approval behavior.
 - SDK: `permissionLevel` option on `GenerateTextOptions`, `StreamTextOptions`, and `AgentCreateOptions`.
 - Server: per-message permission level with `maxPermissionLevel` ceiling per connection.
-- `ZCLAW_PERMISSION` environment variable and settings file support for default permission level.
+- `ZOE_PERMISSION` environment variable and settings file support for default permission level.
 - `src/core/permission.ts` — Permission matrix with 3 pure functions (`needsApproval`, `resolvePermissionLevel`, `getToolRiskCategory`).
 - 12 built-in tools categorized by risk; custom tools default to "destructive" (deny-by-default).
 - 25 new tests (22 in `permission.test.ts`, 3 in `tool-executor.test.ts`).
@@ -139,7 +114,7 @@ This release fixes five bugs found during a holistic system audit — two that c
 - **Medium**: Unknown permission level values are validated in server ceiling comparison, preventing ceiling bypass via invalid levels.
 - **Medium**: Custom tool registry is included in risk lookups alongside built-in tools.
 - **Low**: Conflicting `--headless` and permission level flags produce a warning.
-- **Low**: Legacy `ZCLAW_SHELL_APPROVE` env var is ignored when new permission flags are active.
+- **Low**: Legacy `ZOE_SHELL_APPROVE` env var is ignored when new permission flags are active.
 
 ## [v0.2.1] - 2026-04-09
 
@@ -154,8 +129,8 @@ This release fixes five bugs found during a holistic system audit — two that c
 - **SDK (Programmatic API)**: Full TypeScript SDK with `createAgent`, `streamText`, `generateText`, structured output, React hooks, and session persistence.
 - **Server Adapter**: Standalone HTTP/WebSocket server with REST API, session management, and authentication (API key + bearer token).
 - **Docker Support**: Production-ready Dockerfile, `.dockerignore`, `docker-compose.yml`, `--docker` CLI flag, and non-interactive environment detection.
-- **Shell Approval Modes**: Dual-mode shell command approval — interactive inquirer prompt and non-interactive `ZCLAW_SHELL_APPROVE` env var with `auto`/`deny` modes.
-- **Standalone Server Binary**: `zclaw-server` with `--generate-api-key` flag, env var configuration, and graceful shutdown.
+- **Shell Approval Modes**: Dual-mode shell command approval — interactive inquirer prompt and non-interactive `ZOE_SHELL_APPROVE` env var with `auto`/`deny` modes.
+- **Standalone Server Binary**: `zoe-server` with `--generate-api-key` flag, env var configuration, and graceful shutdown.
 - Environment variable overrides for provider API keys.
 - VitePress documentation site.
 
@@ -177,7 +152,3 @@ This release fixes five bugs found during a holistic system audit — two that c
 ### Removed
 
 - Monolithic `src/index.ts` entry point (replaced by modular architecture).
-
-[v0.3.0]: https://github.com/hashangit/zclaw/compare/v0.2.2...v0.3.0
-[v0.2.2]: https://github.com/hashangit/zclaw/compare/v0.2.1...v0.2.2
-[v0.2.0]: https://github.com/hashangit/zclaw/compare/v0.1.0...v0.2.0

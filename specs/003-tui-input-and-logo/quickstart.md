@@ -41,12 +41,12 @@ Launch the interactive TUI:
 ```bash
 pnpm dev            # tsx — resolves the lazy './tui/*.tsx' import
 # or the built binary in a real terminal:
-zclaw
+zoe
 ```
 
 ### S1 — Bordered input box, last live element above the footer (idle)
 
-1. Run `zclaw` in a TTY.
+1. Run `zoe` in a TTY.
 2. **Expect**: the prompt sits inside a **rounded box** (`╭…╮` / `╰…╯`) directly
    above the footer status bar. It is clearly separated from the feed and the
    footer by its border.
@@ -60,7 +60,7 @@ zclaw
 1. Submit a prompt that runs a slow shell command, e.g.:
    `run a shell command: sleep 4 && echo done`.
 2. **Expect**: the rounded input box **stays in place, dimmed** for the whole run;
-   the "ZClaw is working" spinner renders **immediately above** the box.
+   the "Zoe is working" spinner renders **immediately above** the box.
 3. Type while running → **keystrokes are ignored** (input disabled).
 4. When the run finishes → the box is live (full color) again.
 
@@ -69,7 +69,7 @@ zclaw
 
 ### S3 — Zoe Agent logo on launch (scrolls away)
 
-1. Start `zclaw` on a fresh session.
+1. Start `zoe` on a fresh session.
 2. **Expect**: a large "Zoe Agent" banner with a **vivid 45° Tokyo Night rainbow**
    (red → orange → yellow → green → cyan → blue → purple across the letters) —
    mid-tones must be saturated, **not** muddy gray/brown (HSL, not RGB lerp).
@@ -82,16 +82,16 @@ zclaw
 ### S4 — Rename is logo-only
 
 1. While in the TUI, inspect: placeholder text, spinner text, footer.
-2. **Expect**: they still say **zClaw** (`Ask ZClaw …`, `ZClaw is working`).
+2. **Expect**: they still say **Zoe** (`Ask Zoe …`, `Zoe is working`).
    Only the logo says "Zoe Agent".
-3. `zclaw --version` / package name → still `zclaw`.
+3. `zoe --version` / package name → still `zoe`.
 
 ### S5 — Non-interactive paths unchanged (regression)
 
 ```bash
-echo "hi" | zclaw            # piped stdin → readline path, no React import
-zclaw -n "hi"                # --no-interactive → readline path
-zclaw --docker ...           # docker non-interactive → unchanged
+echo "hi" | zoe            # piped stdin → readline path, no React import
+zoe -n "hi"                # --no-interactive → readline path
+zoe --docker ...           # docker non-interactive → unchanged
 ```
 
 - **Expect**: byte-identical behavior to before; React/Ink never load. (If a CI

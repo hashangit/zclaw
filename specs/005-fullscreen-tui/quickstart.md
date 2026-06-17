@@ -44,12 +44,12 @@ pnpm test -- src/adapters/cli/tui/fullscreen/
 ```bash
 pnpm dev            # tsx
 # or in a real terminal:
-zclaw
+zoe
 ```
 
 ### S1 — Full-screen, bottom-pinned input + footer
 
-1. Run `zclaw` on a fresh session.
+1. Run `zoe` on a fresh session.
 2. **Expect**: the app fills the terminal; the input + footer sit on the **bottom
    rows** (not floating mid-screen). Empty space is above them, in the feed region.
 3. Send a short message → the exchange appears above; input/footer stay pinned.
@@ -92,9 +92,9 @@ zclaw
 ### S7 — Non-interactive paths unchanged (regression)
 
 ```bash
-echo "hi" | zclaw
-zclaw -n "hi"
-zclaw --docker …
+echo "hi" | zoe
+zoe -n "hi"
+zoe --docker …
 ```
 - **Expect**: byte-identical to before; no alt buffer, no React import.
 
