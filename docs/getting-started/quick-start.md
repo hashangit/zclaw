@@ -187,5 +187,5 @@ Congratulations! You've covered the basics. Here's what to explore next:
 - **[Production Checklist](/guides/production-checklist)** - Best practices
 
 ::: info Need Help?
-Check out our [GitHub Discussions](https://github.com/hashangit/zoe-agent/discussions) or open an issue if you run into problems.
+Check out our [GitHub Discussions](https://github.com/hashangit/zoe/discussions) or open an issue if you run into problems.
 :::

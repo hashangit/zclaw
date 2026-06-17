@@ -2,15 +2,15 @@
 
 [![NPM Version](https://img.shields.io/npm/v/zoe-agent.svg?style=flat-square)](https://www.npmjs.com/package/zoe-agent)
 [![NPM Downloads](https://img.shields.io/npm/dm/zoe-agent.svg?style=flat-square)](https://www.npmjs.com/package/zoe-agent)
-[![GitHub Release](https://img.shields.io/github/v/tag/hashangit/zoe-agent?style=flat-square&label=release)](https://github.com/hashangit/zoe-agent/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://github.com/hashangit/zoe-agent/blob/main/LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/tag/hashangit/zoe?style=flat-square&label=release)](https://github.com/hashangit/zoe/releases)
+[![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg?style=flat-square)](https://github.com/hashangit/zoe/blob/main/LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
 
 **The Engineering-First Headless Agent Framework: CLI, SDK, and Server. Stable, Scalable Automation for the Post-Vision Era.**
 
 ---
 
-🔗 **GitHub Repository**: [https://github.com/hashangit/zoe-agent](https://github.com/hashangit/zoe-agent)
+🔗 **GitHub Repository**: [https://github.com/hashangit/zoe](https://github.com/hashangit/zoe)
 
 ---
 
@@ -67,8 +67,8 @@ pnpm add -g zoe-agent
 
 ### Homebrew (macOS & Linux)
 ```bash
-brew tap hashangit/zoe-agent
-brew install zoe
+brew tap hashangit/zoe
+brew install zoe-agent
 ```
 
 > **Note:** Requires [Node.js](https://nodejs.org/) 20 or later.
@@ -94,7 +94,7 @@ import { createServer } from 'zoe-agent/server';
 ### Development Installation
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/hashangit/zoe-agent.git
+    git clone https://github.com/hashangit/zoe.git
     cd zoe
     ```
 2.  Install dependencies:
@@ -479,7 +479,7 @@ Zoe Agent includes a production-ready [`Dockerfile`](./Dockerfile) (Node 20 Alpi
 
 ```bash
 # Clone and build
-git clone https://github.com/hashangit/zoe-agent.git
+git clone https://github.com/hashangit/zoe.git
 cd zoe
 docker build -t zoe-server .
 
@@ -538,7 +538,18 @@ apt-get update && apt-get install -y fonts-noto-cjk fonts-wqy-zenhei fonts-noto-
 
 ## License
 
-MIT
+Zoe is distributed under the **Business Source License 1.1 (BSL)** — a
+source-available license.
+
+- **Free for personal, non-commercial use** (including students, educators,
+  and research), and for short evaluation/internal trial use.
+- **Commercial / production use** (including offering Zoe as a managed
+  service) requires a commercial license from the Licensor.
+- On the **Change Date (2028-01-01)** the Licensed Work automatically becomes
+  available under the Apache License 2.0.
+
+See the full terms in [LICENSE](./LICENSE). To obtain a commercial license,
+contact the maintainer.
 
 ## Contributing
 
@@ -551,13 +562,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 5.  Open a Pull Request
 
 ---
-GitHub: [https://github.com/hashangit/zoe-agent](https://github.com/hashangit/zoe-agent)
+GitHub: [https://github.com/hashangit/zoe](https://github.com/hashangit/zoe)
 
 ---
-
-## Acknowledgments
-
-Zoe Agent is a standalone project forked from the original [AutoClaw](https://github.com/tsingliuwin/autoclaw) project by **tsingliuwin** under the MIT License on **March 31st, 2026**. 
-
-We would like to express our sincere gratitude to **tsingliuwin** and all the contributors of the original AutoClaw project for their exceptional work and vision, which served as the foundation for this repository.
 

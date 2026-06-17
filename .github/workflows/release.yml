@@ -71,7 +71,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          git clone https://x-access-token:${GH_TOKEN}@github.com/hashangit/homebrew-zoe-agent.git tap
+          git clone https://x-access-token:${GH_TOKEN}@github.com/hashangit/homebrew-zoe.git tap
           cd tap
           F="Formula/zoe-agent.rb"
           sed -i "s|^  url .*|  url \"https://registry.npmjs.org/zoe-agent/-/zoe-agent-${{ steps.ver.outputs.version }}.tgz\"|" "$F"

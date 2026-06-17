@@ -17,7 +17,7 @@ Run Zoe Agent as a containerized backend service. This example covers building t
 Zoe Agent includes a Dockerfile in the repository. Build it from source:
 
 ```bash
-git clone https://github.com/hashangit/zoe-agent.git
+git clone https://github.com/hashangit/zoe.git
 cd zoe
 docker build -t zoe-server .
 ```

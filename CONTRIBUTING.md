@@ -31,7 +31,7 @@ Thank you for your interest in contributing to Zoe Agent! We welcome contributio
     ```bash
     git push origin feature/my-new-feature
     ```
-2.  Go to the [original repository](https://github.com/hashangit/zoe-agent) and click "New Pull Request".
+2.  Go to the [original repository](https://github.com/hashangit/zoe) and click "New Pull Request".
 3.  Describe your changes clearly. What problem does it solve? Why is this change necessary?
 4.  Wait for review! We will review your PR as soon as possible.
 

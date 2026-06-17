@@ -1,8 +1,8 @@
 # Zoe Agent - Complete Feature Documentation
 
 **Version:** 1.0.40
-**License:** MIT
-**Repository:** https://github.com/hashangit/zoe-agent
+**License:** BSL 1.1 (Business Source License — source-available, free for non-commercial use)
+**Repository:** https://github.com/hashangit/zoe
 
 ---
 
@@ -203,9 +203,9 @@ Zoe Agent is an engineering-first headless AI agent framework designed for scala
 | 168 | js-yaml | js-yaml | YAML parsing for OpenAPI spec import | YAML Support | Most real-world OpenAPI specs use YAML format |
 | **PACKAGE INFORMATION** |
 | 169 | Version | 1.0.40 | Current release version | Stable Release | Production-ready software |
-| 170 | License | MIT License | Open source MIT license | Free to Use | Can use commercially, modify, distribute |
+| 170 | License | BSL 1.1 | Business Source License — source-available | Free for Non-Commercial | Personal/eval use free; commercial use requires license |
 | 171 | NPM Package | `zoe-agent` | Published on NPM registry | Easy Installation | `npm install -g zoe-agent-core` |
-| 172 | GitHub Repo | hashangit/zoe-agent | Source code on GitHub | Open Development | Can contribute, report issues, fork |
+| 172 | GitHub Repo | hashangit/zoe | Source code on GitHub | Open Development | Can contribute, report issues, fork |
 | 173 | Keywords | ai, cli, agent, automation, openai, docker, headless, devops, llm, typescript, orchestration, infrastructure, terminal | Package keywords | Discoverable | Easy to find via search |
 
 ---
@@ -371,7 +371,7 @@ zoe setup --project
 
 - **README:** `/Users/hashanw/Developer/zoe/README.md`
 - **Contributing Guide:** `/Users/hashanw/Developer/zoe/CONTRIBUTING.md`
-- **GitHub:** https://github.com/hashangit/zoe-agent
+- **GitHub:** https://github.com/hashangit/zoe
 - **NPM:** https://www.npmjs.com/package/zoe-agent
 
 ---

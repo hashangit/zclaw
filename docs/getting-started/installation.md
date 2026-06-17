@@ -92,7 +92,7 @@ Zoe Agent includes a Dockerfile in the repository. Build the image and run the s
 ### Build the Image
 
 ```bash
-git clone https://github.com/hashangit/zoe-agent.git
+git clone https://github.com/hashangit/zoe.git
 cd zoe
 docker build -t zoe-server .
 ```
@@ -149,7 +149,7 @@ If you want to contribute to Zoe Agent or run it from source:
 
 ```bash
 # Clone the repository
-git clone https://github.com/hashangit/zoe-agent.git
+git clone https://github.com/hashangit/zoe.git
 cd zoe
 
 # Install dependencies

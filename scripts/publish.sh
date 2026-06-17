@@ -3,7 +3,7 @@
 #
 # The release workflow (.github/workflows/release.yml) then publishes to:
 #   1. npm (zoe-agent)
-#   2. the hashangit/homebrew-zoe-agent tap (formula auto-bumped)
+#   2. the hashangit/homebrew-zoe tap (formula auto-bumped)
 #   3. a GitHub Release
 #
 # Usage:
@@ -227,10 +227,10 @@ if gh run list --workflow=release.yml --limit=1 --json databaseId,status -q '.[0
   ok "${BOLD}Release workflow succeeded.${RESET}"
   echo
   echo "  ${DIM}npm:${RESET}      https://www.npmjs.com/package/$PKG_NAME"
-  echo "  ${DIM}homebrew:${RESET} https://github.com/hashangit/homebrew-zoe-agent/commit/main"
-  echo "  ${DIM}release:${RESET}  https://github.com/hashangit/zoe-agent/releases/tag/v$TARGET_VERSION"
+  echo "  ${DIM}homebrew:${RESET} https://github.com/hashangit/homebrew-zoe/commit/main"
+  echo "  ${DIM}release:${RESET}  https://github.com/hashangit/zoe/releases/tag/v$TARGET_VERSION"
   echo
-  echo "  Install via:  ${CYAN}brew install hashangit/zoe-agent/zoe-agent${RESET}"
+  echo "  Install via:  ${CYAN}brew install hashangit/zoe/zoe-agent${RESET}"
   echo "                ${CYAN}npm i -g $PKG_NAME@$TARGET_VERSION${RESET}"
   exit 0
 else

@@ -44,8 +44,8 @@ FROM node:20-slim AS production
 # Container metadata
 LABEL org.opencontainers.image.title="Zoe Agent"
 LABEL org.opencontainers.image.description="Lightweight AI agent CLI with multi-provider LLM support"
-LABEL org.opencontainers.image.source="https://github.com/hashangit/zoe-agent"
-LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.source="https://github.com/hashangit/zoe"
+LABEL org.opencontainers.image.licenses="BUSL-1.1"
 
 # Install Chromium + required fonts + runtime dependencies
 # - chromium: system Chromium for Playwright (avoids bundled download)

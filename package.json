@@ -66,16 +66,16 @@
     "rest-proxy"
   ],
   "author": "Hashan Wickramasinghe",
-  "license": "MIT",
+  "license": "BUSL-1.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hashangit/zoe-agent.git"
+    "url": "git+https://github.com/hashangit/zoe.git"
   },
   "bugs": {
-    "url": "https://github.com/hashangit/zoe-agent/issues"
+    "url": "https://github.com/hashangit/zoe/issues"
   },
-  "homepage": "https://hashangit.github.io/zoe-agent/",
-  "description": "A headless AI agent framework with CLI, SDK, and server adapters — skills, multi-provider LLM support, and Docker-native deployment.",
+  "homepage": "https://hashangit.github.io/zoe/",
+  "description": "Zoe — your AI person. A skill-driven AI agent with CLI, SDK, and server adapters; multi-provider LLM support and Docker-native deployment. Coding is one of the things she does.",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
     "@modelcontextprotocol/sdk": "^1.29.0",

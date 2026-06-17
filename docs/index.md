@@ -10,7 +10,7 @@ hero:
       link: /getting-started/installation
     - theme: alt
       text: View on GitHub
-      link: https://github.com/hashangit/zoe-agent
+      link: https://github.com/hashangit/zoe
 
 features:
   - icon: ⚡
