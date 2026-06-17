@@ -1,11 +1,11 @@
 /**
- * ZClaw Middleware — Rate Limiting
+ * Zoe Middleware — Rate Limiting
  *
  * Token bucket rate limiter per key. Throws on limit exceeded.
  */
 
 import type { PipelineContext, Middleware } from "../middleware.js";
-import { ZclawError } from "../errors.js";
+import { ZoeError } from "../errors.js";
 
 export interface RateLimitOptions {
   /** Maximum requests allowed per window */
@@ -51,7 +51,7 @@ export function rateLimitMiddleware(options: RateLimitOptions): Middleware {
     }
 
     if (bucket.tokens <= 0) {
-      throw new ZclawError(
+      throw new ZoeError(
         `Rate limit exceeded for key "${key}": max ${maxRequests} requests per ${windowMs}ms`,
         "RATE_LIMITED",
         false,

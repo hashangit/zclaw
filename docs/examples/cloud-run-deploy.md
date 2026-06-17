@@ -1,18 +1,18 @@
 ---
 title: Cloud Run Deployment
-description: Deploy ZClaw to Google Cloud Run with Redis session storage and monitoring.
+description: Deploy Zoe Agent to Google Cloud Run with Redis session storage and monitoring.
 ---
 
 # Cloud Run Deployment
 
-Deploy ZClaw to Google Cloud Run for serverless, auto-scaling agent workloads. This example covers the full setup including session externalization with Redis and monitoring.
+Deploy Zoe Agent to Google Cloud Run for serverless, auto-scaling agent workloads. This example covers the full setup including session externalization with Redis and monitoring.
 
 ## Prerequisites
 
 - Google Cloud SDK (`gcloud`) installed and authenticated
 - A Google Cloud project with billing enabled
 - At least one LLM provider API key
-- ZClaw Docker image built (see [Docker Deployment](/examples/docker-deploy))
+- Zoe Agent Docker image built (see [Docker Deployment](/examples/docker-deploy))
 
 ## Step 1: Configure Google Cloud
 
@@ -34,13 +34,13 @@ Build and push to Artifact Registry:
 
 ```bash
 # Create a repository (one-time)
-gcloud artifacts repositories create zclaw \
+gcloud artifacts repositories create zoe \
   --repository-format=docker \
   --location=us-central1
 
 # Build and push
-docker tag zclaw-server us-central1-docker.pkg.dev/YOUR_PROJECT_ID/zclaw/server
-docker push us-central1-docker.pkg.dev/YOUR_PROJECT_ID/zclaw/server
+docker tag zoe-server us-central1-docker.pkg.dev/YOUR_PROJECT_ID/zoe/server
+docker push us-central1-docker.pkg.dev/YOUR_PROJECT_ID/zoe/server
 ```
 
 ## Step 3: Store Secrets
@@ -60,7 +60,7 @@ Cloud Run instances are ephemeral. Mount a persistent volume for session storage
 
 ```bash
 # Sessions will be stored in /data/sessions inside the container
-# Set ZCLAW_SESSION_DIR=/data/sessions in your deployment
+# Set ZOE_SESSION_DIR=/data/sessions in your deployment
 ```
 
 ::: warning File-based sessions on Cloud Run
@@ -70,8 +70,8 @@ File-based sessions do not persist across Cloud Run instances. For production mu
 ## Step 5: Deploy to Cloud Run
 
 ```bash
-gcloud run deploy zclaw-server \
-  --image us-central1-docker.pkg.dev/YOUR_PROJECT_ID/zclaw/server \
+gcloud run deploy zoe-server \
+  --image us-central1-docker.pkg.dev/YOUR_PROJECT_ID/zoe/server \
   --platform managed \
   --region us-central1 \
   --port 7337 \
@@ -83,9 +83,9 @@ gcloud run deploy zclaw-server \
   --set-env-vars "\
 LLM_PROVIDER=openai,\
 OPENAI_MODEL=gpt-5.4,\
-ZCLAW_PORT=7337,\
-ZCLAW_SESSION_DIR=/data/sessions,\
-ZCLAW_SESSION_TTL=86400" \
+ZOE_PORT=7337,\
+ZOE_SESSION_DIR=/data/sessions,\
+ZOE_SESSION_TTL=86400" \
   --set-secrets "\
 OPENAI_API_KEY=openai-api-key:latest,\
 ANTHROPIC_API_KEY=anthropic-api-key:latest,\
@@ -106,7 +106,7 @@ TAVILY_API_KEY=tavily-api-key:latest" \
 
 ```bash
 # Get the service URL
-SERVICE_URL=$(gcloud run services describe zclaw-server \
+SERVICE_URL=$(gcloud run services describe zoe-server \
   --region us-central1 \
   --format 'value(status.url)')
 
@@ -116,7 +116,7 @@ curl ${SERVICE_URL}/v1/health
 # Test chat
 curl -X POST ${SERVICE_URL}/v1/chat \
   -H "Content-Type: application/json" \
-  -H "X-Zclaw-API-Key: sk_zclaw_..." \
+  -H "X-Zoe-API-Key: sk_zoe_..." \
   -d '{
     "message": "Hello! What tools do you have available?",
     "tools": [],
@@ -128,10 +128,10 @@ curl -X POST ${SERVICE_URL}/v1/chat \
 
 ### Cloud Logging
 
-ZClaw outputs structured JSON logs to stdout. Cloud Run automatically sends these to Cloud Logging. View them:
+Zoe Agent outputs structured JSON logs to stdout. Cloud Run automatically sends these to Cloud Logging. View them:
 
 ```bash
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=zclaw-server" \
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=zoe-server" \
   --limit 50 \
   --format json
 ```
@@ -142,9 +142,9 @@ Create an alert for health check failures:
 
 ```bash
 gcloud alpha monitoring policies create \
-  --display-name "ZClaw Health Check" \
+  --display-name "Zoe Agent Health Check" \
   --condition-display-name "Health endpoint failing" \
-  --condition-filter 'resource.type="cloud_run_revision" AND resource.labels.service_name="zclaw-server" AND httpRequest.status>=500' \
+  --condition-filter 'resource.type="cloud_run_revision" AND resource.labels.service_name="zoe-server" AND httpRequest.status>=500' \
   --condition-threshold-value 5 \
   --notification-channels=YOUR_CHANNEL_ID
 ```
@@ -155,22 +155,22 @@ Track token usage and cost by logging structured data:
 
 ```bash
 # Example: create a log-based metric for token usage
-gcloud logging metrics create zclaw-token-usage \
+gcloud logging metrics create zoe-token-usage \
   --description="Total tokens consumed per request" \
-  --log-filter='resource.type="cloud_run_revision" AND resource.labels.service_name="zclaw-server" AND jsonPayload.type="usage"'
+  --log-filter='resource.type="cloud_run_revision" AND resource.labels.service_name="zoe-server" AND jsonPayload.type="usage"'
 ```
 
 ## Updating the Deployment
 
 ```bash
 # Build and push new image
-docker build -t zclaw-server .
-docker tag zclaw-server us-central1-docker.pkg.dev/YOUR_PROJECT_ID/zclaw/server
-docker push us-central1-docker.pkg.dev/YOUR_PROJECT_ID/zclaw/server
+docker build -t zoe-server .
+docker tag zoe-server us-central1-docker.pkg.dev/YOUR_PROJECT_ID/zoe/server
+docker push us-central1-docker.pkg.dev/YOUR_PROJECT_ID/zoe/server
 
 # Cloud Run automatically pulls the latest image on new revision
-gcloud run deploy zclaw-server \
-  --image us-central1-docker.pkg.dev/YOUR_PROJECT_ID/zclaw/server \
+gcloud run deploy zoe-server \
+  --image us-central1-docker.pkg.dev/YOUR_PROJECT_ID/zoe/server \
   --region us-central1
 ```
 
@@ -180,7 +180,7 @@ Cloud Run supports HTTP/1.1 and HTTP/2, including long-lived connections. For We
 
 - Use `--timeout 3600` to allow long-lived connections.
 - Implement a heartbeat (30-second interval) to prevent connection drops.
-- Consider using SSE (Server-Sent Events) instead of WebSockets for simpler streaming. ZClaw's `toResponse()` already produces SSE output.
+- Consider using SSE (Server-Sent Events) instead of WebSockets for simpler streaming. Zoe Agent's `toResponse()` already produces SSE output.
 
 ## Cost Optimization
 
@@ -195,7 +195,7 @@ Cloud Run supports HTTP/1.1 and HTTP/2, including long-lived connections. For We
 
 ```bash
 # Delete the Cloud Run service
-gcloud run services delete zclaw-server --region us-central1
+gcloud run services delete zoe-server --region us-central1
 
 # Delete secrets
 gcloud secrets delete openai-api-key
@@ -203,7 +203,7 @@ gcloud secrets delete anthropic-api-key
 gcloud secrets delete tavily-api-key
 
 # Delete the artifact repository
-gcloud artifacts repositories delete zclaw --location us-central1
+gcloud artifacts repositories delete zoe --location us-central1
 ```
 
 ## Next Steps

@@ -1,13 +1,13 @@
 # ============================================================================
-# ZClaw Dockerfile — Production Multi-Stage Build
+# Zoe Dockerfile — Production Multi-Stage Build
 # ============================================================================
 # Builds a minimal production image with Chromium + CJK fonts for Playwright
 # browser tools. Supports both CLI mode and server mode.
 #
 # Usage:
-#   Server mode (default):  docker run zclaw
-#   CLI mode:               docker run zclaw zclaw chat "hello"
-#   With env file:          docker run --env-file .env zclaw
+#   Server mode (default):  docker run zoe
+#   CLI mode:               docker run zoe zoe chat "hello"
+#   With env file:          docker run --env-file .env zoe
 # ============================================================================
 
 # ---------------------------------------------------------------------------
@@ -42,9 +42,9 @@ RUN pnpm prune --prod
 FROM node:20-slim AS production
 
 # Container metadata
-LABEL org.opencontainers.image.title="ZClaw"
+LABEL org.opencontainers.image.title="Zoe Agent"
 LABEL org.opencontainers.image.description="Lightweight AI agent CLI with multi-provider LLM support"
-LABEL org.opencontainers.image.source="https://github.com/hashangit/zclaw"
+LABEL org.opencontainers.image.source="https://github.com/hashangit/zoe-agent"
 LABEL org.opencontainers.image.licenses="MIT"
 
 # Install Chromium + required fonts + runtime dependencies
@@ -71,7 +71,7 @@ ENV NODE_ENV=production
 # Shell tool auto-approve for non-interactive containers
 # Set to "auto" to allow command execution without prompts
 # Set to "deny" (or leave unset) to block commands in non-interactive mode
-ENV ZCLAW_SHELL_APPROVE=auto
+ENV ZOE_SHELL_APPROVE=auto
 
 # Create non-root user for security
 RUN groupadd --gid 1001 appuser \
@@ -124,7 +124,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
 ENTRYPOINT ["dumb-init", "--", "node", "dist/adapters/cli/index.js"]
 
 # Default command: start the server adapter
-# Override with any zclaw CLI subcommand, e.g.:
-#   docker run zclaw chat "explain this code"
-#   docker run zclaw --help
+# Override with any zoe CLI subcommand, e.g.:
+#   docker run zoe chat "explain this code"
+#   docker run zoe --help
 CMD ["--serve"]

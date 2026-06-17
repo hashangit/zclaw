@@ -1,14 +1,14 @@
 # Configuration
 
-Configure ZClaw to work with your preferred LLM provider and customize behavior for your use case.
+Configure Zoe Agent to work with your preferred LLM provider and customize behavior for your use case.
 
 ::: info Bring Your Own API Key
-ZClaw does **not** provide LLM inference. You bring your own API keys from inference providers (OpenAI, Anthropic, GLM, or any OpenAI-compatible service). The minimum to get started is **one** provider API key (e.g., `OPENAI_API_KEY`).
+Zoe Agent does **not** provide LLM inference. You bring your own API keys from inference providers (OpenAI, Anthropic, GLM, or any OpenAI-compatible service). The minimum to get started is **one** provider API key (e.g., `OPENAI_API_KEY`).
 :::
 
 ## Environment Variables
 
-The easiest way to configure ZClaw is through environment variables.
+The easiest way to configure Zoe Agent is through environment variables.
 
 ### Required Variables
 
@@ -29,7 +29,7 @@ Set **at least one** provider-specific API key:
 | `LLM_MODEL` | Override default model for any provider | Provider-specific |
 
 ::: tip
-These are framework settings, not API keys. `LLM_PROVIDER` tells ZClaw which inference provider to route to. `LLM_MODEL` overrides the default model for the active provider. Provider-specific overrides (`OPENAI_MODEL`, `ANTHROPIC_MODEL`, `GLM_MODEL`, `OPENAI_COMPAT_MODEL`) take priority over `LLM_MODEL`.
+These are framework settings, not API keys. `LLM_PROVIDER` tells Zoe Agent which inference provider to route to. `LLM_MODEL` overrides the default model for the active provider. Provider-specific overrides (`OPENAI_MODEL`, `ANTHROPIC_MODEL`, `GLM_MODEL`, `OPENAI_COMPAT_MODEL`) take priority over `LLM_MODEL`.
 :::
 
 ### Provider-Specific Keys and Settings
@@ -71,7 +71,7 @@ OPENAI_MODEL=gpt-5.4
 :::
 
 ::: tip Using .env Files
-The ZClaw **CLI** automatically loads `.env` files in your project root. If you are using the **SDK** in your own application, you must handle `.env` loading yourself (e.g., `import 'dotenv/config'` at the top of your entry file).
+The Zoe Agent **CLI** automatically loads `.env` files in your project root. If you are using the **SDK** in your own application, you must handle `.env` loading yourself (e.g., `import 'dotenv/config'` at the top of your entry file).
 :::
 
 ## Programmatic Configuration
@@ -79,7 +79,7 @@ The ZClaw **CLI** automatically loads `.env` files in your project root. If you 
 For more control, use `configureProviders()`:
 
 ```typescript
-import { configureProviders, generateText } from 'zclaw-core'
+import { configureProviders, generateText } from 'zoe-agent'
 
 // Configure all providers at once
 configureProviders({
@@ -109,7 +109,7 @@ const result = await generateText('Hello!', {
 Override configuration for individual requests:
 
 ```typescript
-import { generateText } from 'zclaw-core'
+import { generateText } from 'zoe-agent'
 
 const result = await generateText('Hello!', {
   provider: 'anthropic', // Override default provider
@@ -218,7 +218,7 @@ export OPENAI_COMPAT_BASE_URL=https://api.together.xyz/v1
 ### Custom Tool Configuration
 
 ```typescript
-import { configureProviders } from 'zclaw-core'
+import { configureProviders } from 'zoe-agent'
 
 configureProviders({
   openai: {
@@ -245,7 +245,7 @@ const result = await generateText('Hello!', {
 
 ## TypeScript Configuration
 
-ZClaw is fully typed. Import types for better developer experience:
+Zoe Agent is fully typed. Import types for better developer experience:
 
 ```typescript
 import type {
@@ -253,7 +253,7 @@ import type {
   GenerateTextOptions,
   StreamTextOptions,
   GenerateTextResult
-} from 'zclaw-core'
+} from 'zoe-agent'
 
 const options: GenerateTextOptions = {
   provider: 'openai',
@@ -267,14 +267,14 @@ Environment variables for customizing skill discovery and behavior:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ZCLAW_SKILLS_PATH` | *(none)* | Colon-separated list of additional skill directories |
-| `ZCLAW_NO_BUNDLED_SKILLS` | `false` | Set to `true` to disable built-in bundled skills |
-| `ZCLAW_SKILL_BODY_MAX_CHARS` | `32000` | Maximum skill body size in characters before truncation (~8k tokens) |
-| `ZCLAW_SKILL_BODY_WARN_CHARS` | `8000` | Warning threshold for skill body size in characters (~2k tokens) |
-| `ZCLAW_SKILLS_DEBUG` | *(none)* | Set to `true` to enable debug logging for skill discovery |
+| `ZOE_SKILLS_PATH` | *(none)* | Colon-separated list of additional skill directories |
+| `ZOE_NO_BUNDLED_SKILLS` | `false` | Set to `true` to disable built-in bundled skills |
+| `ZOE_SKILL_BODY_MAX_CHARS` | `32000` | Maximum skill body size in characters before truncation (~8k tokens) |
+| `ZOE_SKILL_BODY_WARN_CHARS` | `8000` | Warning threshold for skill body size in characters (~2k tokens) |
+| `ZOE_SKILLS_DEBUG` | *(none)* | Set to `true` to enable debug logging for skill discovery |
 
 ::: tip
-Skills are discovered in priority order (last wins): built-in bundled skills, `~/.zclaw/skills/`, `.zclaw/skills/`, then `ZCLAW_SKILLS_PATH` directories. See the [Skills documentation](/sdk/skills) for the full SKILL.md format and features.
+Skills are discovered in priority order (last wins): built-in bundled skills, `~/.zoe/skills/`, `.zoe/skills/`, then `ZOE_SKILLS_PATH` directories. See the [Skills documentation](/sdk/skills) for the full SKILL.md format and features.
 :::
 
 ## Permission Levels
@@ -303,22 +303,22 @@ Custom tools default to `destructive` (deny-by-default). Custom tools can specif
 ### CLI Flags
 
 ```bash
-zclaw --strict       # All tools require approval
-zclaw --moderate     # Safe tools auto-execute (default)
-zclaw --yolo         # Only destructive tools require approval
-zclaw --headless     # No approval prompts; denied tools fail silently
+zoe --strict       # All tools require approval
+zoe --moderate     # Safe tools auto-execute (default)
+zoe --yolo         # Only destructive tools require approval
+zoe --headless     # No approval prompts; denied tools fail silently
 ```
 
 ### Environment Variable
 
 | Variable | Values | Default |
 |----------|--------|---------|
-| `ZCLAW_PERMISSION` | `strict`, `moderate`, `permissive` | `moderate` |
+| `ZOE_PERMISSION` | `strict`, `moderate`, `permissive` | `moderate` |
 
 ### SDK Usage
 
 ```typescript
-import { generateText } from 'zclaw'
+import { generateText } from 'zoe'
 
 await generateText('List my files', {
   permissionLevel: 'strict' // All tools require approval callback
@@ -344,7 +344,7 @@ const server = createServer({
 - Check [production best practices](/guides/production-checklist)
 
 ::: info Configuration Priority
-ZClaw resolves configuration in this order:
+Zoe Agent resolves configuration in this order:
 1. Per-request options
 2. Programmatic configuration
 3. Environment variables

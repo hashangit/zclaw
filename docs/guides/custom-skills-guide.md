@@ -1,11 +1,11 @@
 ---
 title: Custom Skills Guide
-description: Create, test, and package custom skills for ZClaw's skills system.
+description: Create, test, and package custom skills for Zoe Agent's skills system.
 ---
 
 # Custom Skills Guide
 
-Skills are reusable behavior packages that give ZClaw agents specialized knowledge and procedures. This guide covers creating custom skills from scratch.
+Skills are reusable behavior packages that give Zoe Agent agents specialized knowledge and procedures. This guide covers creating custom skills from scratch.
 
 ## What Are Skills?
 
@@ -55,20 +55,20 @@ Skills live in one of several locations, searched in priority order:
 
 | Location | Priority | Use Case |
 |---|---|---|
-| `ZCLAW_SKILLS_PATH` env var | Highest | Custom override path |
-| `.zclaw/skills/` in project root | High | Project-specific skills |
+| `ZOE_SKILLS_PATH` env var | Highest | Custom override path |
+| `.zoe/skills/` in project root | High | Project-specific skills |
 | `/mnt/skills/` | Medium | Docker volume-mounted skills |
-| Bundled `skills/` directory | Lowest | Skills shipped with Zclaw |
+| Bundled `skills/` directory | Lowest | Skills shipped with Zoe |
 
 Create a project-level skill:
 
 ```bash
-mkdir -p .zclaw/skills/code-review
+mkdir -p .zoe/skills/code-review
 ```
 
 ## Step 2: Write the Skill Frontmatter
 
-Create `.zclaw/skills/code-review/SKILL.md`:
+Create `.zoe/skills/code-review/SKILL.md`:
 
 ```markdown
 ---
@@ -164,10 +164,10 @@ Refer to the project's documentation style:
 | Pattern | Resolves To |
 |---|---|
 | `@src/file.ts` | `{project_root}/src/file.ts` |
-| `@zclaw_documents/report.pdf` | `~/zclaw_documents/report.pdf` |
+| `@zoe_documents/report.pdf` | `~/zoe_documents/report.pdf` |
 | `@~/custom/path.txt` | `~/custom/path.txt` |
 
-References are resolved relative to the project root (current working directory). Files must be under the project root, `~/zclaw_documents/`, or `~/.zclaw/` to be accessible. Files over 1 MB are skipped.
+References are resolved relative to the project root (current working directory). Files must be under the project root, `~/zoe_documents/`, or `~/.zoe/` to be accessible. Files over 1 MB are skipped.
 
 ## Step 4: Test the Skill with use_skill
 
@@ -176,7 +176,7 @@ Test your skill using the CLI, SDK, or REST API.
 ### CLI
 
 ```bash
-npx zclaw-core chat
+npx zoe-agent chat
 > /code-review Check the auth module for security issues
 ```
 
@@ -185,7 +185,7 @@ The `/` prefix triggers skill invocation. Arguments after the skill name are pas
 ### SDK
 
 ```typescript
-import { generateText } from "zclaw-core";
+import { generateText } from "zoe-agent";
 
 const result = await generateText(
   "Review the authentication module for security issues",
@@ -203,7 +203,7 @@ console.log(result.text);
 ```bash
 curl -X POST http://localhost:7337/v1/chat \
   -H "Content-Type: application/json" \
-  -H "X-Zclaw-API-Key: sk_zclaw_..." \
+  -H "X-Zoe-API-Key: sk_zoe_..." \
   -d '{
     "message": "Review the auth module",
     "skills": ["code-review"],
@@ -216,14 +216,14 @@ curl -X POST http://localhost:7337/v1/chat \
 Check that your skill was discovered:
 
 ```bash
-npx zclaw-core skills list
+npx zoe-agent skills list
 ```
 
 Or via the API:
 
 ```bash
 curl http://localhost:7337/v1/skills \
-  -H "X-Zclaw-API-Key: sk_zclaw_..."
+  -H "X-Zoe-API-Key: sk_zoe_..."
 ```
 
 ## Step 5: Package Skills for Reuse
@@ -232,16 +232,16 @@ curl http://localhost:7337/v1/skills \
 
 Skills are directories, so they can be shared via:
 
-- **Git repository** -- clone into `.zclaw/skills/`
-- **npm package** -- install and point `ZCLAW_SKILLS_PATH` to `node_modules/my-skills/`
+- **Git repository** -- clone into `.zoe/skills/`
+- **npm package** -- install and point `ZOE_SKILLS_PATH` to `node_modules/my-skills/`
 - **Docker volume** -- mount at `/mnt/skills/`
 
 ### Environment Variable Configuration
 
-Set `ZCLAW_SKILLS_PATH` to one or more directories (colon-separated):
+Set `ZOE_SKILLS_PATH` to one or more directories (colon-separated):
 
 ```bash
-export ZCLAW_SKILLS_PATH=/shared/skills:/opt/team-skills
+export ZOE_SKILLS_PATH=/shared/skills:/opt/team-skills
 ```
 
 ### Docker Deployment
@@ -253,7 +253,7 @@ docker run -d \
   -p 7337:7337 \
   -v ./my-skills:/mnt/skills \
   --env-file .env \
-  zclaw-server
+  zoe-server
 ```
 
 ### Disable Bundled Skills
@@ -261,7 +261,7 @@ docker run -d \
 To only use custom skills:
 
 ```bash
-export ZCLAW_NO_BUNDLED_SKILLS=1
+export ZOE_NO_BUNDLED_SKILLS=1
 ```
 
 ## Argument Substitution Patterns
@@ -305,7 +305,7 @@ All args: $ALL
 Invocation:
 
 ```bash
-npx zclaw-core chat
+npx zoe-agent chat
 > /deploy my-api production
 ```
 
@@ -342,4 +342,4 @@ const result = await generateText("Deploy the service", {
 
 - [Custom Tools Guide](/guides/custom-tools-guide) -- create tools that skills can invoke
 - [Tools Reference](/tools/reference) -- complete reference for all built-in tools
-- [Deploy as Backend](/guides/deploy-as-backend) -- deploy skills alongside your ZClaw server
+- [Deploy as Backend](/guides/deploy-as-backend) -- deploy skills alongside your Zoe Agent server

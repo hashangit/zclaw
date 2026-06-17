@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-describe("zClaw smoke test — module resolution", () => {
+describe("Zoe smoke test — module resolution", () => {
   it("SDK public surface imports without error", async () => {
     const sdk = await import("../adapters/sdk/index.js");
     expect(typeof sdk.generateText).toBe("function");
@@ -13,12 +13,12 @@ describe("zClaw smoke test — module resolution", () => {
   it("core modules import without error", async () => {
     const { runAgentLoop } = await import("../core/agent-loop.js");
     const { createHookExecutor } = await import("../core/hooks.js");
-    const { ZclawError } = await import("../core/errors.js");
+    const { ZoeError } = await import("../core/errors.js");
     const { StreamManager } = await import("../core/stream-manager.js");
 
     expect(typeof runAgentLoop).toBe("function");
     expect(typeof createHookExecutor).toBe("function");
-    expect(ZclawError).toBeDefined();
+    expect(ZoeError).toBeDefined();
     expect(typeof StreamManager).toBe("function");
   });
 

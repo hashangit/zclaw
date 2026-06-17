@@ -1,7 +1,7 @@
 /**
- * ZClaw Core — Error class hierarchy
+ * Zoe Core — Error class hierarchy
  *
- * Proper class hierarchy for all ZClaw errors.
+ * Proper class hierarchy for all Zoe errors.
  * Each error class carries a `code`, `retryable` flag, and domain-specific
  * metadata (e.g. `provider`, `tool`, `steps`).
  */
@@ -9,12 +9,12 @@
 // ── Base error ──────────────────────────────────────────────────────────
 
 /**
- * Base class for all ZClaw errors.
+ * Base class for all Zoe errors.
  *
  * Carries a machine-readable `code` and a `retryable` flag so callers can
  * decide whether to retry automatically.
  */
-export class ZclawError extends Error {
+export class ZoeError extends Error {
   /** Machine-readable error code, e.g. "PROVIDER_ERROR", "TOOL_FAILED". */
   code: string;
   /** Whether the operation that caused this error can be retried. */
@@ -22,7 +22,7 @@ export class ZclawError extends Error {
 
   constructor(message: string, code: string, retryable = false) {
     super(message);
-    this.name = "ZclawError";
+    this.name = "ZoeError";
     this.code = code;
     this.retryable = retryable;
   }
@@ -33,7 +33,7 @@ export class ZclawError extends Error {
 /**
  * Error originating from a provider (LLM API call failure, auth, rate-limit, etc.).
  */
-export class ProviderError extends ZclawError {
+export class ProviderError extends ZoeError {
   /** The provider name that produced the error, if known. */
   provider?: string;
 
@@ -49,7 +49,7 @@ export class ProviderError extends ZclawError {
 /**
  * Error from tool execution.
  */
-export class ToolError extends ZclawError {
+export class ToolError extends ZoeError {
   /** The tool name that produced the error, if known. */
   tool?: string;
 
@@ -65,7 +65,7 @@ export class ToolError extends ZclawError {
 /**
  * Thrown when the agent loop exceeds the configured maximum number of steps.
  */
-export class MaxStepsError extends ZclawError {
+export class MaxStepsError extends ZoeError {
   /** The number of steps that were executed. */
   steps: number;
 
@@ -85,7 +85,7 @@ export class MaxStepsError extends ZclawError {
 /**
  * Thrown when an operation is aborted (e.g. via AbortSignal).
  */
-export class AbortedError extends ZclawError {
+export class AbortedError extends ZoeError {
   constructor(message?: string) {
     super(message ?? "Operation was aborted", "ABORTED", false);
     this.name = "AbortedError";
@@ -97,7 +97,7 @@ export class AbortedError extends ZclawError {
 /**
  * Error from gateway operations (MCP client, REST proxy, target management).
  */
-export class GatewayError extends ZclawError {
+export class GatewayError extends ZoeError {
   /** The target name that produced the error, if known. */
   target?: string;
 

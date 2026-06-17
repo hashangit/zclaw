@@ -1,8 +1,8 @@
 /**
- * ZClaw SDK — Settings Facade
+ * Zoe SDK — Settings Facade
  *
  * Wraps SettingsManager for SDK consumers.
- * Import via `import { settings } from 'zclaw'`.
+ * Import via `import { settings } from 'zoe-agent'`.
  */
 
 import {

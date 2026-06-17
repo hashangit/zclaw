@@ -19,7 +19,7 @@ function generateText(
 ## Quick example
 
 ```typescript
-import { generateText } from "zclaw-core";
+import { generateText } from "zoe-agent";
 
 const result = await generateText("What is the weather in San Francisco?", {
   tools: ["web_search"],
@@ -151,7 +151,7 @@ const result2 = await generateText("Read ./config.json and summarize it", {
 ### Custom tools
 
 ```typescript
-import { generateText, tool } from "zclaw-core";
+import { generateText, tool } from "zoe-agent";
 import { z } from "zod";
 
 const dbQuery = tool({
@@ -273,7 +273,7 @@ interface Hooks {
 
   onStep?: (step: StepResult) => void | Promise<void>;
 
-  onError?: (error: ZclawError) => void | Promise<void>;
+  onError?: (error: ZoeError) => void | Promise<void>;
 
   onFinish?: (result: GenerateTextResult) => void | Promise<void>;
 }
@@ -281,7 +281,7 @@ interface Hooks {
 
 ## Error handling
 
-ZClaw throws typed errors that all extend `ZclawError`:
+Zoe Agent throws typed errors that all extend `ZoeError`:
 
 | Error class     | Code              | `retryable` | When                                      |
 | --------------- | ----------------- | ------------ | ----------------------------------------- |
@@ -291,7 +291,7 @@ ZClaw throws typed errors that all extend `ZclawError`:
 | `AbortedError`  | `ABORTED`         | `false`      | Operation cancelled via `AbortSignal`     |
 
 ```typescript
-import { ProviderError, AbortedError } from "zclaw-core";
+import { ProviderError, AbortedError } from "zoe-agent";
 
 try {
   const result = await generateText("Hello", { provider: "anthropic" });

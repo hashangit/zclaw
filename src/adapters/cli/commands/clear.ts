@@ -1,5 +1,5 @@
 /**
- * /clear command handler for ZClaw CLI.
+ * /clear command handler for Zoe CLI.
  *
  * Aliases: /reset, /new
  */

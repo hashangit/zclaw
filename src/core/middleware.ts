@@ -1,5 +1,5 @@
 /**
- * ZClaw Middleware Pipeline
+ * Zoe Middleware Pipeline
  *
  * Composable middleware chain that wraps `runAgentLoop`.
  * Follows the `(ctx, next) => Promise<void>` pattern for cross-cutting

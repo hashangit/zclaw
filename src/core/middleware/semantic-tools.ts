@@ -1,5 +1,5 @@
 /**
- * ZClaw Core — Semantic Tool Injection Middleware
+ * Zoe Core — Semantic Tool Injection Middleware
  *
  * Scores the user's last message against all gateway-discovered tools
  * and injects the top-K most relevant directly into ctx.toolDefs.

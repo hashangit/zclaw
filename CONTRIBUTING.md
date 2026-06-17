@@ -1,14 +1,14 @@
-# Contributing to ZClaw 🦞
+# Contributing to Zoe Agent 🦞
 
-Thank you for your interest in contributing to ZClaw! We welcome contributions from everyone.
+Thank you for your interest in contributing to Zoe Agent! We welcome contributions from everyone.
 
 ## Getting Started
 
 1.  **Fork the repository**: Click the "Fork" button on GitHub.
 2.  **Clone your fork**:
     ```bash
-    git clone https://github.com/YOUR_USERNAME/zclaw.git
-    cd zclaw
+    git clone https://github.com/YOUR_USERNAME/zoe.git
+    cd zoe
     ```
 3.  **Install dependencies**:
     ```bash
@@ -31,7 +31,7 @@ Thank you for your interest in contributing to ZClaw! We welcome contributions f
     ```bash
     git push origin feature/my-new-feature
     ```
-2.  Go to the [original repository](https://github.com/hashangit/zclaw) and click "New Pull Request".
+2.  Go to the [original repository](https://github.com/hashangit/zoe-agent) and click "New Pull Request".
 3.  Describe your changes clearly. What problem does it solve? Why is this change necessary?
 4.  Wait for review! We will review your PR as soon as possible.
 
@@ -48,4 +48,4 @@ If you find a bug, please open an issue on GitHub with:
 Have an idea for a new feature? Open an issue with the "enhancement" label and let's discuss it!
 
 ---
-Thank you for helping make ZClaw better!
+Thank you for helping make Zoe Agent better!

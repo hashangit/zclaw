@@ -1,7 +1,7 @@
-/** ZClaw Core — Message conversion helpers */
+/** Zoe Core — Message conversion helpers */
 
 import type { Message, ToolCall } from "./types.js";
-import { ZclawError, ProviderError, ToolError } from "./errors.js";
+import { ZoeError, ProviderError, ToolError } from "./errors.js";
 import type { ProviderMessage, ProviderResponse, ProviderToolCall } from "../providers/types.js";
 
 /**
@@ -26,10 +26,10 @@ export function estimateTokens(text: string): number {
 }
 
 /**
- * Create a ZclawError from a plain Error or unknown value.
+ * Create a ZoeError from a plain Error or unknown value.
  * Uses the proper class hierarchy based on the error code.
  */
-export function toZclawError(err: unknown, code: string): ZclawError {
+export function toZoeError(err: unknown, code: string): ZoeError {
   const message = err instanceof Error ? err.message : String(err);
 
   switch (code) {
@@ -38,7 +38,7 @@ export function toZclawError(err: unknown, code: string): ZclawError {
     case "TOOL_FAILED":
       return new ToolError(message);
     default:
-      return new ZclawError(message, code, code === "PROVIDER_ERROR");
+      return new ZoeError(message, code, code === "PROVIDER_ERROR");
   }
 }
 

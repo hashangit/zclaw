@@ -1,5 +1,5 @@
 /**
- * Slash Command Registry for ZClaw CLI.
+ * Slash Command Registry for Zoe CLI.
  *
  * Flat namespace of `/command` handlers with alias support.
  *

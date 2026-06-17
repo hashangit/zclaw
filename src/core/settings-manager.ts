@@ -1,5 +1,5 @@
 /**
- * ZClaw Core — Settings Manager
+ * Zoe Core — Settings Manager
  *
  * Single source of truth for reading, writing, validating, and persisting
  * settings. Adapters (CLI, SDK, Server) delegate to this class.
@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { ZclawError } from './errors.js';
+import { ZoeError } from './errors.js';
 import {
   SETTINGS_MAP,
   SETTINGS_SCHEMA,
@@ -22,7 +22,7 @@ import {
 
 // ── Settings Error ────────────────────────────────────────────────────────
 
-export class SettingsError extends ZclawError {
+export class SettingsError extends ZoeError {
   constructor(message: string, code = 'SETTINGS_ERROR') {
     super(message, code, false);
     this.name = 'SettingsError';

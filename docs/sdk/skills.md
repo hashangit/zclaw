@@ -1,6 +1,6 @@
 ---
 title: Skills
-description: Discover, load, and create reusable skill packages that extend ZClaw's capabilities.
+description: Discover, load, and create reusable skill packages that extend Zoe Agent's capabilities.
 ---
 
 # Skills
@@ -44,7 +44,7 @@ See [Two invocation paths](#two-invocation-paths) for a detailed walkthrough of 
 Skills are loaded automatically when you specify skill names:
 
 ```typescript
-import { generateText } from "zclaw-core";
+import { generateText } from "zoe-agent";
 
 const result = await generateText("Deploy the staging environment", {
   skills: ["docker-ops"],
@@ -55,7 +55,7 @@ const result = await generateText("Deploy the staging environment", {
 ### With createAgent
 
 ```typescript
-import { createAgent } from "zclaw-core";
+import { createAgent } from "zoe-agent";
 
 const agent = await createAgent({
   skills: ["docker-ops", "code-review"],
@@ -70,24 +70,24 @@ const reply = await agent.chat("Review my latest commit");
 Bootstraps the skill registry by scanning skill directories. This is the public API for initializing skills programmatically:
 
 ```typescript
-import { initializeSkillRegistry } from "zclaw-core";
+import { initializeSkillRegistry } from "zoe-agent";
 
 // Scan the current working directory and configured paths for skills
 await initializeSkillRegistry(process.cwd());
 ```
 
-Call this at application startup to ensure skills are discovered before the first agent invocation. ZClaw calls this automatically when you pass `skills` to `generateText()` or `createAgent()`, but you may call it explicitly to pre-load skills or inspect the registry.
+Call this at application startup to ensure skills are discovered before the first agent invocation. Zoe Agent calls this automatically when you pass `skills` to `generateText()` or `createAgent()`, but you may call it explicitly to pre-load skills or inspect the registry.
 
 ## Skill search paths
 
-ZClaw searches for skills in the following locations, in priority order:
+Zoe Agent searches for skills in the following locations, in priority order:
 
 | Priority | Path                            | Source                        |
 | -------- | ------------------------------- | ----------------------------- |
-| 1        | `ZCLAW_SKILLS_PATH` env var     | Colon-separated custom paths  |
-| 2        | `.zclaw/skills/`                | Project-level skills          |
+| 1        | `ZOE_SKILLS_PATH` env var     | Colon-separated custom paths  |
+| 2        | `.zoe/skills/`                | Project-level skills          |
 | 3        | `/mnt/skills/`                  | Docker volume mount           |
-| 4        | Bundled `skills/` directory     | Shipped with ZClaw            |
+| 4        | Bundled `skills/` directory     | Shipped with Zoe Agent            |
 
 Higher-priority paths override skills with the same name from lower-priority paths.
 
@@ -95,12 +95,12 @@ Higher-priority paths override skills with the same name from lower-priority pat
 
 ```bash
 # Multiple paths, colon-separated
-export ZCLAW_SKILLS_PATH=/opt/skills:/home/user/my-skills
+export ZOE_SKILLS_PATH=/opt/skills:/home/user/my-skills
 ```
 
 ```bash
 # Disable bundled skills
-export ZCLAW_NO_BUNDLED_SKILLS=1
+export ZOE_NO_BUNDLED_SKILLS=1
 ```
 
 ## Skill metadata
@@ -263,7 +263,7 @@ Supported patterns:
 | Pattern                 | Resolves to                               |
 | ----------------------- | ----------------------------------------- |
 | `@path/to/file`        | Relative to project root (`process.cwd()`) |
-| `@zclaw_documents/file` | `~/zclaw_documents/file`                  |
+| `@zoe_documents/file` | `~/zoe_documents/file`                  |
 | `@~/path/to/file`      | Explicit home directory path              |
 
 Files are inlined with syntax highlighting. Limits:
@@ -281,7 +281,7 @@ When the cumulative total exceeds 2 MB, remaining references are skipped with a 
 ```
 
 :::warning
-All resolved paths must fall within the project root, `~/zclaw_documents/`, or `~/.zclaw/`. References outside these boundaries are rejected with an access-denied error.
+All resolved paths must fall within the project root, `~/zoe_documents/`, or `~/.zoe/`. References outside these boundaries are rejected with an access-denied error.
 :::
 
 ## Lazy body loading
@@ -350,7 +350,7 @@ Consider trimming below 8000 chars for optimal context usage.
 
 ```
 [... Skill body truncated: 45000 chars total, 32000 shown.
-Reduce skill body size or set ZCLAW_SKILL_BODY_MAX_CHARS to increase the limit. ...]
+Reduce skill body size or set ZOE_SKILL_BODY_MAX_CHARS to increase the limit. ...]
 ```
 
 The function returns a `TruncationResult` with metadata about original and final sizes:
@@ -374,8 +374,8 @@ The `@path` resolver stops inlining files when the cumulative resolved content w
 
 | Environment variable              | Default  | Description                  |
 | --------------------------------- | -------- | ---------------------------- |
-| `ZCLAW_SKILL_BODY_MAX_CHARS`      | `32000`  | Hard truncation limit        |
-| `ZCLAW_SKILL_BODY_WARN_CHARS`     | `8000`   | Soft warning threshold       |
+| `ZOE_SKILL_BODY_MAX_CHARS`      | `32000`  | Hard truncation limit        |
+| `ZOE_SKILL_BODY_WARN_CHARS`     | `8000`   | Soft warning threshold       |
 
 :::tip
 If a skill is being truncated, split it into multiple smaller skills or use `@path` references to load instructions from separate files instead of embedding everything in the body.
@@ -402,7 +402,7 @@ When a skill with a `model.provider` field is invoked, `createSkillProviderSwitc
 3. After the skill execution completes, restores the original provider in a `finally` block.
 
 ```typescript
-import { createSkillProviderSwitcher } from "zclaw-core";
+import { createSkillProviderSwitcher } from "zoe-agent";
 
 const switcher = createSkillProviderSwitcher({
   provider: currentProvider,

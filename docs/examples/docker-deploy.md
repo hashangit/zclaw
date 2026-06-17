@@ -1,11 +1,11 @@
 ---
 title: Docker Deployment
-description: Deploy ZClaw as a Docker container with complete configuration and Docker Compose example.
+description: Deploy Zoe Agent as a Docker container with complete configuration and Docker Compose example.
 ---
 
 # Docker Deployment
 
-Run ZClaw as a containerized backend service. This example covers building the image, running it locally, persisting sessions, and using Docker Compose.
+Run Zoe Agent as a containerized backend service. This example covers building the image, running it locally, persisting sessions, and using Docker Compose.
 
 ## Prerequisites
 
@@ -14,46 +14,46 @@ Run ZClaw as a containerized backend service. This example covers building the i
 
 ## Dockerfile
 
-ZClaw includes a Dockerfile in the repository. Build it from source:
+Zoe Agent includes a Dockerfile in the repository. Build it from source:
 
 ```bash
-git clone https://github.com/hashangit/zclaw.git
-cd zclaw
-docker build -t zclaw-server .
+git clone https://github.com/hashangit/zoe-agent.git
+cd zoe
+docker build -t zoe-server .
 ```
 
 ## Build and Run
 
-### Using the `zclaw server` command
+### Using the `zoe server` command
 
-After building, start the server inside the container using `zclaw server`:
+After building, start the server inside the container using `zoe server`:
 
 ```bash
 docker run -d \
-  --name zclaw \
+  --name zoe \
   -p 7337:7337 \
   -e OPENAI_API_KEY=sk-... \
-  zclaw-server \
-  zclaw server
+  zoe-server \
+  zoe server
 ```
 
 Generate an API key for authenticated access:
 
 ```bash
-docker exec -it zclaw zclaw server --generate-api-key
+docker exec -it zoe zoe server --generate-api-key
 ```
 
-This prints a key like `sk_zclaw_a1b2c3...` and stores it in `~/.zclaw/server-keys.json`.
+This prints a key like `sk_zoe_a1b2c3...` and stores it in `~/.zoe/server-keys.json`.
 
 ### Using the `--docker` CLI flag
 
-Run the ZClaw CLI inside Docker with the `--docker` flag for container-aware defaults:
+Run the Zoe Agent CLI inside Docker with the `--docker` flag for container-aware defaults:
 
 ```bash
 docker run -it --rm \
   -e OPENAI_API_KEY=sk-... \
-  zclaw-server \
-  zclaw --docker "List files in the current directory"
+  zoe-server \
+  zoe --docker "List files in the current directory"
 ```
 
 ### Basic Run
@@ -62,10 +62,10 @@ Start the server on port 7337:
 
 ```bash
 docker run -d \
-  --name zclaw \
+  --name zoe \
   -p 7337:7337 \
   -e OPENAI_API_KEY=sk-... \
-  zclaw-server
+  zoe-server
 ```
 
 Verify it is running:
@@ -92,10 +92,10 @@ Run with the environment file:
 
 ```bash
 docker run -d \
-  --name zclaw \
+  --name zoe \
   -p 7337:7337 \
   --env-file .env \
-  zclaw-server
+  zoe-server
 ```
 
 ## Environment Variable Configuration
@@ -112,16 +112,16 @@ docker run -d \
 | `ANTHROPIC_MODEL` | No | Default Anthropic model (default: `claude-sonnet-4-6-20260320`) |
 | `GLM_MODEL` | No | Default GLM model (default: `glm-5.1`) |
 | `LLM_MODEL` | No | Default model for OpenAI-compatible provider (default: `gpt-5.4`) |
-| `ZCLAW_PORT` | No | Server port (default: `7337`) |
-| `ZCLAW_SKILLS_PATH` | No | Colon-separated paths to custom skill directories |
+| `ZOE_PORT` | No | Server port (default: `7337`) |
+| `ZOE_SKILLS_PATH` | No | Colon-separated paths to custom skill directories |
 | `TAVILY_API_KEY` | No | Required for `web_search` tool |
 | `SMTP_HOST` | No | SMTP server for `send_email` |
 | `SMTP_PORT` | No | SMTP port (default: `587`) |
 | `SMTP_USER` | No | SMTP username |
 | `SMTP_PASS` | No | SMTP password |
-| `ZCLAW_SESSION_DIR` | No | Session storage directory (default: `./.zclaw/sessions`) |
-| `ZCLAW_SESSION_TTL` | No | Session TTL in seconds (default: `86400`) |
-| `ZCLAW_SHELL_APPROVE` | No | Shell command approval in containers: `auto` (approve all), `deny` (block all). Default in non-interactive: `deny` |
+| `ZOE_SESSION_DIR` | No | Session storage directory (default: `./.zoe/sessions`) |
+| `ZOE_SESSION_TTL` | No | Session TTL in seconds (default: `86400`) |
+| `ZOE_SHELL_APPROVE` | No | Shell command approval in containers: `auto` (approve all), `deny` (block all). Default in non-interactive: `deny` |
 
 ## Volume Mounting for Sessions
 
@@ -129,22 +129,22 @@ Persist sessions to the host filesystem so they survive container restarts:
 
 ```bash
 docker run -d \
-  --name zclaw \
+  --name zoe \
   -p 7337:7337 \
   --env-file .env \
-  -v zclaw-sessions:/data/sessions \
-  zclaw-server
+  -v zoe-sessions:/data/sessions \
+  zoe-server
 ```
 
 Or bind-mount a specific directory:
 
 ```bash
 docker run -d \
-  --name zclaw \
+  --name zoe \
   -p 7337:7337 \
   --env-file .env \
   -v $(pwd)/sessions:/data/sessions \
-  zclaw-server
+  zoe-server
 ```
 
 ## Docker Compose
@@ -153,8 +153,8 @@ Create a `docker-compose.yml` for a complete deployment with Redis for session s
 
 ```yaml
 services:
-  zclaw:
-    image: zclaw-server
+  zoe:
+    image: zoe-server
     build: .
     ports:
       - "7337:7337"
@@ -164,9 +164,9 @@ services:
       - LLM_PROVIDER=openai
       - OPENAI_MODEL=gpt-5.4
       - TAVILY_API_KEY=${TAVILY_API_KEY}
-      - ZCLAW_SKILLS_PATH=/mnt/skills
-      - ZCLAW_SESSION_DIR=/data/sessions
-      - ZCLAW_SESSION_TTL=86400
+      - ZOE_SKILLS_PATH=/mnt/skills
+      - ZOE_SESSION_DIR=/data/sessions
+      - ZOE_SESSION_TTL=86400
     volumes:
       - ./skills:/mnt/skills
       - ./sessions:/data/sessions
@@ -187,7 +187,7 @@ docker compose up -d
 Check logs:
 
 ```bash
-docker compose logs -f zclaw
+docker compose logs -f zoe
 ```
 
 Stop all services:
@@ -202,11 +202,11 @@ Mount a directory of custom skills into the container:
 
 ```bash
 docker run -d \
-  --name zclaw \
+  --name zoe \
   -p 7337:7337 \
   --env-file .env \
   -v $(pwd)/my-skills:/mnt/skills \
-  zclaw-server
+  zoe-server
 ```
 
 Skills in `/mnt/skills/` are automatically discovered. Each skill is a subdirectory containing a `SKILL.md` file:
@@ -226,7 +226,7 @@ my-skills/
 ```bash
 curl -X POST http://localhost:7337/v1/chat \
   -H "Content-Type: application/json" \
-  -H "X-Zclaw-API-Key: sk_zclaw_..." \
+  -H "X-Zoe-API-Key: sk_zoe_..." \
   -d '{
     "message": "List files in the current directory",
     "tools": ["execute_shell_command"],
@@ -237,7 +237,7 @@ curl -X POST http://localhost:7337/v1/chat \
 ### SDK
 
 ```typescript
-import { generateText } from "zclaw-core";
+import { generateText } from "zoe-agent";
 
 // Point at the Docker instance
 const result = await generateText("Analyze the server logs", {
@@ -255,21 +255,21 @@ curl http://localhost:7337/v1/health
 
 ```bash
 # View logs
-docker logs -f zclaw
+docker logs -f zoe
 
 # Restart
-docker restart zclaw
+docker restart zoe
 
 # Stop
-docker stop zclaw
+docker stop zoe
 
 # Remove
-docker rm zclaw
+docker rm zoe
 
 # Update to latest
-docker pull zclaw-server:latest
-docker stop zclaw && docker rm zclaw
-docker run -d --name zclaw ... zclaw-server:latest
+docker pull zoe-server:latest
+docker stop zoe && docker rm zoe
+docker run -d --name zoe ... zoe-server:latest
 ```
 
 ## Browser Tools (Playwright/Chromium)

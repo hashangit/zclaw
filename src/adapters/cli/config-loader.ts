@@ -1,5 +1,5 @@
 /**
- * ZClaw CLI — Config Loader
+ * Zoe CLI — Config Loader
  *
  * Re-exports core config utilities and adds CLI-specific chalk output.
  */

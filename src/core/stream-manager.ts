@@ -1,5 +1,5 @@
 /**
- * ZClaw Core — StreamManager
+ * Zoe Core — StreamManager
  *
  * Shared streaming queue management for text deltas, step results,
  * and SSE conversion. Eliminates duplication between SDK's streamText()

@@ -1,15 +1,15 @@
 ---
 title: SDK Overview
-description: ZClaw SDK architecture, installation, and quick-start guide.
+description: Zoe Agent SDK architecture, installation, and quick-start guide.
 ---
 
 # SDK Overview
 
-ZClaw is a headless AI agent framework for building LLM-powered applications. The SDK provides a functional, composable API -- no class hierarchies, no boilerplate. Import a function, pass a prompt, get a result.
+Zoe Agent is a headless AI agent framework for building LLM-powered applications. The SDK provides a functional, composable API -- no class hierarchies, no boilerplate. Import a function, pass a prompt, get a result.
 
 ## Architecture
 
-ZClaw is organized in three layers of increasing statefulness:
+Zoe Agent is organized in three layers of increasing statefulness:
 
 ```
 generateText()   -- One-shot. Stateless. No memory between calls.
@@ -34,15 +34,15 @@ Configuration is passed as options objects. Return types are plain interfaces. T
 ::: code-group
 
 ```bash [npm]
-npm install zclaw-core
+npm install zoe-agent
 ```
 
 ```bash [pnpm]
-pnpm add zclaw-core
+pnpm add zoe-agent
 ```
 
 ```bash [yarn]
-yarn add zclaw-core
+yarn add zoe-agent
 ```
 
 :::
@@ -52,7 +52,7 @@ yarn add zclaw-core
 ::: code-group
 
 ```typescript [ESM -- recommended]
-import { generateText, streamText, createAgent } from "zclaw-core";
+import { generateText, streamText, createAgent } from "zoe-agent";
 ```
 
 ```typescript [SDK types only]
@@ -61,19 +61,19 @@ import type {
   GenerateTextResult,
   StreamTextResult,
   SdkAgent,
-} from "zclaw-core";
+} from "zoe-agent";
 ```
 
 ```typescript [Tools and factories]
-import { tool, CORE_TOOLS, COMM_TOOLS, ADVANCED_TOOLS, ALL_TOOLS } from "zclaw-core";
+import { tool, CORE_TOOLS, COMM_TOOLS, ADVANCED_TOOLS, ALL_TOOLS } from "zoe-agent";
 ```
 
 ```typescript [React integration]
-import { createUseChat } from "zclaw-core/react";
+import { createUseChat } from "zoe-agent/react";
 ```
 
 ```typescript [Server]
-import { createServer } from "zclaw-core/server";
+import { createServer } from "zoe-agent/server";
 ```
 
 :::
@@ -83,7 +83,7 @@ import { createServer } from "zclaw-core/server";
 ### One-shot text generation
 
 ```typescript
-import { generateText } from "zclaw-core";
+import { generateText } from "zoe-agent";
 
 const result = await generateText("Explain recursion in one paragraph");
 console.log(result.text);
@@ -93,7 +93,7 @@ console.log(result.usage.totalTokens);
 ### Streaming
 
 ```typescript
-import { streamText } from "zclaw-core";
+import { streamText } from "zoe-agent";
 
 const stream = await streamText("Write a haiku about programming", {
   onText: (delta) => process.stdout.write(delta),
@@ -105,7 +105,7 @@ const finalText = await stream.fullText;
 ### Multi-turn agent
 
 ```typescript
-import { createAgent } from "zclaw-core";
+import { createAgent } from "zoe-agent";
 
 const agent = await createAgent({
   model: "gpt-5.4",
@@ -123,7 +123,7 @@ console.log(followUp.text);
 ### Custom tools
 
 ```typescript
-import { generateText, tool } from "zclaw-core";
+import { generateText, tool } from "zoe-agent";
 import { z } from "zod";
 
 const weatherTool = tool({
@@ -140,7 +140,7 @@ const result = await generateText("What is the weather in Tokyo?", {
 ### HTTP SSE endpoint
 
 ```typescript
-import { streamText } from "zclaw-core";
+import { streamText } from "zoe-agent";
 
 app.get("/chat", async (req, res) => {
   const stream = await streamText(req.query.prompt as string);
@@ -150,7 +150,7 @@ app.get("/chat", async (req, res) => {
 
 ## Provider support
 
-ZClaw supports multiple LLM providers out of the box:
+Zoe Agent supports multiple LLM providers out of the box:
 
 | Provider         | `provider` value      | Default model                  |
 | ---------------- | --------------------- | ------------------------------ |
@@ -159,11 +159,11 @@ ZClaw supports multiple LLM providers out of the box:
 | GLM              | `"glm"`               | `opus`                          |
 | OpenAI-compatible| `"openai-compatible"` | `gpt-5.4` (configurable `baseUrl`) |
 
-Configure providers via environment variables, `.env`, or the `zclaw setup` CLI wizard.
+Configure providers via environment variables, `.env`, or the `zoe setup` CLI wizard.
 
 ## Built-in tools
 
-ZClaw ships with a set of built-in tools organized into groups:
+Zoe Agent ships with a set of built-in tools organized into groups:
 
 | Group      | Tools                                                       |
 | ---------- | ----------------------------------------------------------- |

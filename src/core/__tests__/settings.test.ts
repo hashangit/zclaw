@@ -94,7 +94,7 @@ describe('settings-schema', () => {
   it('ENV_VAR_MAP has entries for settings with env var overrides', () => {
     expect(ENV_VAR_MAP.get('providers.openai.apiKey')).toBe('OPENAI_API_KEY');
     expect(ENV_VAR_MAP.get('smtp.host')).toBe('SMTP_HOST');
-    expect(ENV_VAR_MAP.get('agent.permissionLevel')).toBe('ZCLAW_PERMISSION');
+    expect(ENV_VAR_MAP.get('agent.permissionLevel')).toBe('ZOE_PERMISSION');
   });
 
   it('provider dot-keys map to correct AppConfig paths', () => {
@@ -113,7 +113,7 @@ describe('SettingsManager', () => {
   let configPath: string;
 
   beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zclaw-test-'));
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zoe-test-'));
     configPath = path.join(tmpDir, 'setting.json');
   });
 
@@ -279,26 +279,26 @@ describe('SettingsManager', () => {
   });
 
   it('get() ignores empty-string env var and falls back to default', () => {
-    process.env.ZCLAW_GATEWAY_ENABLED = '';
+    process.env.ZOE_GATEWAY_ENABLED = '';
     try {
       const mgr = createTestManager();
       const result = mgr.get('gateway.enabled');
       expect(result.value).toBe(true);
       expect(result.origin).toBe('default');
     } finally {
-      delete process.env.ZCLAW_GATEWAY_ENABLED;
+      delete process.env.ZOE_GATEWAY_ENABLED;
     }
   });
 
   it('get() respects explicit false env var', () => {
-    process.env.ZCLAW_GATEWAY_ENABLED = 'false';
+    process.env.ZOE_GATEWAY_ENABLED = 'false';
     try {
       const mgr = createTestManager();
       const result = mgr.get('gateway.enabled');
       expect(result.value).toBe(false);
-      expect(result.origin).toBe('env: ZCLAW_GATEWAY_ENABLED');
+      expect(result.origin).toBe('env: ZOE_GATEWAY_ENABLED');
     } finally {
-      delete process.env.ZCLAW_GATEWAY_ENABLED;
+      delete process.env.ZOE_GATEWAY_ENABLED;
     }
   });
 });

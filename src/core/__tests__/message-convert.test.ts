@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   estimateTokens,
-  toZclawError,
+  toZoeError,
   messageToProviderMessage,
   providerToolCallToToolCall,
 } from "../message-convert.js";
-import { ZclawError, ProviderError, ToolError } from "../errors.js";
+import { ZoeError, ProviderError, ToolError } from "../errors.js";
 
 describe("estimateTokens", () => {
   it("returns ceil(length/4)", () => {
@@ -17,30 +17,30 @@ describe("estimateTokens", () => {
   });
 });
 
-describe("toZclawError", () => {
+describe("toZoeError", () => {
   it("creates ProviderError for PROVIDER_ERROR code", () => {
-    const err = toZclawError(new Error("timeout"), "PROVIDER_ERROR");
+    const err = toZoeError(new Error("timeout"), "PROVIDER_ERROR");
     expect(err).toBeInstanceOf(ProviderError);
     expect(err.message).toBe("timeout");
   });
 
   it("creates ToolError for TOOL_FAILED code", () => {
-    const err = toZclawError("something bad", "TOOL_FAILED");
+    const err = toZoeError("something bad", "TOOL_FAILED");
     expect(err).toBeInstanceOf(ToolError);
     expect(err.message).toBe("something bad");
   });
 
-  it("creates ZclawError for unknown codes", () => {
-    const err = toZclawError("oops", "UNKNOWN");
-    expect(err).toBeInstanceOf(ZclawError);
+  it("creates ZoeError for unknown codes", () => {
+    const err = toZoeError("oops", "UNKNOWN");
+    expect(err).toBeInstanceOf(ZoeError);
     expect(err.code).toBe("UNKNOWN");
   });
 
   it("sets retryable=true for PROVIDER_ERROR on default path", () => {
-    const err = toZclawError("x", "PROVIDER_ERROR");
+    const err = toZoeError("x", "PROVIDER_ERROR");
     // The switch case creates a ProviderError, but the default path is covered
     // by testing a code that falls through:
-    const generic = toZclawError("x", "PROVIDER_ERROR");
+    const generic = toZoeError("x", "PROVIDER_ERROR");
     expect(generic.retryable).toBe(true);
   });
 });

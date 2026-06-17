@@ -1,5 +1,5 @@
 {
-  "name": "zclaw-core",
+  "name": "zoe-agent",
   "version": "0.3.0",
   "type": "module",
   "main": "dist/adapters/cli/index.js",
@@ -15,8 +15,8 @@
   },
   "types": "./dist/adapters/sdk/index.d.ts",
   "bin": {
-    "zclaw": "dist/adapters/cli/index.js",
-    "zclaw-server": "dist/adapters/server/standalone.js"
+    "zoe": "dist/adapters/cli/index.js",
+    "zoe-server": "dist/adapters/server/standalone.js"
   },
   "scripts": {
     "build": "tsc",
@@ -69,12 +69,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hashangit/zclaw.git"
+    "url": "git+https://github.com/hashangit/zoe-agent.git"
   },
   "bugs": {
-    "url": "https://github.com/hashangit/zclaw/issues"
+    "url": "https://github.com/hashangit/zoe-agent/issues"
   },
-  "homepage": "https://hashangit.github.io/zclaw/",
+  "homepage": "https://hashangit.github.io/zoe-agent/",
   "description": "A headless AI agent framework with CLI, SDK, and server adapters — skills, multi-provider LLM support, and Docker-native deployment.",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",

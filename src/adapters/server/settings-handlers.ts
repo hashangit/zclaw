@@ -1,5 +1,5 @@
 /**
- * ZClaw Server — Settings REST & WebSocket Handlers
+ * Zoe Server — Settings REST & WebSocket Handlers
  *
  * REST endpoints and WS message handlers for settings management.
  */
@@ -189,7 +189,7 @@ export async function handleGetSettingsSchema(
 
   sendJSON(res, 200, {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
-    title: 'ZClaw Settings',
+    title: 'Zoe Agent Settings',
     type: 'object',
     properties,
   });

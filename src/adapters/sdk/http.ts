@@ -1,5 +1,5 @@
 /**
- * ZClaw SDK — HTTP response helpers
+ * Zoe SDK — HTTP response helpers
  *
  * Converts StreamTextResult into HTTP-friendly SSE responses
  * using the Web API Response and ReadableStream interfaces.

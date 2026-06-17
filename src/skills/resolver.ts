@@ -3,7 +3,7 @@
  *
  * Supported patterns:
  * - @path/to/file         — relative to project root (process.cwd())
- * - @zclaw_documents/file — resolves to ~/zclaw_documents/file
+ * - @zoe_documents/file — resolves to ~/zoe_documents/file
  * - @~/path/to/file       — explicit home directory path
  *
  * Resolution flow:
@@ -24,12 +24,12 @@ const MAX_TOTAL_RESOLVED_SIZE = 2 * 1024 * 1024; // 2MB total across all inlined
 
 /**
  * Extract all @reference patterns from text.
- * Matches @path/to/file, @zclaw_documents/foo, @~/foo/bar
+ * Matches @path/to/file, @zoe_documents/foo, @~/foo/bar
  * Does NOT match email addresses (requires word boundary before @)
  */
 function extractReferences(text: string): string[] {
   // Match @path patterns but exclude email addresses
-  // Pattern: @ followed by a path-like string (no spaces, starts with alphanumeric or ~ or zclaw_documents)
+  // Pattern: @ followed by a path-like string (no spaces, starts with alphanumeric or ~ or zoe_documents)
   const pattern = /(?:^|[^a-zA-Z0-9])@(~?\/?[a-zA-Z0-9_][a-zA-Z0-9_./-]*)/g;
   const matches: string[] = [];
   let match;
@@ -50,8 +50,8 @@ function resolveReference(refPath: string, projectRoot: string): string {
     return resolve(join(homedir(), refPath.slice(2)));
   }
 
-  // @zclaw_documents/... → ~/zclaw_documents/...
-  if (refPath.startsWith('zclaw_documents/') || refPath === 'zclaw_documents') {
+  // @zoe_documents/... → ~/zoe_documents/...
+  if (refPath.startsWith('zoe_documents/') || refPath === 'zoe_documents') {
     return resolve(join(homedir(), refPath));
   }
 
@@ -67,8 +67,8 @@ function isPathAllowed(resolvedPath: string, projectRoot: string): boolean {
   const home = homedir();
   const allowedPrefixes = [
     projectRoot,                    // Project files (read-only via @)
-    join(home, 'zclaw_documents'),  // Agent workspace
-    join(home, '.zclaw'),           // Config/skills
+    join(home, 'zoe_documents'),  // Agent workspace
+    join(home, '.zoe'),           // Config/skills
   ];
 
   return allowedPrefixes.some(prefix => resolvedPath.startsWith(prefix));

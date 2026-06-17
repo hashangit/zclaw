@@ -1,14 +1,14 @@
-# ZClaw - Complete Feature Documentation
+# Zoe Agent - Complete Feature Documentation
 
 **Version:** 1.0.40
 **License:** MIT
-**Repository:** https://github.com/hashangit/zclaw
+**Repository:** https://github.com/hashangit/zoe-agent
 
 ---
 
 ## Overview
 
-ZClaw is an engineering-first headless AI agent framework designed for scalable automation in containerized environments. It combines LLM-powered decision making with 23 specialized tools to automate system administration, web operations, communications, media generation, and external API integration tasks.
+Zoe Agent is an engineering-first headless AI agent framework designed for scalable automation in containerized environments. It combines LLM-powered decision making with 23 specialized tools to automate system administration, web operations, communications, media generation, and external API integration tasks.
 
 ---
 
@@ -30,9 +30,9 @@ ZClaw is an engineering-first headless AI agent framework designed for scalable 
 | 11 | Headless Mode | `--no-interactive` Flag | Execute single query and exit without entering chat loop | One-Shot Automation | Perfect for scripts, CI/CD pipelines, and automated workflows |
 | 12 | Auto-Confirm Mode | `-y` / `--yes` Flag | Automatically approve all tool executions without user prompts | Unattended Operation | Enables fully automated scripts and batch processing without manual intervention |
 | **CLI & USER INTERFACE** |
-| 13 | Main Command | `zclaw [query]` | Default chat command that starts interactive agent with optional initial query | Quick Start | Users can immediately start working by typing a single command |
-| 14 | Setup Wizard | `zclaw setup` Command | Interactive Inquirer-based configuration wizard | Guided Configuration | Users don't need to manually edit config files; wizard walks them through setup |
-| 15 | Project Config | `zclaw setup --project` | Saves configuration to project-level (`.zclaw/setting.json`) | Per-Project Settings | Different projects can have different configurations (API keys, models, etc.) |
+| 13 | Main Command | `zoe [query]` | Default chat command that starts interactive agent with optional initial query | Quick Start | Users can immediately start working by typing a single command |
+| 14 | Setup Wizard | `zoe setup` Command | Interactive Inquirer-based configuration wizard | Guided Configuration | Users don't need to manually edit config files; wizard walks them through setup |
+| 15 | Project Config | `zoe setup --project` | Saves configuration to project-level (`.zoe/setting.json`) | Per-Project Settings | Different projects can have different configurations (API keys, models, etc.) |
 | 16 | Provider Selection | `-p, --provider <provider>` Flag | CLI flag to specify provider (openai-compatible|openai|anthropic|glm) | Provider Override | Users can override default provider per-command |
 | 17 | Models Command | `/models` Interactive Command | In-chat command to switch between configured providers | Provider Switching | Change AI providers without leaving the conversation |
 | 18 | Version Display | `-v` / `--version` Flag | Displays current version information | Version Tracking | Users can quickly check which version they're running |
@@ -92,8 +92,8 @@ ZClaw is an engineering-first headless AI agent framework designed for scalable 
 | 67 | Hierarchical Config | 4-Tier Priority System | CLI args > Env vars > Project config > Global config | Flexible Configuration | Users can override settings at different levels for different scenarios |
 | 68 | API Key Storage | Encrypted Config Storage | Secure storage of API keys in config files | Persistent Credentials | Don't need to re-enter API keys every session |
 | 69 | Environment Variables | `.env` File Support | Load configuration from environment variables | CI/CD Integration | Secrets can be managed via environment in production |
-| 70 | Global Config | `~/.zclaw/setting.json` | User-level configuration applies to all projects | Default Settings | Set once, use everywhere; no repeated configuration |
-| 71 | Project Config | `./.zclaw/setting.json` | Project-specific configuration | Project Isolation | Different projects can use different models, API keys |
+| 70 | Global Config | `~/.zoe/setting.json` | User-level configuration applies to all projects | Default Settings | Set once, use everywhere; no repeated configuration |
+| 71 | Project Config | `./.zoe/setting.json` | Project-specific configuration | Project Isolation | Different projects can use different models, API keys |
 | 72 | Image Configuration | Separate Image API Settings | Independent API key and base URL for image generation | Multi-Service Support | Can use different providers for chat vs. images |
 | 73 | Image Defaults | Default Size/Quality/Style/N | Configurable defaults for image generation parameters | Personalized Defaults | Set your preferred image settings once |
 | 74 | SMTP Configuration | Full SMTP Settings | Host, port, user, password, from address configuration | Email Integration | Configure once, send emails anytime |
@@ -106,7 +106,7 @@ ZClaw is an engineering-first headless AI agent framework designed for scalable 
 | 80 | API Key Input | Masked Password Input | API keys are hidden during input | Secure Entry | Shoulder-surfing protection during setup |
 | 81 | Optional Services | Conditional Service Prompts | Only asks about services user wants to configure | Customized Setup | Users aren't overwhelmed with irrelevant configuration |
 | 82 | Secret Preservation | Preserve Existing Secrets | Doesn't overwrite existing secrets when left empty | Safe Re-Configuration | Can update some settings without losing others |
-| 83 | Auto Directory Creation | Config Directory Creation | Automatically creates `~/.zclaw` or `.zclaw/` directories | No Manual Setup | Users don't need to create directories manually |
+| 83 | Auto Directory Creation | Config Directory Creation | Automatically creates `~/.zoe` or `.zoe/` directories | No Manual Setup | Users don't need to create directories manually |
 | 84 | Secure Permissions | 0o600 File Permissions | Config files created with owner-read-write only | File Security | Sensitive credentials protected from other users |
 | **DOCKER & CONTAINERIZATION** |
 | 85 | Headless Design | No GUI Dependencies | Designed to run without display or desktop environment | Container-Native | Runs in minimal Docker containers without X11 |
@@ -124,7 +124,7 @@ ZClaw is an engineering-first headless AI agent framework designed for scalable 
 | 96 | Build System | pnpm Build Scripts | Production build compiles TypeScript to `dist/` | Optimized Distribution | Production code is compiled and optimized |
 | 97 | Dev Mode | `pnpm run dev` | Development mode with ts-node for instant iteration | Fast Development | No build step needed during development |
 | 98 | Install Scripts | Windows (.bat) and Unix (.sh) | Platform-specific installation scripts | Easy Installation | Users can install with single command on any OS |
-| 99 | Global Binary | NPM Global Installation | Installs `zclaw` command globally | System-Wide Access | Command available from any directory |
+| 99 | Global Binary | NPM Global Installation | Installs `zoe` command globally | System-Wide Access | Command available from any directory |
 | 100 | Package Filtering | .npmignore Configuration | Excludes source and config from npm package | Clean Distribution | Users only get what they need |
 | **ERROR HANDLING & RELIABILITY** |
 | 101 | Signal Handling | SIGINT/SIGTERM Capture | Gracefully handles Ctrl+C and termination signals | Safe Interruption | Can stop without corrupting files or leaving orphans |
@@ -204,8 +204,8 @@ ZClaw is an engineering-first headless AI agent framework designed for scalable 
 | **PACKAGE INFORMATION** |
 | 169 | Version | 1.0.40 | Current release version | Stable Release | Production-ready software |
 | 170 | License | MIT License | Open source MIT license | Free to Use | Can use commercially, modify, distribute |
-| 171 | NPM Package | `zclaw-core` | Published on NPM registry | Easy Installation | `npm install -g zclaw-core-core` |
-| 172 | GitHub Repo | hashangit/zclaw | Source code on GitHub | Open Development | Can contribute, report issues, fork |
+| 171 | NPM Package | `zoe-agent` | Published on NPM registry | Easy Installation | `npm install -g zoe-agent-core` |
+| 172 | GitHub Repo | hashangit/zoe-agent | Source code on GitHub | Open Development | Can contribute, report issues, fork |
 | 173 | Keywords | ai, cli, agent, automation, openai, docker, headless, devops, llm, typescript, orchestration, infrastructure, terminal | Package keywords | Discoverable | Easy to find via search |
 
 ---
@@ -338,42 +338,42 @@ In a TTY the CLI launches a full-screen Ink/React TUI (`src/adapters/cli/tui/`, 
 
 ```bash
 # Install globally
-npm install -g zclaw-core
+npm install -g zoe-agent
 
 # Run interactive mode
-zclaw
+zoe
 
 # Run with initial query
-zclaw "List all files in current directory"
+zoe "List all files in current directory"
 
 # Run headless (one-shot)
-zclaw --no-interactive "Summarize README.md"
+zoe --no-interactive "Summarize README.md"
 
 # Run with auto-confirm
-zclaw -y "Delete all .log files"
+zoe -y "Delete all .log files"
 
 # Run with specific model
-zclaw -m "gpt-4-turbo" "Write a Python script"
+zoe -m "gpt-4-turbo" "Write a Python script"
 
 # Run with specific provider
-zclaw -p anthropic "Generate code"
+zoe -p anthropic "Generate code"
 
 # Setup wizard
-zclaw setup
+zoe setup
 
 # Project-specific setup
-zclaw setup --project
+zoe setup --project
 ```
 
 ---
 
 ## Documentation
 
-- **README:** `/Users/hashanw/Developer/zclaw/README.md`
-- **Contributing Guide:** `/Users/hashanw/Developer/zclaw/CONTRIBUTING.md`
-- **GitHub:** https://github.com/hashangit/zclaw
-- **NPM:** https://www.npmjs.com/package/zclaw-core
+- **README:** `/Users/hashanw/Developer/zoe/README.md`
+- **Contributing Guide:** `/Users/hashanw/Developer/zoe/CONTRIBUTING.md`
+- **GitHub:** https://github.com/hashangit/zoe-agent
+- **NPM:** https://www.npmjs.com/package/zoe-agent
 
 ---
 
-*This document was auto-generated to provide a comprehensive feature overview of ZClaw version 1.0.40.*
+*This document was auto-generated to provide a comprehensive feature overview of Zoe Agent version 1.0.40.*

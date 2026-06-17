@@ -1,5 +1,5 @@
 /**
- * ZClaw SDK — Session persistence
+ * Zoe SDK — Session persistence
  *
  * Provides composable persistence backends for storing conversation history.
  * Built-in "file" and "memory" backends are registered by default. Custom
@@ -35,7 +35,7 @@ function validateSessionId(sessionId: string): void {
 // ── Default path ────────────────────────────────────────────────────────
 
 function defaultSessionPath(): string {
-  return join(homedir(), ".zclaw", "sessions");
+  return join(homedir(), ".zoe", "sessions");
 }
 
 // ── File-based PersistenceBackend ───────────────────────────────────────

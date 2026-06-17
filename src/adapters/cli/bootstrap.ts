@@ -1,5 +1,5 @@
 /**
- * ZClaw CLI — Shared session bootstrap
+ * Zoe CLI — Shared session bootstrap
  *
  * The setup phase that both dispatch paths need: config load + merge,
  * provider resolution (+ interactive setup wizard), permission level,
@@ -7,7 +7,7 @@
  *
  * Extracted verbatim from `runChat()` so the readline fallback and the
  * Ink TUI share one setup path — no duplicated ~175 lines, and
- * `zclaw -n` stays byte-identical (the setup prints only the same
+ * `zoe -n` stays byte-identical (the setup prints only the same
  * interactive-gated status messages as before). UI chrome (welcome
  * banner, "agent initialized", the readline loop) stays in the caller.
  */
@@ -74,7 +74,7 @@ export async function bootstrapCliSession(options: any): Promise<CliSessionConte
       : undefined;
     permissionLevel = resolvePermissionLevel(
       flagLevel,
-      process.env.ZCLAW_PERMISSION,
+      process.env.ZOE_PERMISSION,
       fullConfig.permissionLevel,
     );
   }
@@ -145,7 +145,7 @@ export async function bootstrapCliSession(options: any): Promise<CliSessionConte
   const launchMode = resolveLaunchMode(options);
   const systemPrompt = selectSystemPrompt(launchMode);
   // Session persistence — single file backend shared by the REPL, TUI, and the
-  // session selector overlay. Default path is ~/.zclaw/sessions (see Core's
+  // session selector overlay. Default path is ~/.zoe/sessions (see Core's
   // defaultSessionPath()). Disabled backends can be added via registerBackend().
   const persistence = createPersistenceBackend({ type: 'file' });
   const agent = new Agent(provider, model, fullConfig, systemPrompt, persistence, activeProviderType as ProviderType);
@@ -170,7 +170,7 @@ export async function bootstrapCliSession(options: any): Promise<CliSessionConte
         maxAuditLogsInMemory: settingsManager.get('gateway.maxAuditLogs').value as number,
       };
       const { GatewaySettingsAdapter } = await import('../../gateway/settings-adapter.js');
-      const gwStorageDir = process.env.ZCLAW_GATEWAY_DIR ?? path.join(os.homedir(), '.zclaw');
+      const gwStorageDir = process.env.ZOE_GATEWAY_DIR ?? path.join(os.homedir(), '.zoe');
       const gwSettingsAdapter = new GatewaySettingsAdapter(gwStorageDir);
       await gwSettingsAdapter.initialize();
 
@@ -189,8 +189,8 @@ export async function bootstrapCliSession(options: any): Promise<CliSessionConte
     console.warn(chalk.yellow(`Gateway initialization skipped: ${e instanceof Error ? e.message : String(e)}`));
   }
 
-  // Ensure ~/zclaw_documents exists
-  const docsDir = path.join(os.homedir(), 'zclaw_documents');
+  // Ensure ~/zoe_documents exists
+  const docsDir = path.join(os.homedir(), 'zoe_documents');
   if (!fs.existsSync(docsDir)) {
     fs.mkdirSync(docsDir, { recursive: true });
     for (const sub of ['notes', 'templates', 'output', 'knowledge']) {

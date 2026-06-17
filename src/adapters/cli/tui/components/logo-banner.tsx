@@ -26,7 +26,7 @@ const COLS = Math.max(...ART_LINES.map((l) => [...l].length));
  * Zoe Agent logo — figlet wordmark with a Tokyo Night 45° rainbow gradient
  * (lolcat-style sweep, our palette) + a dim descriptor. Rendered as the first
  * feed entry (kind: 'logo') on a fresh session, so it scrolls away as the user
- * chats. Rename is logo-only: the rest of the UI still says ZClaw.
+ * chats.
  */
 export function LogoBanner() {
   const theme = useTheme();

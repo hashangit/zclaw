@@ -1,8 +1,8 @@
 /**
- * ZClaw Server — API Key Authentication
+ * Zoe Server — API Key Authentication
  *
  * Generates, validates, and manages API keys for server access.
- * Keys are stored in ~/.zclaw/server-keys.json with associated scopes.
+ * Keys are stored in ~/.zoe/server-keys.json with associated scopes.
  */
 
 import * as crypto from "crypto";
@@ -29,7 +29,7 @@ interface KeyStore {
 
 // ── Defaults ───────────────────────────────────────────────────────────
 
-const DEFAULT_KEY_PATH = path.join(os.homedir(), ".zclaw", "server-keys.json");
+const DEFAULT_KEY_PATH = path.join(os.homedir(), ".zoe", "server-keys.json");
 
 // ── In-memory cache ────────────────────────────────────────────────────
 
@@ -93,7 +93,7 @@ function loadCache(filePath: string): Map<string, ApiKeyEntry> {
 // ── Public API ─────────────────────────────────────────────────────────
 
 /**
- * Generate a new API key with the format `sk_zclaw_{random}`.
+ * Generate a new API key with the format `sk_zoe_{random}`.
  * Optionally persist it to the key store file.
  */
 export function generateApiKey(
@@ -101,7 +101,7 @@ export function generateApiKey(
   options?: { label?: string; filePath?: string },
 ): ApiKeyEntry {
   const random = crypto.randomBytes(32).toString("hex");
-  const key = `sk_zclaw_${random}`;
+  const key = `sk_zoe_${random}`;
 
   const entry: ApiKeyEntry = {
     key,
@@ -128,7 +128,7 @@ export function validateApiKey(
   key: string,
   options?: { filePath?: string },
 ): ApiKeyEntry | null {
-  if (!key || !key.startsWith("sk_zclaw_")) {
+  if (!key || !key.startsWith("sk_zoe_")) {
     return null;
   }
 
@@ -140,8 +140,8 @@ export function validateApiKey(
 /**
  * Extract and validate an API key from an incoming HTTP request.
  *
- * For REST requests: checks `X-Zclaw-API-Key` header first,
- * then `Authorization: Bearer sk_zclaw_...`.
+ * For REST requests: checks `X-Zoe-API-Key` header first,
+ * then `Authorization: Bearer sk_zoe_...`.
  * For WebSocket upgrades: checks the `token` query parameter.
  *
  * Returns the ApiKeyEntry if valid, or null if authentication fails.
@@ -151,15 +151,15 @@ export function authMiddleware(
 ): ApiKeyEntry | null {
   let key: string | undefined;
 
-  // 1. Check X-Zclaw-API-Key header
-  key = req.headers["x-zclaw-api-key"] as string | undefined;
+  // 1. Check X-Zoe-API-Key header
+  key = req.headers["x-zoe-api-key"] as string | undefined;
 
-  // 2. Check Authorization: Bearer sk_zclaw_...
+  // 2. Check Authorization: Bearer sk_zoe_...
   if (!key) {
     const auth = req.headers.authorization;
     if (auth?.startsWith("Bearer ")) {
       const token = auth.slice(7).trim();
-      if (token.startsWith("sk_zclaw_")) {
+      if (token.startsWith("sk_zoe_")) {
         key = token;
       }
     }
@@ -170,7 +170,7 @@ export function authMiddleware(
     try {
       const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
       const tokenParam = url.searchParams.get("token");
-      if (tokenParam?.startsWith("sk_zclaw_")) {
+      if (tokenParam?.startsWith("sk_zoe_")) {
         key = tokenParam;
       }
     } catch {

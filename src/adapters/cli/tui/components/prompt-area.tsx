@@ -100,7 +100,7 @@ export function PromptArea({ value, onChange, onSubmit, onHistoryUp, onHistoryDo
           ignoreArrows={showDropdown}
           onHistoryUp={onHistoryUp}
           onHistoryDown={onHistoryDown}
-          placeholder="Ask ZClaw — type / for commands, @ for files (Shift+Enter newline)"
+          placeholder="Ask Zoe Agent — type / for commands, @ for files (Shift+Enter newline)"
         />
       </Box>
     </Box>

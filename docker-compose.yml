@@ -1,8 +1,8 @@
 # =============================================================================
-# ZClaw Docker Compose — Server Mode
+# Zoe Docker Compose — Server Mode
 # =============================================================================
 # Start:     docker compose up -d
-# Logs:      docker compose logs -f zclaw
+# Logs:      docker compose logs -f zoe
 # Stop:      docker compose down
 # Rebuild:  docker compose up -d --build
 #
@@ -10,12 +10,12 @@
 # =============================================================================
 
 services:
-  zclaw:
+  zoe:
     build:
       context: .
       dockerfile: Dockerfile
-    image: zclaw:latest
-    container_name: zclaw-server
+    image: zoe:latest
+    container_name: zoe-server
     restart: unless-stopped
 
     # Load environment variables from .env file
@@ -25,8 +25,8 @@ services:
 
     # Runtime environment overrides
     environment:
-      - ZCLAW_SHELL_APPROVE=auto   # auto-approve shell commands in container
-      - ZCLAW_SESSION_DIR=/data/sessions
+      - ZOE_SHELL_APPROVE=auto   # auto-approve shell commands in container
+      - ZOE_SESSION_DIR=/data/sessions
 
     # Port mapping — server listens on 7337 by default
     ports:
@@ -35,7 +35,7 @@ services:
     # Persistent volume mounts
     volumes:
       # Session data persists across restarts
-      - zclaw-sessions:/data/sessions
+      - zoe-sessions:/data/sessions
       # Mount custom skills into the container
       - ./skills:/mnt/skills:ro
       # Working directory for agent file operations
@@ -68,5 +68,5 @@ services:
           memory: 256M
 
 volumes:
-  zclaw-sessions:
+  zoe-sessions:
     driver: local

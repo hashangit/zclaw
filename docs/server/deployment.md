@@ -1,11 +1,11 @@
 ---
 title: Deployment
-description: Deploy ZClaw Server with Docker, Cloud Run, or bare metal. Error codes, provider configuration, and production notes.
+description: Deploy Zoe Agent Server with Docker, Cloud Run, or bare metal. Error codes, provider configuration, and production notes.
 ---
 
 # Deployment
 
-ZClaw Server is a stateless Node.js process that can be deployed as a Docker container, on Cloud Run, or directly on any Node.js host.
+Zoe Agent Server is a stateless Node.js process that can be deployed as a Docker container, on Cloud Run, or directly on any Node.js host.
 
 ## Docker
 
@@ -14,8 +14,8 @@ ZClaw Server is a stateless Node.js process that can be deployed as a Docker con
 ```bash
 docker run -d -p 7337:7337 \
   -e ANTHROPIC_API_KEY=sk-ant-... \
-  -v ~/.zclaw:/root/.zclaw \
-  zclaw-server
+  -v ~/.zoe:/root/.zoe \
+  zoe-server
 ```
 
 ### With multiple providers
@@ -26,8 +26,8 @@ docker run -d -p 7337:7337 \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -e GLM_API_KEY=... \
   -e LLM_PROVIDER=anthropic \
-  -v ~/.zclaw:/root/.zclaw \
-  zclaw-server
+  -v ~/.zoe:/root/.zoe \
+  zoe-server
 ```
 
 ### With custom session directory
@@ -35,17 +35,17 @@ docker run -d -p 7337:7337 \
 ```bash
 docker run -d -p 7337:7337 \
   -e ANTHROPIC_API_KEY=sk-ant-... \
-  -e ZCLAW_SESSION_DIR=/data/sessions \
+  -e ZOE_SESSION_DIR=/data/sessions \
   -v session-data:/data/sessions \
-  zclaw-server
+  zoe-server
 ```
 
 ### Docker Compose
 
 ```yaml
 services:
-  zclaw:
-    image: zclaw-server
+  zoe:
+    image: zoe-server
     build: .
     ports:
       - "7337:7337"
@@ -53,9 +53,9 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - LLM_PROVIDER=anthropic
-      - ZCLAW_SESSION_TTL=86400
+      - ZOE_SESSION_TTL=86400
     volumes:
-      - ./data/.zclaw:/root/.zclaw
+      - ./data/.zoe:/root/.zoe
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7337/v1/health"]
@@ -67,8 +67,8 @@ services:
 ## Google Cloud Run
 
 ```bash
-gcloud run deploy zclaw-agent \
-  --image zclaw-server \
+gcloud run deploy zoe-agent \
+  --image zoe-server \
   --port 7337 \
   --min-instances 1 \
   --max-instances 10 \
@@ -82,15 +82,15 @@ gcloud run deploy zclaw-agent \
 
 - **Heartbeat**: Send a `ping` message every 30 seconds to keep the connection alive. Cloud Run may close idle connections.
 - **Request timeout**: Cloud Run has a maximum request duration of 60 minutes. Long-running conversations should use the reconnection protocol.
-- **Session externalization**: File-based sessions do not persist across Cloud Run instances. Use the `ZCLAW_SESSION_DIR` environment variable to point to a mounted volume, or externalize session storage with Redis.
+- **Session externalization**: File-based sessions do not persist across Cloud Run instances. Use the `ZOE_SESSION_DIR` environment variable to point to a mounted volume, or externalize session storage with Redis.
 
 :::
 
 ### Cloud Run with secrets
 
 ```bash
-gcloud run deploy zclaw-agent \
-  --image zclaw-server \
+gcloud run deploy zoe-agent \
+  --image zoe-server \
   --port 7337 \
   --min-instances 1 \
   --max-instances 10 \
@@ -104,16 +104,16 @@ gcloud run deploy zclaw-agent \
 
 ```bash
 # Install
-npm install -g zclaw-core
+npm install -g zoe-agent
 
 # Run with environment
-ANTHROPIC_API_KEY=sk-ant-... zclaw server
+ANTHROPIC_API_KEY=sk-ant-... zoe server
 ```
 
 ### Programmatic
 
 ```typescript
-import { startServer } from "zclaw-core/server";
+import { startServer } from "zoe-agent/server";
 
 const server = await startServer({
   port: 7337,
@@ -126,10 +126,10 @@ const server = await startServer({
 ### Process manager (PM2)
 
 ```bash
-npm install -g pm2 zclaw-core
+npm install -g pm2 zoe-agent
 
 # Start with PM2
-ANTHROPIC_API_KEY=sk-ant-... pm2 start "zclaw server" --name zclaw
+ANTHROPIC_API_KEY=sk-ant-... pm2 start "zoe server" --name zoe
 
 # Save for auto-restart
 pm2 save
@@ -150,7 +150,7 @@ pm2 startup
 | `OPENAI_COMPAT_BASE_URL` | Base URL for OpenAI-compatible provider | For compatible provider |
 | `LLM_MODEL` | Default model for OpenAI-compatible provider (default: `gpt-5.4`) | No |
 | `LLM_PROVIDER` | Default provider (auto-detected if not set) | No |
-| `ZCLAW_SKILLS_PATH` | Colon-separated paths to skill directories | No |
+| `ZOE_SKILLS_PATH` | Colon-separated paths to skill directories | No |
 
 ::: tip Provider auto-detection
 If `LLM_PROVIDER` is not set, the server uses the first configured provider. If `OPENAI_API_KEY` is set, OpenAI becomes the default. Otherwise, the first provider with a configured API key is used.
@@ -226,10 +226,10 @@ Response:
 
 - [ ] Set at least one provider API key via environment variable
 - [ ] Generate API keys with minimal required scopes
-- [ ] Verify `~/.zclaw/server-keys.json` permissions are `0600`
-- [ ] Mount a persistent volume for `./.zclaw/sessions/` if using sessions
+- [ ] Verify `~/.zoe/server-keys.json` permissions are `0600`
+- [ ] Mount a persistent volume for `./.zoe/sessions/` if using sessions
 - [ ] Configure health check against `/v1/health`
-- [ ] Set `ZCLAW_SESSION_TTL` appropriate for your use case
+- [ ] Set `ZOE_SESSION_TTL` appropriate for your use case
 - [ ] Enable WebSocket heartbeat (ping/pong every 30s) for Cloud Run deployments
 - [ ] Configure reverse proxy (nginx, Cloud Load Balancer) with WebSocket upgrade support
 - [ ] Set up log aggregation for `[server]` and `[ws]` log prefixes

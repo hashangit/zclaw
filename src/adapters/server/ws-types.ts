@@ -1,5 +1,5 @@
 /**
- * ZClaw Server — WebSocket Type Definitions
+ * Zoe Server — WebSocket Type Definitions
  *
  * All WS library type shims, protocol message interfaces, and context types.
  * Extracted from websocket.ts for single-responsibility.

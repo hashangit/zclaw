@@ -1,8 +1,8 @@
 /**
- * ZClaw Gateway — Type definitions
+ * Zoe Gateway — Type definitions
  *
  * Types for MCP targets, REST targets, audit records, and gateway config.
- * Reuses ZClaw's existing ToolModule and ToolDefinition from src/tools/interface.ts.
+ * Reuses Zoe's existing ToolModule and ToolDefinition from src/tools/interface.ts.
  */
 
 export type AuthType = 'none' | 'header' | 'bearer' | 'query' | 'basic';

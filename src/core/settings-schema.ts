@@ -1,5 +1,5 @@
 /**
- * ZClaw Core — Settings Schema
+ * Zoe Core — Settings Schema
  *
  * Static data structures mapping all user-visible settings to their
  * AppConfig paths, validation rules, env var overrides, and metadata.
@@ -187,13 +187,13 @@ const schemaEntries: [string, SettingsSchemaEntry][] = [
   ['notifications.wecom.keyword', { type: 'string', secret: false, restartRequired: false, envVar: 'WECOM_KEYWORD' }],
 
   // Agent
-  ['agent.permissionLevel', { type: 'enum', secret: false, enumValues: ['strict', 'moderate', 'permissive'], default: 'moderate', restartRequired: false, envVar: 'ZCLAW_PERMISSION' }],
+  ['agent.permissionLevel', { type: 'enum', secret: false, enumValues: ['strict', 'moderate', 'permissive'], default: 'moderate', restartRequired: false, envVar: 'ZOE_PERMISSION' }],
   ['agent.autoConfirm', { type: 'boolean', secret: false, default: false, restartRequired: false }],
 
   // Gateway
-  ['gateway.enabled', { type: 'boolean', secret: false, default: true, restartRequired: true, envVar: 'ZCLAW_GATEWAY_ENABLED' }],
+  ['gateway.enabled', { type: 'boolean', secret: false, default: true, restartRequired: true, envVar: 'ZOE_GATEWAY_ENABLED' }],
   ['gateway.semanticTopK', { type: 'number', secret: false, default: 3, min: 1, max: 10, restartRequired: false }],
-  ['gateway.defaultRateLimitPerMin', { type: 'number', secret: false, default: 60, min: 0, restartRequired: false, envVar: 'ZCLAW_GATEWAY_RATE_LIMIT' }],
+  ['gateway.defaultRateLimitPerMin', { type: 'number', secret: false, default: 60, min: 0, restartRequired: false, envVar: 'ZOE_GATEWAY_RATE_LIMIT' }],
   ['gateway.maxAuditLogs', { type: 'number', secret: false, default: 1000, min: 10, max: 10000, restartRequired: false }],
 
   // Sessions

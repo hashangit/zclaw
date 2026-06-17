@@ -1,14 +1,14 @@
 ---
 title: Types Reference
-description: Complete TypeScript types reference for the ZClaw SDK.
+description: Complete TypeScript types reference for the Zoe Agent SDK.
 ---
 
 # Types Reference
 
-Complete TypeScript type definitions for the ZClaw SDK. All types are exported from `"zclaw-core"`.
+Complete TypeScript type definitions for the Zoe Agent SDK. All types are exported from `"zoe-agent"`.
 
 ```typescript
-import type { Message, GenerateTextResult, SdkAgent } from "zclaw-core";
+import type { Message, GenerateTextResult, SdkAgent } from "zoe-agent";
 ```
 
 ## Core Types
@@ -200,7 +200,7 @@ interface StreamTextOptions extends GenerateTextOptions {
   /** Called for every agent loop step. */
   onStep?: (step: StepResult) => void;
   /** Called if an error occurs during execution. */
-  onError?: (error: ZclawError) => void;
+  onError?: (error: ZoeError) => void;
 }
 ```
 
@@ -412,7 +412,7 @@ interface Hooks {
   onStep?: (step: StepResult) => void | Promise<void>;
 
   /** Called when an error occurs. */
-  onError?: (error: ZclawError) => void | Promise<void>;
+  onError?: (error: ZoeError) => void | Promise<void>;
 
   /** Called when the agent loop finishes. */
   onFinish?: (result: GenerateTextResult) => void | Promise<void>;
@@ -421,12 +421,12 @@ interface Hooks {
 
 ## Error Types
 
-### ZclawError
+### ZoeError
 
-Base class for all ZClaw errors:
+Base class for all Zoe Agent errors:
 
 ```typescript
-class ZclawError extends Error {
+class ZoeError extends Error {
   /** Machine-readable error code. */
   code: string;
   /** Whether the operation can be retried. */
@@ -437,7 +437,7 @@ class ZclawError extends Error {
 ### ProviderError
 
 ```typescript
-class ProviderError extends ZclawError {
+class ProviderError extends ZoeError {
   code: "PROVIDER_ERROR";
   retryable: true;
   /** The provider name that produced the error. */
@@ -448,7 +448,7 @@ class ProviderError extends ZclawError {
 ### ToolError
 
 ```typescript
-class ToolError extends ZclawError {
+class ToolError extends ZoeError {
   code: "TOOL_FAILED";
   retryable: true;
   /** The tool name that produced the error. */
@@ -459,7 +459,7 @@ class ToolError extends ZclawError {
 ### MaxStepsError
 
 ```typescript
-class MaxStepsError extends ZclawError {
+class MaxStepsError extends ZoeError {
   code: "MAX_STEPS";
   retryable: false;
   /** The number of steps that were executed. */
@@ -470,7 +470,7 @@ class MaxStepsError extends ZclawError {
 ### AbortedError
 
 ```typescript
-class AbortedError extends ZclawError {
+class AbortedError extends ZoeError {
   code: "ABORTED";
   retryable: false;
 }
@@ -857,8 +857,8 @@ const DEFAULT_SKILL_BODY_WARN_CHARS = 8_000;
 
 /** Resolved skill body limits from environment variables. */
 function getSkillBodyLimits(): {
-  maxChars: number;  // ZCLAW_SKILL_BODY_MAX_CHARS (default: 32000)
-  warnChars: number; // ZCLAW_SKILL_BODY_WARN_CHARS (default: 8000)
+  maxChars: number;  // ZOE_SKILL_BODY_MAX_CHARS (default: 32000)
+  warnChars: number; // ZOE_SKILL_BODY_WARN_CHARS (default: 8000)
 };
 
 /** Enforce size limits on a skill body. Fail-soft: never throws. */

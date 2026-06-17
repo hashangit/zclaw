@@ -1,10 +1,10 @@
 # Installation
 
-Get ZClaw up and running in your environment. Choose the installation method that fits your workflow.
+Get Zoe Agent up and running in your environment. Choose the installation method that fits your workflow.
 
 ## Prerequisites
 
-Before installing ZClaw, ensure you have:
+Before installing Zoe Agent, ensure you have:
 
 - **Node.js 18+** installed ([download here](https://nodejs.org/))
 - **npm**, **pnpm**, or **bun** as your package manager
@@ -16,24 +16,24 @@ We recommend using **pnpm** for faster installs and better disk space efficiency
 
 ## Install as an SDK
 
-Use ZClaw as a library in your Node.js projects.
+Use Zoe Agent as a library in your Node.js projects.
 
 ### npm
 
 ```bash
-npm install zclaw-core
+npm install zoe-agent
 ```
 
 ### pnpm
 
 ```bash
-pnpm add zclaw-core
+pnpm add zoe-agent
 ```
 
 ### bun
 
 ```bash
-bun add zclaw-core
+bun add zoe-agent
 ```
 
 ### Verify Installation
@@ -41,9 +41,9 @@ bun add zclaw-core
 Create a file called `test.js`:
 
 ```javascript
-import { generateText } from 'zclaw-core'
+import { generateText } from 'zoe-agent'
 
-const result = await generateText('Hello, ZClaw!', {
+const result = await generateText('Hello, Zoe Agent!', {
   provider: 'openai',
   model: 'gpt-5.4'
 })
@@ -58,43 +58,43 @@ OPENAI_API_KEY=your-key node test.js
 ```
 
 ::: info TypeScript Support
-ZClaw is written in TypeScript and includes full type definitions. No additional `@types` package needed.
+Zoe Agent is written in TypeScript and includes full type definitions. No additional `@types` package needed.
 :::
 
 ## Install as a CLI
 
-Install ZClaw globally to use the command-line interface.
+Install Zoe Agent globally to use the command-line interface.
 
 ### npm
 
 ```bash
-npm install -g zclaw-core
+npm install -g zoe-agent
 ```
 
 ### pnpm
 
 ```bash
-pnpm add -g zclaw-core
+pnpm add -g zoe-agent
 ```
 
 ### Verify CLI Installation
 
 ```bash
-zclaw-core --version
+zoe-agent --version
 ```
 
 You should see the version number printed.
 
 ## Use with Docker
 
-ZClaw includes a Dockerfile in the repository. Build the image and run the server or CLI without a local Node.js installation.
+Zoe Agent includes a Dockerfile in the repository. Build the image and run the server or CLI without a local Node.js installation.
 
 ### Build the Image
 
 ```bash
-git clone https://github.com/hashangit/zclaw.git
-cd zclaw
-docker build -t zclaw-server .
+git clone https://github.com/hashangit/zoe-agent.git
+cd zoe
+docker build -t zoe-server .
 ```
 
 ### Run the Server
@@ -102,7 +102,7 @@ docker build -t zclaw-server .
 ```bash
 docker run -p 7337:7337 \
   -e OPENAI_API_KEY=your-key \
-  zclaw-server
+  zoe-server
 ```
 
 The server will start on `http://localhost:7337`.
@@ -110,29 +110,29 @@ The server will start on `http://localhost:7337`.
 ### Generate an API Key
 
 ```bash
-docker exec -it <container-name> zclaw server --generate-api-key
+docker exec -it <container-name> zoe server --generate-api-key
 ```
 
 ### Run the CLI
 
 ```bash
 docker run -it -e OPENAI_API_KEY=your-key \
-  zclaw-server \
-  zclaw chat
+  zoe-server \
+  zoe chat
 ```
 
 ## Deploy to Cloud Run
 
-Deploy ZClaw to Google Cloud Run in one command:
+Deploy Zoe Agent to Google Cloud Run in one command:
 
 ```bash
 # First, push the image to a registry (e.g., Artifact Registry)
-docker tag zclaw-server us-central1-docker.pkg.dev/YOUR_PROJECT/repo/zclaw:latest
-docker push us-central1-docker.pkg.dev/YOUR_PROJECT/repo/zclaw:latest
+docker tag zoe-server us-central1-docker.pkg.dev/YOUR_PROJECT/repo/zoe:latest
+docker push us-central1-docker.pkg.dev/YOUR_PROJECT/repo/zoe:latest
 
 # Deploy to Cloud Run
-gcloud run deploy zclaw \
-  --image us-central1-docker.pkg.dev/YOUR_PROJECT/repo/zclaw:latest \
+gcloud run deploy zoe \
+  --image us-central1-docker.pkg.dev/YOUR_PROJECT/repo/zoe:latest \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \
@@ -145,12 +145,12 @@ For production, use Secret Manager or a similar service to store your API keys s
 
 ## Development Setup
 
-If you want to contribute to ZClaw or run it from source:
+If you want to contribute to Zoe Agent or run it from source:
 
 ```bash
 # Clone the repository
-git clone https://github.com/hashangit/zclaw.git
-cd zclaw
+git clone https://github.com/hashangit/zoe-agent.git
+cd zoe
 
 # Install dependencies
 pnpm install
@@ -171,5 +171,5 @@ After installation:
 3. Explore the [SDK Reference](/sdk/overview) for advanced usage
 
 ::: info Troubleshooting
-If you encounter any issues during installation, check our [GitHub Issues](https://github.com/zclaw/zclaw/issues) or join our community discussions.
+If you encounter any issues during installation, check our [GitHub Issues](https://github.com/zoe/zoe/issues) or join our community discussions.
 :::

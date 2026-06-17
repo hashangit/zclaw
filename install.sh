@@ -1,8 +1,8 @@
 #!/bin/bash
-echo "Installing ZClaw dependencies..."
+echo "Installing Zoe Agent dependencies..."
 pnpm install
 
-echo "Building ZClaw..."
+echo "Building Zoe Agent..."
 pnpm run build
 
 echo ""

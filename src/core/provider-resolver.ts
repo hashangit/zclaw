@@ -1,5 +1,5 @@
 /**
- * ZClaw Core — Unified Provider Resolver
+ * Zoe Core — Unified Provider Resolver
  *
  * Re-export hub. All logic has been split into:
  *   - provider-env.ts    — env var helpers, defaults, resolveFromEnv(), resolveGLMModel()

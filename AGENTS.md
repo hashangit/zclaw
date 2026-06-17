@@ -88,7 +88,7 @@ All three adapters delegate to a single `runAgentLoop` in `src/core/agent-loop.t
 | Hooks | `src/core/hooks.ts` | Safe executor — errors never crash the loop |
 | Middleware | `src/core/middleware.ts` | `PipelineContext`, `Middleware` type, `compose()` chain |
 | Built-in middleware | `src/core/middleware/` | `logging`, `rate-limit`, `auth` |
-| Errors | `src/core/errors.ts` | `ZclawError` hierarchy with `code` + `retryable` |
+| Errors | `src/core/errors.ts` | `ZoeError` hierarchy with `code` + `retryable` |
 | Stream manager | `src/core/stream-manager.ts` | Shared streaming queue, async iterables, SSE for SDK and agent |
 | Session store | `src/core/session-store.ts` | `PersistenceBackend` factory + registry, file & memory backends |
 | Settings schema | `src/core/settings-schema.ts` | 31 dot-key settings, validation, env vars, 5 categories |
@@ -132,7 +132,7 @@ Custom tools: `tool({ description, parameters, execute })` → `ToolModule` regi
 
 ## Skills
 
-File-based plugin system. YAML frontmatter + body. Skills can specify allowed tools, preferred provider/model, and template args. Discovery from multiple sources with priority (last wins): built-in → `~/.zclaw/skills/` → `.zclaw/skills/` → `ZCLAW_SKILLS_PATH`.
+File-based plugin system. YAML frontmatter + body. Skills can specify allowed tools, preferred provider/model, and template args. Discovery from multiple sources with priority (last wins): built-in → `~/.zoe/skills/` → `.zoe/skills/` → `ZOE_SKILLS_PATH`.
 
 ## Adapters
 
@@ -142,7 +142,7 @@ Two modes via `resolveLaunchMode()`: the **Ink/React TUI** (`tui/`, default in a
 
 ### SDK (`src/adapters/sdk/`)
 
-Programmatic library. Exports `generateText()`, `streamText()`, `createAgent()`. React hook via `zclaw/react`. Session persistence via `persist` option.
+Programmatic library. Exports `generateText()`, `streamText()`, `createAgent()`. React hook via `zoe/react`. Session persistence via `persist` option.
 
 ### Server (`src/adapters/server/`)
 
@@ -150,16 +150,16 @@ HTTP + WebSocket standalone server. REST endpoints for generate/stream/agent. AP
 
 ## Configuration
 
-Multi-layer merge (highest wins): env vars → local `.zclaw/setting.json` → global `~/.zclaw/setting.json` → defaults.
+Multi-layer merge (highest wins): env vars → local `.zoe/setting.json` → global `~/.zoe/setting.json` → defaults.
 
 Env vars per provider: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GLM_API_KEY`, `OPENAI_COMPAT_API_KEY` + `OPENAI_COMPAT_BASE_URL`. General: `LLM_PROVIDER`, `LLM_MODEL`. Legacy vars work with deprecation warnings.
 
 ## Conventions
 
 - **No bundler** — plain `tsc` to ES2022 NodeNext. Dev via `tsx`.
-- **Package exports** — `zclaw` (SDK), `zclaw/react`, `zclaw/server`. Binaries: `zclaw` (CLI), `zclaw-server`.
+- **Package exports** — `zoe` (SDK), `zoe/react`, `zoe/server`. Binaries: `zoe` (CLI), `zoe-server`.
 - **Vitest test suite (partial)** — 322 tests across 33 files covering P0/P1 areas; CI gates publish on test pass
-- **Errors carry metadata** — `code` (machine-readable) + `retryable` flag on all `ZclawError` subclasses.
+- **Errors carry metadata** — `code` (machine-readable) + `retryable` flag on all `ZoeError` subclasses.
 - **Hook errors are non-fatal** — never crash the agent loop.
 - **Dynamic provider imports** — unused provider SDKs stay out of memory.
 

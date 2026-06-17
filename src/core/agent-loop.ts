@@ -1,9 +1,9 @@
-/** ZClaw Core — THE Agent Loop (single implementation) */
+/** Zoe Core — THE Agent Loop (single implementation) */
 
-import type { Message, StepResult, ToolCall, Usage, ZclawError, ApproveToolFn, PermissionLevel, ToolRiskCategory } from "./types.js";
+import type { Message, StepResult, ToolCall, Usage, ZoeError, ApproveToolFn, PermissionLevel, ToolRiskCategory } from "./types.js";
 import type { LLMProvider, ProviderMessage, ProviderToolCall, ProviderResponse } from "../providers/types.js";
 import type { ToolDefinition } from "../tools/interface.js";
-import { generateId, now, toZclawError, messageToProviderMessage, providerToolCallToToolCall } from "./message-convert.js";
+import { generateId, now, toZoeError, messageToProviderMessage, providerToolCallToToolCall } from "./message-convert.js";
 import { StreamingResponseAccumulator } from "./stream-accumulator.js";
 import { executeTool, normalizeToolResult } from "./tool-executor.js";
 import type { HookExecutor } from "./hooks.js";
@@ -59,7 +59,7 @@ export interface AgentLoopResult {
 }
 
 /**
- * Run the ZClaw agent loop - THE single implementation.
+ * Run the Zoe agent loop - THE single implementation.
  *
  * This is the canonical agent loop that all other entry points (createAgent,
  * generateText, streamText, CLI Agent) will delegate to. It handles:
@@ -119,7 +119,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         toolDefs: ctx.toolDefs,
         config: {
           ...options.config,
-          agentName: options.config?.agentName ?? 'zclaw',
+          agentName: options.config?.agentName ?? 'zoe',
           ...(ctx.metadata.injectedTools ? { injectedTools: ctx.metadata.injectedTools } : {}),
         },
       };
@@ -261,8 +261,8 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
           retryable: true,
           provider: currentModel,
         };
-        const zclawErr = toZclawError(err, "PROVIDER_ERROR");
-        await hooks.onError(zclawErr);
+        const zoeErr = toZoeError(err, "PROVIDER_ERROR");
+        await hooks.onError(zoeErr);
         break;
       }
     }
@@ -300,14 +300,14 @@ async function executeLoop(options: AgentLoopOptions): Promise<AgentLoopResult> 
       }
     } catch (err) {
       finishReason = "error";
-      const zclawErr = toZclawError(err, "PROVIDER_ERROR");
+      const zoeErr = toZoeError(err, "PROVIDER_ERROR");
       loopError = {
-        message: zclawErr.message,
+        message: zoeErr.message,
         code: "PROVIDER_ERROR",
-        retryable: zclawErr.retryable,
+        retryable: zoeErr.retryable,
         provider: currentModel,
       };
-      await hooks.onError(zclawErr);
+      await hooks.onError(zoeErr);
       break;
     }
 

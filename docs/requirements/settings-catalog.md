@@ -1,10 +1,10 @@
-# ZClaw Settings Catalog
+# Zoe Agent Settings Catalog
 
 **Version:** 0.2.2
 **Last Updated:** 2025-04-15
 **Status:** Authoritative Reference
 
-This document is the complete specification for every configurable property in ZClaw. It covers all settings across CLI, SDK, and Server adapters, their types, defaults, validation rules, environment variable overrides, and cross-setting dependencies.
+This document is the complete specification for every configurable property in Zoe Agent. It covers all settings across CLI, SDK, and Server adapters, their types, defaults, validation rules, environment variable overrides, and cross-setting dependencies.
 
 ---
 
@@ -34,18 +34,18 @@ This document is the complete specification for every configurable property in Z
 
 | Scope | Path | Priority |
 |-------|------|----------|
-| Global | `~/.zclaw/setting.json` | Lower |
-| Project | `.zclaw/setting.json` | Higher |
+| Global | `~/.zoe/setting.json` | Lower |
+| Project | `.zoe/setting.json` | Higher |
 | Environment | Env vars | Highest |
 
-**Merge order** (highest wins): env vars > project `.zclaw/setting.json` > global `~/.zclaw/setting.json` > defaults.
+**Merge order** (highest wins): env vars > project `.zoe/setting.json` > global `~/.zoe/setting.json` > defaults.
 
 ### Scope Legend
 
 | Scope | Meaning |
 |-------|---------|
-| `global` | Only `~/.zclaw/setting.json` |
-| `project` | Only `.zclaw/setting.json` |
+| `global` | Only `~/.zoe/setting.json` |
+| `project` | Only `.zoe/setting.json` |
 | `both` | Either file; project overrides global |
 | `env` | Environment variable only |
 | `runtime` | Passed at invocation time, not persisted |
@@ -66,8 +66,8 @@ The resolution chain for a given setting follows this order:
 ```
 1. CLI flag / SDK option / Server option (runtime)
 2. Environment variable
-3. Project config (.zclaw/setting.json)
-4. Global config (~/.zclaw/setting.json)
+3. Project config (.zoe/setting.json)
+4. Global config (~/.zoe/setting.json)
 5. Hardcoded default
 ```
 
@@ -93,13 +93,13 @@ env var > models.<provider>.apiKey (config) > legacy top-level apiKey (deprecate
 | **Required** | No |
 | **Sensitive** | No |
 | **Valid Values** | `"openai"` \| `"openai-compatible"` \| `"anthropic"` \| `"glm"` |
-| **Env Var Override** | `LLM_PROVIDER` or `ZCLAW_PROVIDER` |
+| **Env Var Override** | `LLM_PROVIDER` or `ZOE_PROVIDER` |
 | **Scope** | both |
 | **Runtime Editable** | Yes (hot-apply) |
 | **Category** | Providers & Models |
 | **Depends On** | Corresponding `models.<provider>.apiKey` or env var must be set |
 
-**Notes:** `LLM_PROVIDER` and `ZCLAW_PROVIDER` are checked in that order. Invalid values silently fall through to the default. SDK and Server callers can override per-request via the `provider` option.
+**Notes:** `LLM_PROVIDER` and `ZOE_PROVIDER` are checked in that order. Invalid values silently fall through to the default. SDK and Server callers can override per-request via the `provider` option.
 
 ---
 
@@ -253,7 +253,7 @@ Unknown aliases pass through unchanged.
 | **Category** | Providers & Models |
 | **Depends On** | — |
 
-**Notes:** Deprecated fallback: `ZCLAW_API_KEY` (emits warning). Also falls back to `OPENAI_API_KEY` during env override if `OPENAI_COMPAT_API_KEY` is not set.
+**Notes:** Deprecated fallback: `ZOE_API_KEY` (emits warning). Also falls back to `OPENAI_API_KEY` during env override if `OPENAI_COMPAT_API_KEY` is not set.
 
 ---
 
@@ -323,7 +323,7 @@ Unknown aliases pass through unchanged.
 
 ---
 
-### 3.12 `LLM_MODEL` / `ZCLAW_MODEL` (Global Model Override)
+### 3.12 `LLM_MODEL` / `ZOE_MODEL` (Global Model Override)
 
 | Property | Value |
 |----------|-------|
@@ -335,13 +335,13 @@ Unknown aliases pass through unchanged.
 | **Required** | No |
 | **Sensitive** | No |
 | **Valid Values** | Any model ID |
-| **Env Var Override** | `LLM_MODEL` or `ZCLAW_MODEL` (checked in that order) |
+| **Env Var Override** | `LLM_MODEL` or `ZOE_MODEL` (checked in that order) |
 | **Scope** | env |
 | **Runtime Editable** | No (read-only, set before process start) |
 | **Category** | Providers & Models |
 | **Depends On** | — |
 
-**Resolution order for a provider's model:** `PROVIDER_MODEL` env var > `models.<provider>.model` (config) > `LLM_MODEL` env var > `ZCLAW_MODEL` env var > hardcoded `DEFAULT_MODELS` map.
+**Resolution order for a provider's model:** `PROVIDER_MODEL` env var > `models.<provider>.model` (config) > `LLM_MODEL` env var > `ZOE_MODEL` env var > hardcoded `DEFAULT_MODELS` map.
 
 ---
 
@@ -772,7 +772,7 @@ Three notification channels: Feishu (Lark), DingTalk, and WeCom. Each follows th
 | **Required** | No |
 | **Sensitive** | No |
 | **Valid Values** | `"strict"` \| `"moderate"` \| `"permissive"` |
-| **Env Var Override** | `ZCLAW_PERMISSION` |
+| **Env Var Override** | `ZOE_PERMISSION` |
 | **Scope** | both |
 | **Runtime Editable** | Yes (hot-apply) |
 | **Category** | Agent Behavior |
@@ -787,7 +787,7 @@ Three notification channels: Feishu (Lark), DingTalk, and WeCom. Each follows th
 | `communications` | ask | auto | auto |
 | `destructive` | ask | ask | auto |
 
-**Resolution priority:** CLI flag > `ZCLAW_PERMISSION` env var > config file > `"moderate"` default. Invalid values silently fall through to the next source.
+**Resolution priority:** CLI flag > `ZOE_PERMISSION` env var > config file > `"moderate"` default. Invalid values silently fall through to the next source.
 
 ---
 
@@ -859,7 +859,7 @@ Three notification channels: Feishu (Lark), DingTalk, and WeCom. Each follows th
 
 ## 9. Category 7: Server
 
-These settings apply only to the `zclaw-server` adapter.
+These settings apply only to the `zoe-server` adapter.
 
 ### 9.1 `port`
 
@@ -873,13 +873,13 @@ These settings apply only to the `zclaw-server` adapter.
 | **Required** | No |
 | **Sensitive** | No |
 | **Valid Values** | Positive integer, 1-65535 (practical: 1024-65535 for non-root) |
-| **Env Var Override** | `ZCLAW_PORT` or `PORT` (checked in that order) |
+| **Env Var Override** | `ZOE_PORT` or `PORT` (checked in that order) |
 | **Scope** | env / runtime |
 | **Runtime Editable** | No (set at startup) |
 | **Category** | Server |
 | **Depends On** | — |
 
-**Resolution:** `ServerOptions.port` > `ZCLAW_PORT` > `PORT` > `7337`.
+**Resolution:** `ServerOptions.port` > `ZOE_PORT` > `PORT` > `7337`.
 
 ---
 
@@ -924,7 +924,7 @@ These settings apply only to the `zclaw-server` adapter.
 **CORS Headers Applied:**
 - `Access-Control-Allow-Origin`: mirrors request `Origin` header, or `*`
 - `Access-Control-Allow-Methods`: `GET, POST, OPTIONS`
-- `Access-Control-Allow-Headers`: `Content-Type, Authorization, X-Zclaw-API-Key`
+- `Access-Control-Allow-Headers`: `Content-Type, Authorization, X-Zoe-API-Key`
 - `Access-Control-Max-Age`: `86400`
 
 ---
@@ -941,7 +941,7 @@ These settings apply only to the `zclaw-server` adapter.
 | **Required** | No |
 | **Sensitive** | No |
 | **Valid Values** | Positive integer, seconds |
-| **Env Var Override** | `ZCLAW_SESSION_TTL` |
+| **Env Var Override** | `ZOE_SESSION_TTL` |
 | **Scope** | env / runtime |
 | **Runtime Editable** | No (set at startup) |
 | **Category** | Server |
@@ -981,17 +981,17 @@ These settings apply only to the `zclaw-server` adapter.
 | **Display Name** | Session Directory |
 | **Description** | Filesystem directory where session data is stored. Used by the file-based persistence backend. |
 | **Type** | string |
-| **Default Value** | Server: `.zclaw/sessions` (relative to cwd). SDK/CLI default: `~/.zclaw/sessions` |
+| **Default Value** | Server: `.zoe/sessions` (relative to cwd). SDK/CLI default: `~/.zoe/sessions` |
 | **Required** | No |
 | **Sensitive** | No |
 | **Valid Values** | Valid directory path (created automatically if it does not exist) |
-| **Env Var Override** | `ZCLAW_SESSION_DIR` |
+| **Env Var Override** | `ZOE_SESSION_DIR` |
 | **Scope** | env |
 | **Runtime Editable** | No (set at startup) |
 | **Category** | Session & Persistence |
 | **Depends On** | — |
 
-**Notes:** Server resolves this as `ZCLAW_SESSION_DIR` env var > `.zclaw/sessions` (in cwd). SDK default (via `session-store.ts`) is `~/.zclaw/sessions`.
+**Notes:** Server resolves this as `ZOE_SESSION_DIR` env var > `.zoe/sessions` (in cwd). SDK default (via `session-store.ts`) is `~/.zoe/sessions`.
 
 ---
 
@@ -1039,7 +1039,7 @@ These settings apply only to the `zclaw-server` adapter.
 
 ## 11. Category 9: Skills
 
-### 11.1 `ZCLAW_SKILLS_PATH`
+### 11.1 `ZOE_SKILLS_PATH`
 
 | Property | Value |
 |----------|-------|
@@ -1051,29 +1051,29 @@ These settings apply only to the `zclaw-server` adapter.
 | **Required** | No |
 | **Sensitive** | No |
 | **Valid Values** | Colon-separated absolute or relative paths (e.g., `/opt/skills:~/my-skills`) |
-| **Env Var Override** | `ZCLAW_SKILLS_PATH` |
+| **Env Var Override** | `ZOE_SKILLS_PATH` |
 | **Scope** | env |
 | **Runtime Editable** | No (set at startup) |
 | **Category** | Skills |
 | **Depends On** | — |
 
-**Skill Discovery Priority** (highest wins): `ZCLAW_SKILLS_PATH` > `.zclaw/skills` (project) > `/mnt/skills` (Docker) > bundled skills (`src/skills/`).
+**Skill Discovery Priority** (highest wins): `ZOE_SKILLS_PATH` > `.zoe/skills` (project) > `/mnt/skills` (Docker) > bundled skills (`src/skills/`).
 
 ---
 
-### 11.2 `ZCLAW_NO_BUNDLED_SKILLS`
+### 11.2 `ZOE_NO_BUNDLED_SKILLS`
 
 | Property | Value |
 |----------|-------|
 | **Key** | _(env var only)_ |
 | **Display Name** | Disable Bundled Skills |
-| **Description** | When set to any value, disables loading of skills bundled with ZClaw. Useful in environments where only custom skills should be available. |
+| **Description** | When set to any value, disables loading of skills bundled with Zoe Agent. Useful in environments where only custom skills should be available. |
 | **Type** | boolean (env presence check) |
 | **Default Value** | `false` (bundled skills are loaded) |
 | **Required** | No |
 | **Sensitive** | No |
 | **Valid Values** | Any non-empty string (presence = true) |
-| **Env Var Override** | `ZCLAW_NO_BUNDLED_SKILLS` |
+| **Env Var Override** | `ZOE_NO_BUNDLED_SKILLS` |
 | **Scope** | env |
 | **Runtime Editable** | No (set at startup) |
 | **Category** | Skills |
@@ -1081,7 +1081,7 @@ These settings apply only to the `zclaw-server` adapter.
 
 ---
 
-### 11.3 `ZCLAW_SKILLS_DEBUG`
+### 11.3 `ZOE_SKILLS_DEBUG`
 
 | Property | Value |
 |----------|-------|
@@ -1093,7 +1093,7 @@ These settings apply only to the `zclaw-server` adapter.
 | **Required** | No |
 | **Sensitive** | No |
 | **Valid Values** | Any non-empty string (presence = true) |
-| **Env Var Override** | `ZCLAW_SKILLS_DEBUG` |
+| **Env Var Override** | `ZOE_SKILLS_DEBUG` |
 | **Scope** | env |
 | **Runtime Editable** | No (set at startup) |
 | **Category** | Skills |
@@ -1101,7 +1101,7 @@ These settings apply only to the `zclaw-server` adapter.
 
 ---
 
-### 11.4 `ZCLAW_SKILL_BODY_MAX_CHARS`
+### 11.4 `ZOE_SKILL_BODY_MAX_CHARS`
 
 | Property | Value |
 |----------|-------|
@@ -1113,7 +1113,7 @@ These settings apply only to the `zclaw-server` adapter.
 | **Required** | No |
 | **Sensitive** | No |
 | **Valid Values** | Positive integer |
-| **Env Var Override** | `ZCLAW_SKILL_BODY_MAX_CHARS` |
+| **Env Var Override** | `ZOE_SKILL_BODY_MAX_CHARS` |
 | **Scope** | env |
 | **Runtime Editable** | No (set at startup) |
 | **Category** | Skills |
@@ -1121,7 +1121,7 @@ These settings apply only to the `zclaw-server` adapter.
 
 ---
 
-### 11.5 `ZCLAW_SKILL_BODY_WARN_CHARS`
+### 11.5 `ZOE_SKILL_BODY_WARN_CHARS`
 
 | Property | Value |
 |----------|-------|
@@ -1132,8 +1132,8 @@ These settings apply only to the `zclaw-server` adapter.
 | **Default Value** | `8000` (approx. 2k tokens at 4 chars/token) |
 | **Required** | No |
 | **Sensitive** | No |
-| **Valid Values** | Positive integer (should be less than `ZCLAW_SKILL_BODY_MAX_CHARS`) |
-| **Env Var Override** | `ZCLAW_SKILL_BODY_WARN_CHARS` |
+| **Valid Values** | Positive integer (should be less than `ZOE_SKILL_BODY_MAX_CHARS`) |
+| **Env Var Override** | `ZOE_SKILL_BODY_WARN_CHARS` |
 | **Scope** | env |
 | **Runtime Editable** | No (set at startup) |
 | **Category** | Skills |
@@ -1181,11 +1181,11 @@ The following settings are from the legacy configuration format. They continue t
 
 ---
 
-### 12.4 `ZCLAW_API_KEY` (Env Var)
+### 12.4 `ZOE_API_KEY` (Env Var)
 
 | Property | Value |
 |----------|-------|
-| **Key** | `ZCLAW_API_KEY` |
+| **Key** | `ZOE_API_KEY` |
 | **Status** | **DEPRECATED** — Migrate to `OPENAI_COMPAT_API_KEY` |
 | **Behavior** | Falls back to this var when `OPENAI_COMPAT_API_KEY` is not set. Emits `console.warn`. |
 
@@ -1226,7 +1226,7 @@ These settings do not yet exist in `AppConfig` or env vars but are identified as
 | **Description** | Default maximum agent loop iterations. Overridable per-request. Currently hardcoded per adapter. |
 | **Type** | number |
 | **Default Value** | `20` |
-| **Proposed Env Var** | `ZCLAW_MAX_STEPS` |
+| **Proposed Env Var** | `ZOE_MAX_STEPS` |
 | **Scope** | both |
 | **Category** | Agent Behavior |
 | **Rationale** | Today the server defaults to 5, CLI/SDK to 20. A single config setting would unify this. Acceptable as a config entry since users frequently want to tune this. |
@@ -1242,7 +1242,7 @@ These settings do not yet exist in `AppConfig` or env vars but are identified as
 | **Description** | Custom system prompt applied to all conversations unless overridden per-request. |
 | **Type** | string |
 | **Default Value** | _(adapter-specific default)_ |
-| **Proposed Env Var** | `ZCLAW_SYSTEM_PROMPT` |
+| **Proposed Env Var** | `ZOE_SYSTEM_PROMPT` |
 | **Scope** | both |
 | **Category** | Agent Behavior |
 | **Rationale** | Useful for project-specific or team-wide prompt customization. The `AgentLoopOptions.systemPrompt` field already exists but has no config file binding. |
@@ -1255,11 +1255,11 @@ These settings do not yet exist in `AppConfig` or env vars but are identified as
 |----------|-------|
 | **Key** | `logLevel` |
 | **Display Name** | Log Level |
-| **Description** | Controls verbosity of ZClaw's internal logging. Currently uses `console.log`/`console.warn` with no level control. |
+| **Description** | Controls verbosity of Zoe Agent's internal logging. Currently uses `console.log`/`console.warn` with no level control. |
 | **Type** | enum |
 | **Default Value** | `"info"` |
 | **Valid Values** | `"debug"` \| `"info"` \| `"warn"` \| `"error"` \| `"silent"` |
-| **Proposed Env Var** | `ZCLAW_LOG_LEVEL` |
+| **Proposed Env Var** | `ZOE_LOG_LEVEL` |
 | **Scope** | both |
 | **Category** | Agent Behavior |
 | **Rationale** | No structured logging exists today. Adding a log level is prerequisite for production use. |
@@ -1276,7 +1276,7 @@ These settings do not yet exist in `AppConfig` or env vars but are identified as
 | **Type** | string[] |
 | **Default Value** | _(all tools enabled)_ |
 | **Valid Values** | Array of built-in tool names: `execute_shell_command`, `read_file`, `write_file`, `get_current_datetime`, `send_email`, `web_search`, `send_notification`, `read_website`, `take_screenshot`, `generate_image`, `optimize_prompt`, `use_skill` |
-| **Proposed Env Var** | `ZCLAW_ENABLED_TOOLS` (comma-separated) |
+| **Proposed Env Var** | `ZOE_ENABLED_TOOLS` (comma-separated) |
 | **Scope** | both |
 | **Category** | Agent Behavior |
 | **Rationale** | No way to disable individual tools today. Security-conscious deployments need this. |
@@ -1292,7 +1292,7 @@ These settings do not yet exist in `AppConfig` or env vars but are identified as
 | **Description** | Blacklist of tool names that should be excluded. Simpler alternative to `enabledTools` when you want all tools except a few. |
 | **Type** | string[] |
 | **Default Value** | `[]` |
-| **Proposed Env Var** | `ZCLAW_DISABLED_TOOLS` (comma-separated) |
+| **Proposed Env Var** | `ZOE_DISABLED_TOOLS` (comma-separated) |
 | **Scope** | both |
 | **Category** | Agent Behavior |
 | **Rationale** | Complements `enabledTools`. If both are set, `disabledTools` is subtracted from `enabledTools`. |
@@ -1348,15 +1348,15 @@ These settings do not yet exist in `AppConfig` or env vars but are identified as
 | Rule | Severity | Behavior |
 |------|----------|----------|
 | `permissionLevel` must be one of: `"strict"`, `"moderate"`, `"permissive"`. | Warning | Invalid values silently fall through to next source. Default: `"moderate"`. |
-| `ZCLAW_PERMISSION` env var value must be one of the three valid values. | Warning | Invalid values are ignored silently. |
+| `ZOE_PERMISSION` env var value must be one of the three valid values. | Warning | Invalid values are ignored silently. |
 | `autoConfirm` bypasses `permissionLevel` entirely when `true`. | Override | All tools auto-approved. |
 
 ### 14.5 Skills
 
 | Rule | Severity | Behavior |
 |------|----------|----------|
-| `ZCLAW_SKILL_BODY_WARN_CHARS` should be less than `ZCLAW_SKILL_BODY_MAX_CHARS`. | Warning | No enforcement; misconfiguration leads to warning at or above truncation threshold. |
-| `ZCLAW_SKILLS_PATH` directories that do not exist are silently skipped. | Silent | No error. |
+| `ZOE_SKILL_BODY_WARN_CHARS` should be less than `ZOE_SKILL_BODY_MAX_CHARS`. | Warning | No enforcement; misconfiguration leads to warning at or above truncation threshold. |
+| `ZOE_SKILLS_PATH` directories that do not exist are silently skipped. | Silent | No error. |
 | Cumulative resolved body size cap is 2MB across all inlined `@path` references. | Hard limit | Excess references are skipped with a marker. |
 
 ### 14.6 Session
@@ -1364,7 +1364,7 @@ These settings do not yet exist in `AppConfig` or env vars but are identified as
 | Rule | Severity | Behavior |
 |------|----------|----------|
 | Session IDs must match `/^[a-zA-Z0-9-]+$/`. | Error | `validateSessionId()` throws. |
-| `ZCLAW_SESSION_DIR` is created automatically if it does not exist. | Auto-create | No error. |
+| `ZOE_SESSION_DIR` is created automatically if it does not exist. | Auto-create | No error. |
 | `backendType` must be registered via `registerBackend()` before use. | Error | `createPersistenceBackend()` throws. |
 
 ### 14.7 Config File
@@ -1383,7 +1383,7 @@ These settings do not yet exist in `AppConfig` or env vars but are identified as
 
 | # | Key | Category | Type | Default | Sensitive | Env Var | Scope | Editable |
 |---|-----|----------|------|---------|-----------|---------|-------|----------|
-| 1 | `provider` | Providers & Models | enum | `openai-compatible` | No | `LLM_PROVIDER`, `ZCLAW_PROVIDER` | both | hot-apply |
+| 1 | `provider` | Providers & Models | enum | `openai-compatible` | No | `LLM_PROVIDER`, `ZOE_PROVIDER` | both | hot-apply |
 | 2 | `models.openai.apiKey` | Providers & Models | string | _(none)_ | Yes | `OPENAI_API_KEY` | both | restart |
 | 3 | `models.openai.model` | Providers & Models | string | `gpt-5.4` | No | `OPENAI_MODEL` | both | hot-apply |
 | 4 | `models.anthropic.apiKey` | Providers & Models | string | _(none)_ | Yes | `ANTHROPIC_API_KEY` | both | restart |
@@ -1394,7 +1394,7 @@ These settings do not yet exist in `AppConfig` or env vars but are identified as
 | 9 | `models.openai-compatible.baseUrl` | Providers & Models | string | _(none)_ | No | `OPENAI_COMPAT_BASE_URL` | both | restart |
 | 10 | `models.openai-compatible.model` | Providers & Models | string | `gpt-5.4` | No | `OPENAI_MODEL` | both | hot-apply |
 | 11 | _(provider timeout)_ | Providers & Models | number | varies | No | _(none)_ | runtime | restart |
-| 12 | _(global model)_ | Providers & Models | string | _(none)_ | No | `LLM_MODEL`, `ZCLAW_MODEL` | env | read-only |
+| 12 | _(global model)_ | Providers & Models | string | _(none)_ | No | `LLM_MODEL`, `ZOE_MODEL` | env | read-only |
 | 13 | `imageApiKey` | Image Generation | string | fallback | Yes | _(none)_ | both | hot-apply |
 | 14 | `imageBaseUrl` | Image Generation | string | fallback | No | _(none)_ | both | hot-apply |
 | 15 | `imageModel` | Image Generation | string | `dall-e-3` | No | _(none)_ | both | hot-apply |
@@ -1414,23 +1414,23 @@ These settings do not yet exist in `AppConfig` or env vars but are identified as
 | 29 | `dingtalkKeyword` | Notifications | string | _(none)_ | No | `DINGTALK_KEYWORD` | both | hot-apply |
 | 30 | `wecomWebhook` | Notifications | string | _(none)_ | Yes | `WECOM_WEBHOOK` | both | hot-apply |
 | 31 | `wecomKeyword` | Notifications | string | _(none)_ | No | `WECOM_KEYWORD` | both | hot-apply |
-| 32 | `permissionLevel` | Agent Behavior | enum | `moderate` | No | `ZCLAW_PERMISSION` | both | hot-apply |
+| 32 | `permissionLevel` | Agent Behavior | enum | `moderate` | No | `ZOE_PERMISSION` | both | hot-apply |
 | 33 | `autoConfirm` | Agent Behavior | boolean | `false` | No | _(none)_ | both | hot-apply |
 | 34 | `maxSteps` | Agent Behavior | number | 5-20 | No | _(none)_ | runtime | per-request |
 | 35 | `systemPrompt` | Agent Behavior | string | _(none)_ | No | _(none)_ | runtime | per-request |
-| 36 | `port` | Server | number | `7337` | No | `ZCLAW_PORT`, `PORT` | env/runtime | startup |
+| 36 | `port` | Server | number | `7337` | No | `ZOE_PORT`, `PORT` | env/runtime | startup |
 | 37 | `host` | Server | string | `0.0.0.0` | No | _(none)_ | runtime | startup |
 | 38 | `cors` | Server | boolean | `true` | No | _(none)_ | runtime | startup |
-| 39 | `sessionTTL` | Server | number | `86400` | No | `ZCLAW_SESSION_TTL` | env/runtime | startup |
+| 39 | `sessionTTL` | Server | number | `86400` | No | `ZOE_SESSION_TTL` | env/runtime | startup |
 | 40 | `maxPermissionLevel` | Server | enum | _(none)_ | No | _(none)_ | runtime | startup |
-| 41 | `sessionDir` | Session & Persistence | string | varies | No | `ZCLAW_SESSION_DIR` | env | startup |
+| 41 | `sessionDir` | Session & Persistence | string | varies | No | `ZOE_SESSION_DIR` | env | startup |
 | 42 | `backendType` | Session & Persistence | enum | `file` | No | _(none)_ | runtime | startup |
 | 43 | `cleanupInterval` | Session & Persistence | number | `300000` | No | _(none)_ | runtime | startup |
-| 44 | `ZCLAW_SKILLS_PATH` | Skills | string | _(none)_ | No | `ZCLAW_SKILLS_PATH` | env | startup |
-| 45 | `ZCLAW_NO_BUNDLED_SKILLS` | Skills | boolean | `false` | No | `ZCLAW_NO_BUNDLED_SKILLS` | env | startup |
-| 46 | `ZCLAW_SKILLS_DEBUG` | Skills | boolean | `false` | No | `ZCLAW_SKILLS_DEBUG` | env | startup |
-| 47 | `ZCLAW_SKILL_BODY_MAX_CHARS` | Skills | number | `32000` | No | `ZCLAW_SKILL_BODY_MAX_CHARS` | env | startup |
-| 48 | `ZCLAW_SKILL_BODY_WARN_CHARS` | Skills | number | `8000` | No | `ZCLAW_SKILL_BODY_WARN_CHARS` | env | startup |
+| 44 | `ZOE_SKILLS_PATH` | Skills | string | _(none)_ | No | `ZOE_SKILLS_PATH` | env | startup |
+| 45 | `ZOE_NO_BUNDLED_SKILLS` | Skills | boolean | `false` | No | `ZOE_NO_BUNDLED_SKILLS` | env | startup |
+| 46 | `ZOE_SKILLS_DEBUG` | Skills | boolean | `false` | No | `ZOE_SKILLS_DEBUG` | env | startup |
+| 47 | `ZOE_SKILL_BODY_MAX_CHARS` | Skills | number | `32000` | No | `ZOE_SKILL_BODY_MAX_CHARS` | env | startup |
+| 48 | `ZOE_SKILL_BODY_WARN_CHARS` | Skills | number | `8000` | No | `ZOE_SKILL_BODY_WARN_CHARS` | env | startup |
 
 ### Statistics
 
@@ -1455,7 +1455,7 @@ All webhook URLs are classified as sensitive because they contain access tokens 
 
 ### Deprecated Settings (5 total)
 
-`apiKey` (top-level), `baseUrl` (top-level), `model` (top-level), `ZCLAW_API_KEY` env var, `OPENAI_BASE_URL` env var.
+`apiKey` (top-level), `baseUrl` (top-level), `model` (top-level), `ZOE_API_KEY` env var, `OPENAI_BASE_URL` env var.
 
 ### Proposed New Settings (6 total)
 

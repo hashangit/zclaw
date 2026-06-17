@@ -1,5 +1,5 @@
 # =============================================================================
-# ZClaw Docker Ignore — Exclude development-only files from build context
+# Zoe Docker Ignore — Exclude development-only files from build context
 # =============================================================================
 
 # Version control

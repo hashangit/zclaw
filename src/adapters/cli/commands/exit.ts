@@ -1,5 +1,5 @@
 /**
- * /exit command handler for ZClaw CLI.
+ * /exit command handler for Zoe CLI.
  *
  * Aliases: /quit
  */

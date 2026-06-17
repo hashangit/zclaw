@@ -1,11 +1,11 @@
 ---
 title: Built-in Tools Reference
-description: Complete reference for all 12 built-in tools in ZClaw with parameters, examples, and notes.
+description: Complete reference for all 12 built-in tools in Zoe Agent with parameters, examples, and notes.
 ---
 
 # Built-in Tools Reference
 
-ZClaw includes 12 built-in tools organized into four groups. Every tool works identically across `generateText`, `streamText`, `createAgent`, the CLI, and the server REST API.
+Zoe Agent includes 12 built-in tools organized into four groups. Every tool works identically across `generateText`, `streamText`, `createAgent`, the CLI, and the server REST API.
 
 ## Quick Import
 
@@ -15,7 +15,7 @@ import {
   COMM_TOOLS,
   ADVANCED_TOOLS,
   ALL_TOOLS,
-} from "zclaw-core";
+} from "zoe-agent";
 ```
 
 | Group Constant | Tools |
@@ -342,7 +342,7 @@ Generate or edit images using AI models (DALL-E 3, DALL-E 2, or compatible model
 **Configuration required:**
 
 ```bash
-OPENAI_API_KEY=sk-...    # or configure imageApiKey in .zclaw/setting.json
+OPENAI_API_KEY=sk-...    # or configure imageApiKey in .zoe/setting.json
 ```
 
 **Example:**

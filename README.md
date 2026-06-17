@@ -1,24 +1,24 @@
-# ZClaw 🦞
+# Zoe Agent 🦞
 
-[![NPM Version](https://img.shields.io/npm/v/zclaw-core.svg?style=flat-square)](https://www.npmjs.com/package/zclaw-core)
-[![NPM Downloads](https://img.shields.io/npm/dm/zclaw-core.svg?style=flat-square)](https://www.npmjs.com/package/zclaw-core)
-[![GitHub Release](https://img.shields.io/github/v/tag/hashangit/zclaw?style=flat-square&label=release)](https://github.com/hashangit/zclaw/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://github.com/hashangit/zclaw/blob/main/LICENSE)
+[![NPM Version](https://img.shields.io/npm/v/zoe-agent.svg?style=flat-square)](https://www.npmjs.com/package/zoe-agent)
+[![NPM Downloads](https://img.shields.io/npm/dm/zoe-agent.svg?style=flat-square)](https://www.npmjs.com/package/zoe-agent)
+[![GitHub Release](https://img.shields.io/github/v/tag/hashangit/zoe-agent?style=flat-square&label=release)](https://github.com/hashangit/zoe-agent/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://github.com/hashangit/zoe-agent/blob/main/LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
 
 **The Engineering-First Headless Agent Framework: CLI, SDK, and Server. Stable, Scalable Automation for the Post-Vision Era.**
 
 ---
 
-🔗 **GitHub Repository**: [https://github.com/hashangit/zclaw](https://github.com/hashangit/zclaw)
+🔗 **GitHub Repository**: [https://github.com/hashangit/zoe-agent](https://github.com/hashangit/zoe-agent)
 
 ---
 
-ZClaw is a high-stability, open-source automation framework specifically engineered for **headless systems**.
+Zoe Agent is a high-stability, open-source automation framework specifically engineered for **headless systems**.
 
-Unlike "screen-seeing" agents (such as OpenClaw) that rely on visual interpretation, ZClaw is built on a foundation of precise command-driven execution. This makes it significantly more **stable**, **robust from an engineering perspective**, and **easier to scale** across complex environments—whether it's a local server, a CI/CD pipeline, or thousands of containerized nodes.
+Unlike "screen-seeing" agents (such as OpenClaw) that rely on visual interpretation, Zoe Agent is built on a foundation of precise command-driven execution. This makes it significantly more **stable**, **robust from an engineering perspective**, and **easier to scale** across complex environments—whether it's a local server, a CI/CD pipeline, or thousands of containerized nodes.
 
-## Why ZClaw?
+## Why Zoe Agent?
 - 🐳 **Docker Native**: Built to run safely inside containers. Minimal footprint (Node.js/Alpine friendly).
 - 🚀 **Better Engineering**: Operates via precise system APIs and shell commands rather than unstable visual recognition, ensuring deterministic outcomes.
 - 🛡️ **Superior Stability**: Immune to issues like UI rendering, screen resolution, or network lag that plague vision-based agents.
@@ -42,7 +42,7 @@ Unlike "screen-seeing" agents (such as OpenClaw) that rely on visual interpretat
 - 📦 **TypeScript SDK**: Programmatic access via `createAgent`, `streamText`, `generateText`.
 - 🖥 **Server Mode**: Standalone HTTP/WebSocket server with API key auth and session management.
 - 🛠 **Skills System**: Loadable skill packs from directories with `@path` file references and custom tool creation.
-- 🐚 **Shell Approval**: Interactive prompts or non-interactive modes via `ZCLAW_SHELL_APPROVE` env var.
+- 🐚 **Shell Approval**: Interactive prompts or non-interactive modes via `ZOE_SHELL_APPROVE` env var.
 - 🖥️ **Interactive TUI**: In a TTY, a full-screen Ink/React UI — bordered always-on input, streaming feed, session manager, message queue/`/steer`, and inline `write_file` diffs (atomic, crash-safe writes).
 
 ## Tech Stack
@@ -57,45 +57,45 @@ Unlike "screen-seeing" agents (such as OpenClaw) that rely on visual interpretat
 
 ### npm
 ```bash
-npm install -g zclaw-core
+npm install -g zoe-agent
 ```
 
 ### pnpm
 ```bash
-pnpm add -g zclaw-core
+pnpm add -g zoe-agent
 ```
 
 ### Homebrew (macOS & Linux)
 ```bash
-brew tap hashangit/zclaw
-brew install zclaw
+brew tap hashangit/zoe-agent
+brew install zoe
 ```
 
 > **Note:** Requires [Node.js](https://nodejs.org/) 20 or later.
 
 ### Server Binary
-The `zclaw-server` binary is included for running the standalone HTTP/WebSocket server:
+The `zoe-server` binary is included for running the standalone HTTP/WebSocket server:
 ```bash
-zclaw-server --port 7337 --generate-api-key
+zoe-server --port 7337 --generate-api-key
 ```
 
 ### SDK Usage
 Import the SDK in your TypeScript/JavaScript project:
 ```bash
-npm install zclaw-core
+npm install zoe-agent
 ```
 ```ts
 // Main exports
-import { createAgent, streamText, generateText } from 'zclaw-core';
+import { createAgent, streamText, generateText } from 'zoe-agent';
 // Server utilities
-import { createServer } from 'zclaw-core/server';
+import { createServer } from 'zoe-agent/server';
 ```
 
 ### Development Installation
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/hashangit/zclaw.git
-    cd zclaw
+    git clone https://github.com/hashangit/zoe-agent.git
+    cd zoe
     ```
 2.  Install dependencies:
     ```bash
@@ -114,50 +114,50 @@ import { createServer } from 'zclaw-core/server';
 
 1.  **Setup**: Run the interactive setup wizard to configure your API keys and integrations.
     ```bash
-    zclaw setup
+    zoe setup
     ```
     The wizard now supports configuring multiple providers (OpenAI, Anthropic, GLM) in a single session.
 
 2.  **Run**: Start the agent in interactive mode.
     ```bash
-    zclaw
+    zoe
     ```
 
 ## Usage
 
 ### Interactive Mode
-Simply run `zclaw` to enter the chat loop.
+Simply run `zoe` to enter the chat loop.
 ```bash
-zclaw
+zoe
 > List all TypeScript files in the src folder.
 ```
 
 ### Interactive TUI
 
-In a terminal (TTY), `zclaw` launches a full-screen Ink/React TUI instead of the readline loop: a bordered always-visible input, a streaming message feed, a persistent task panel (`manage_todos`), session list/resume/export, and inline diffs for `write_file`. File writes are atomic (same-dir temp + `fs.rename`, so a crash never corrupts the file) and render as a green/red unified diff in the tool block; Ctrl+O expands collapsed blocks, and `/clear` starts a fresh session. It falls back to the readline REPL when piped or run with `--no-interactive`.
+In a terminal (TTY), `zoe` launches a full-screen Ink/React TUI instead of the readline loop: a bordered always-visible input, a streaming message feed, a persistent task panel (`manage_todos`), session list/resume/export, and inline diffs for `write_file`. File writes are atomic (same-dir temp + `fs.rename`, so a crash never corrupts the file) and render as a green/red unified diff in the tool block; Ctrl+O expands collapsed blocks, and `/clear` starts a fresh session. It falls back to the readline REPL when piped or run with `--no-interactive`.
 
 ### Headless Mode (One-Shot)
 Run a single command and exit.
 ```bash
-zclaw "Check disk usage and save the report to usage.txt" --no-interactive
+zoe "Check disk usage and save the report to usage.txt" --no-interactive
 ```
 
 ### Auto-Confirm (CI/CD)
 Automatically approve all tool executions (dangerous, use with caution or in sandboxes).
 ```bash
-zclaw "Refactor src/index.ts to use ES modules" -y
+zoe "Refactor src/index.ts to use ES modules" -y
 ```
 
 ### Provider Selection
 Use a specific provider for a single command:
 ```bash
-zclaw -p anthropic "Analyze this code for security issues"
+zoe -p anthropic "Analyze this code for security issues"
 ```
 
 ### Switch Providers Mid-Conversation
 In interactive mode, type `/models` to switch between configured providers:
 ```bash
-zclaw
+zoe
 > /models  # Select Anthropic from the list
 > Now analyze this with Claude...
 ```
@@ -168,7 +168,7 @@ zclaw
 - `-n, --no-interactive`: Exit after processing the initial query (Headless mode).
 - `-y, --yes`: Auto-confirm all tool executions (e.g., shell commands).
 - `--docker`: Run in Docker-optimized non-interactive mode (auto-detected in containers).
-- `--generate-api-key`: Generate an API key for server mode (use with `zclaw-server`).
+- `--generate-api-key`: Generate an API key for server mode (use with `zoe-server`).
 
 ### Interactive Commands
 - `/models`: Switch between configured providers during a conversation.
@@ -176,19 +176,19 @@ zclaw
 
 ## Configuration
 
-ZClaw uses a hierarchical configuration system.
+Zoe Agent uses a hierarchical configuration system.
 
 **Priority Order (Highest to Lowest):**
 1.  **CLI Arguments**: (e.g., `-m gpt-4o`)
 2.  **Environment Variables**: (`OPENAI_API_KEY`, `.env` file)
-3.  **Project Config**: (`./.zclaw/setting.json` in current directory)
-4.  **Global Config**: (`~/.zclaw/setting.json`)
+3.  **Project Config**: (`./.zoe/setting.json` in current directory)
+4.  **Global Config**: (`~/.zoe/setting.json`)
 
 ### Supported Configuration Keys (JSON)
 
 **Environment Variables:**
-- `ZCLAW_SHELL_APPROVE`: Shell command approval mode (`auto`, `deny`, or unset for interactive)
-- `ZCLAW_SKILLS_PATH`: Colon-separated list of additional skill directories
+- `ZOE_SHELL_APPROVE`: Shell command approval mode (`auto`, `deny`, or unset for interactive)
+- `ZOE_SKILLS_PATH`: Colon-separated list of additional skill directories
 - `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GLM_API_KEY`: Provider API keys
 - `OPENAI_COMPAT_API_KEY`, `OPENAI_COMPAT_BASE_URL`, `OPENAI_COMPAT_MODEL`: OpenAI-compatible provider settings
 
@@ -228,7 +228,7 @@ ZClaw uses a hierarchical configuration system.
 ```
 
 **Legacy Configuration (Still Supported):**
-Create a file at `.zclaw/setting.json`:
+Create a file at `.zoe/setting.json`:
 ```json
 {
   "model": "gpt-3.5-turbo",
@@ -236,13 +236,13 @@ Create a file at `.zclaw/setting.json`:
 }
 ```
 
-> **⚠️ Security Warning**: If you store your `apiKey` or secrets in `.zclaw/setting.json`, make sure to add `.zclaw/` to your `.gitignore` file to prevent leaking secrets!
+> **⚠️ Security Warning**: If you store your `apiKey` or secrets in `.zoe/setting.json`, make sure to add `.zoe/` to your `.gitignore` file to prevent leaking secrets!
 
 ## Integrations
 
 ### Gateway (MCP Client + REST Proxy + OpenAPI Adapter)
 
-ZClaw v0.3.0 introduces a universal API gateway that connects to downstream MCP servers and REST APIs:
+Zoe Agent v0.3.0 introduces a universal API gateway that connects to downstream MCP servers and REST APIs:
 
 - **Semantic Injection**: Middleware scores your message against all discovered tools and injects the top-K most relevant directly into the agent's tool context. Zero context pollution.
 - **Proxy Pattern**: Generic tools (`gateway_route`, `gateway_call_tool`, etc.) let the agent navigate targets when semantic injection finds no match.
@@ -250,7 +250,7 @@ ZClaw v0.3.0 introduces a universal API gateway that connects to downstream MCP 
 - **Credential Trust Guard**: Admin-registered targets can resolve stored credentials; agent-registered targets cannot — preventing credential exfiltration.
 - **Audit Logging**: Ring-buffer audit logs with per-target usage summaries for debugging and self-healing.
 
-**Configuration** (`~/.zclaw/setting.json` or env vars):
+**Configuration** (`~/.zoe/setting.json` or env vars):
 ```json
 {
   "gatewayEnabled": true,
@@ -266,12 +266,12 @@ ZClaw v0.3.0 introduces a universal API gateway that connects to downstream MCP 
 
 **SDK**:
 ```ts
-import { gateway } from 'zclaw-core';
+import { gateway } from 'zoe-agent';
 const gw = await gateway.createGateway({ enabled: true, semanticTopK: 3, defaultRateLimitPerMin: 60, maxAuditLogsInMemory: 1000 });
 ```
 
 ### Multi-Provider LLM Support
-ZClaw supports multiple AI providers with seamless switching:
+Zoe Agent supports multiple AI providers with seamless switching:
 - **OpenAI**: GPT-4, GPT-3.5-turbo, and latest models
 - **Anthropic**: Claude Sonnet, Haiku, Opus models
 - **GLM**: Z.ai GLM-4.5, GLM-4.7, GLM-5.1 models
@@ -280,7 +280,7 @@ ZClaw supports multiple AI providers with seamless switching:
 Configure multiple providers during setup and switch between them using `/models` command or `-p` flag.
 
 ### Web Search (Tavily)
-ZClaw can search the web if you provide a Tavily API Key during setup or in config.
+Zoe Agent can search the web if you provide a Tavily API Key during setup or in config.
 - **Usage**: "Search for the latest Node.js release notes."
 
 ### Email (SMTP)
@@ -297,11 +297,11 @@ Built-in utility to provide the agent with the current system time, ensuring acc
 
 ## SDK & Programmatic Usage
 
-ZClaw provides a TypeScript SDK for building agent-powered applications.
+Zoe Agent provides a TypeScript SDK for building agent-powered applications.
 
 ### Basic Agent
 ```ts
-import { createAgent } from 'zclaw-core';
+import { createAgent } from 'zoe-agent';
 
 const agent = await createAgent({
   provider: 'anthropic',
@@ -314,7 +314,7 @@ console.log(result.text);
 
 ### Streaming
 ```ts
-import { streamText } from 'zclaw-core';
+import { streamText } from 'zoe-agent';
 
 const stream = await streamText('Analyze the logs for errors', {
   provider: 'openai',
@@ -327,7 +327,7 @@ for await (const chunk of stream.textStream) {
 
 ### Structured Output
 ```ts
-import { generateText } from 'zclaw-core';
+import { generateText } from 'zoe-agent';
 
 const result = await generateText('Extract the top 3 issues from these logs', {
   provider: 'anthropic',
@@ -340,15 +340,15 @@ console.log(result.text);
 Before first use, configure providers from your CLI config (or env vars):
 
 ```ts
-import { configureProviders, loadProviderConfig } from 'zclaw-core';
+import { configureProviders, loadProviderConfig } from 'zoe-agent';
 
-const config = loadProviderConfig(); // reads ~/.zclaw/setting.json + .zclaw/setting.json + env
+const config = loadProviderConfig(); // reads ~/.zoe/setting.json + .zoe/setting.json + env
 if (config) {
   configureProviders(config);
 }
 
 // Now safe to call
-import { generateText } from 'zclaw-core';
+import { generateText } from 'zoe-agent';
 const result = await generateText('Hello, world!');
 ```
 
@@ -356,7 +356,7 @@ Without this step, `generateText` defaults to OpenAI using `OPENAI_API_KEY` if p
 
 ### Custom Tools
 ```ts
-import { createAgent, tool } from 'zclaw-core';
+import { createAgent, tool } from 'zoe-agent';
 
 const agent = await createAgent({
   provider: 'openai',
@@ -384,18 +384,18 @@ const agent = await createAgent({
 
 ## Server Mode
 
-Run ZClaw as a standalone HTTP/WebSocket server for remote agent access.
+Run Zoe Agent as a standalone HTTP/WebSocket server for remote agent access.
 
 ### Starting the Server
 ```bash
 # Start with default settings
-zclaw-server
+zoe-server
 
 # Generate an API key
-zclaw-server --generate-api-key
+zoe-server --generate-api-key
 
 # Custom port
-zclaw-server --port 8080
+zoe-server --port 8080
 ```
 
 ### REST API
@@ -462,31 +462,31 @@ Reference files with @k8s/deployment.yaml.
 ### Discovery Locations
 Skills are discovered in priority order (last wins):
 1. Built-in bundled skills
-2. `~/.zclaw/skills/`
-3. `.zclaw/skills/` (project-level)
-4. `ZCLAW_SKILLS_PATH` directories
+2. `~/.zoe/skills/`
+3. `.zoe/skills/` (project-level)
+4. `ZOE_SKILLS_PATH` directories
 
 ```bash
 # Add custom skill directories
-export ZCLAW_SKILLS_PATH=/path/to/skills:/another/path
+export ZOE_SKILLS_PATH=/path/to/skills:/another/path
 ```
 
 ## Docker Support
 
-ZClaw includes a production-ready [`Dockerfile`](./Dockerfile) (Node 20 Alpine) and [`docker-compose.yml`](./docker-compose.yml) for containerized deployment.
+Zoe Agent includes a production-ready [`Dockerfile`](./Dockerfile) (Node 20 Alpine) and [`docker-compose.yml`](./docker-compose.yml) for containerized deployment.
 
 ### Quick Start with Docker
 
 ```bash
 # Clone and build
-git clone https://github.com/hashangit/zclaw.git
-cd zclaw
-docker build -t zclaw-server .
+git clone https://github.com/hashangit/zoe-agent.git
+cd zoe
+docker build -t zoe-server .
 
 # Run the server
 docker run -d -p 7337:7337 \
   -e OPENAI_API_KEY=sk-... \
-  zclaw-server
+  zoe-server
 
 # Or use Docker Compose
 docker compose up -d
@@ -497,14 +497,14 @@ Use `--docker` for non-interactive execution inside containers:
 ```bash
 docker run --rm \
   -e OPENAI_API_KEY=sk-... \
-  -e ZCLAW_SHELL_APPROVE=auto \
-  zclaw-server zclaw "Check disk usage" --docker
+  -e ZOE_SHELL_APPROVE=auto \
+  zoe-server zoe "Check disk usage" --docker
 ```
 
-ZClaw auto-detects Docker and non-interactive environments. When running in a container, it adjusts behavior accordingly (no interactive prompts, streamlined output).
+Zoe Agent auto-detects Docker and non-interactive environments. When running in a container, it adjusts behavior accordingly (no interactive prompts, streamlined output).
 
 ### Shell Approval in Containers
-Set `ZCLAW_SHELL_APPROVE` to control how shell commands are approved without interactive prompts:
+Set `ZOE_SHELL_APPROVE` to control how shell commands are approved without interactive prompts:
 - `auto`: Automatically approve all commands (use in trusted/sandboxed environments)
 - `deny`: Deny all shell command execution
 - _(unset)_: Interactive prompt (default, requires a TTY)
@@ -512,19 +512,19 @@ Set `ZCLAW_SHELL_APPROVE` to control how shell commands are approved without int
 ```yaml
 # docker-compose.yml example
 services:
-  zclaw:
+  zoe:
     build: .
     ports:
       - "7337:7337"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - ZCLAW_SHELL_APPROVE=auto
-      - ZCLAW_SKILLS_PATH=/app/skills
+      - ZOE_SHELL_APPROVE=auto
+      - ZOE_SKILLS_PATH=/app/skills
 ```
 
 ### Non-Latin Font Issues in Screenshots
-When running ZClaw inside a Docker container (especially Alpine or Debian Slim), screenshots of websites with non-Latin text (e.g., CJK characters) may display text as square boxes ("tofu") due to missing fonts. Emojis (e.g., 🔥) may also appear as squares.
+When running Zoe Agent inside a Docker container (especially Alpine or Debian Slim), screenshots of websites with non-Latin text (e.g., CJK characters) may display text as square boxes ("tofu") due to missing fonts. Emojis (e.g., 🔥) may also appear as squares.
 
 **Solution:** Install CJK (Chinese/Japanese/Korean) and Emoji fonts in your container.
 
@@ -551,13 +551,13 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 5.  Open a Pull Request
 
 ---
-GitHub: [https://github.com/hashangit/zclaw](https://github.com/hashangit/zclaw)
+GitHub: [https://github.com/hashangit/zoe-agent](https://github.com/hashangit/zoe-agent)
 
 ---
 
 ## Acknowledgments
 
-ZClaw is a standalone project forked from the original [AutoClaw](https://github.com/tsingliuwin/autoclaw) project by **tsingliuwin** under the MIT License on **March 31st, 2026**. 
+Zoe Agent is a standalone project forked from the original [AutoClaw](https://github.com/tsingliuwin/autoclaw) project by **tsingliuwin** under the MIT License on **March 31st, 2026**. 
 
 We would like to express our sincere gratitude to **tsingliuwin** and all the contributors of the original AutoClaw project for their exceptional work and vision, which served as the foundation for this repository.
 

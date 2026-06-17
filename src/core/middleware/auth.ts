@@ -1,11 +1,11 @@
 /**
- * ZClaw Middleware — Auth
+ * Zoe Middleware — Auth
  *
  * Simple, composable auth validation middleware.
  */
 
 import type { PipelineContext, Middleware } from "../middleware.js";
-import { ZclawError } from "../errors.js";
+import { ZoeError } from "../errors.js";
 
 export interface AuthOptions {
   /** Validate the request context. Throw or return false to reject. */
@@ -32,7 +32,7 @@ export function authMiddleware(options: AuthOptions): Middleware {
   return async (ctx: PipelineContext, next: () => Promise<void>) => {
     const allowed = await validate(ctx);
     if (!allowed) {
-      throw new ZclawError(errorMessage, "UNAUTHORIZED", false);
+      throw new ZoeError(errorMessage, "UNAUTHORIZED", false);
     }
     await next();
   };

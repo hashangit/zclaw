@@ -74,7 +74,7 @@ handler: async (args, _config, extra) => {
   }
 
   // 2. Atomic write: temp file + rename.
-  const tmpPath = filePath + '.zclaw-tmp-' + Date.now();
+  const tmpPath = filePath + '.zoe-tmp-' + Date.now();
   try {
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(tmpPath, newContent, 'utf-8');
@@ -234,9 +234,15 @@ diff + potential undo).
 
 ## T052 — Collapsible Thinking/Reasoning Blocks
 
+> **Status (2026-06-17): DEFERRED until the pi-ai provider migration.** See
+> "Decision: DEFER" and the migration-relevance tags below. ~70 of ~140 lines
+> are throwaway pre-migration; pi-ai's native `reasoning` option collapses the
+> provider layer. Full per-adapter parity surface recorded below so the
+> post-migration implementer doesn't re-derive it.
+
 ### Problem
 Some providers (Anthropic, OpenAI o-series) emit **reasoning/thinking content**
-alongside the main response. Currently, zClaw's providers don't surface
+alongside the main response. Currently, Zoe Agent's providers don't surface
 reasoning content — `ProviderResponse.content` is only the main text. The
 reasoning is invisible to the user, even though it's valuable for transparency
 ("why did the agent decide X?").
@@ -305,13 +311,166 @@ chain-of-thought in dim text.
   the provider level (sends `thinking: { type: 'enabled' }`). Without the flag,
   the provider doesn't return thinking blocks.
 
+### Decision: DEFER until the pi-ai provider migration lands
+
+**Decided 2026-06-17.** The work splits cleanly along the migration boundary:
+~70 of ~140 lines are throwaway if done against the current hand-rolled
+providers, including the gnarliest part (Anthropic's rule that `thinking`
+blocks must be echoed back *with their cryptographic signature* on every
+tool-use turn — easy to get subtly wrong). pi-ai already handles this.
+Implement T052 as one clean post-migration pass, not incrementally.
+
+**Migration is imminent (days–2 weeks) and the user actively uses reasoning
+models.** These pull in opposite directions, but the timing wins: a partial
+pass now means re-touching the streaming path when pi-ai lands, with ~70
+lines of throwaway in between. The whole task post-migration is ~60 lines TUI
++ ~5 lines to flip pi-ai's `reasoning` option + the adapter-parity work below.
+
+### Correction: pi-ai DOES support extended thinking
+
+`docs/llm-provider-management-comparison.md` §2.7 claims pi-ai has *"No
+built-in support for provider-specific features (e.g., Anthropic's extended
+thinking)."* **This is factually wrong** (verified against pi-ai 0.73.1):
+- pi-ai has a first-class **`reasoning` option** (off by default) enabling
+  extended thinking for Claude, o3, and Gemini 2.5.
+- It consumes Anthropic's native `thinking` content blocks and **normalizes
+  them to tagged text** when round-tripping to non-Anthropic providers.
+- Its model registry reports per-model thinking support (resolves the "GLM
+  unknown" gap in the Scope above for free).
+
+**This correction must be applied to the comparison doc before relying on it
+for migration design.** Post-migration, Layer 1 below collapses to "pass
+`reasoning: { enabled: true }`, read reasoning from the normalized response."
+
+### Implementation layers (tagged by migration relevance)
+
+The original File estimate (above) is CLI-only. Since all adapters must reach
+parity, the real surface is three layers. Each item is tagged by whether it
+survives the pi-ai migration:
+
+| Relevance tag | Meaning |
+|---------------|---------|
+| **[SURVIVES]** | Unchanged by the migration — do post-migration |
+| **[PARTIAL]** | The shape survives; the source/option-threading simplifies |
+| **[THROWAWAY]** | Rewritten or removed by pi-ai — do NOT do pre-migration |
+
+#### Layer 1 — Provider extraction **[THROWAWAY]**
+
+The part being thrown away. Hand-rolled against the current providers:
+- `ProviderResponse.reasoning?` (`providers/types.ts:19`) + a
+  `reasoning_delta` variant in `StreamDelta` (`providers/types.ts:34`).
+- `AnthropicProvider`: inject `thinking: { type: 'enabled', budget_tokens }`,
+  extract `thinking` blocks, **reconstruct thinking blocks (with signature)
+  in `buildRequest()` (`anthropic.ts:22`) for the tool-use round-trip**.
+- `OpenAIProvider`: extract `reasoning_summary` for o-series.
+- GLM: support unknown (guesswork).
+
+**Post-migration this is ~5 lines:** pass pi-ai's `reasoning: { enabled }`,
+read normalized reasoning. Do not implement this layer now.
+
+#### Layer 2 — Core plumbing **[SURVIVES] / [PARTIAL]**
+
+- **[SURVIVES]** `StepResult.reasoning?` — add the field (`core/types.ts:48`).
+  This is the single chokepoint: all three adapters funnel through one
+  `runAgentLoop`, so once reasoning is on the step, the source is unified.
+- **[PARTIAL]** `agent-loop.ts:322` — capture `response.reasoning`, emit the
+  step. Shape survives; how reasoning is read simplifies post-migration.
+- **[PARTIAL]** Thread a `reasoning` option through CLI → config → Agent →
+  loop → `ChatOptions`. Post-migration this becomes "flip pi-ai's flag" —
+  the CLI/settings plumbing survives, the provider-option shape does not.
+
+#### Layer 3 — TUI **[SURVIVES]**
+
+Fully migration-agnostic (cannot be done in isolation — needs a reasoning
+step to render — so it ships with the post-migration pass):
+- `FeedEntry` gains `reasoning?` on `AssistantMessageEntry`
+  (`tui/types.ts:19`) or a new `reasoning` kind.
+- New `ReasoningBlock` component — clone `ToolCallBlock`'s collapsed/expand
+  pattern (`tool-call-block.tsx:54`).
+- `use-agent.ts:128` `onStep` — handle the reasoning step, commit alongside
+  the assistant message.
+- `app.tsx` — `/thinking` toggle (mirrors `/models` dispatch at
+  `app.tsx:224`); footer `contextTokens` accounts for reasoning tokens.
+
+### Adapter parity (NOT in the original File estimate)
+
+The original estimate is CLI-only. All three adapters must reach parity, and
+each has its own serialization boundary that currently drops reasoning. The
+gaps, tagged by relevance:
+
+#### SDK **[SURVIVES]**
+
+| Surface | Gap |
+|---------|-----|
+| `generateText().steps` | **Free** — raw `StepResult[]` flows through (`sdk/index.ts:179`) |
+| `streamText` `stepsStream` | **Free** — `stream.enqueueStep(step)` passes the full step (`sdk/index.ts:273`) |
+| `onReasoning` callback | Add for ergonomic parity (else users walk `onStep`) |
+| `AgentResponse` | `agent.chat()` returns `{ text, toolCalls, usage }` — **no reasoning** (`sdk/agent.ts:213`). Add `reasoning?` |
+
+#### Server **[SURVIVES]** — the worst offender
+
+The ARCHITECTURE doc already flags this for metadata ("the server forwards
+only a narrow `{type, content, timestamp}` step subset"). Reasoning hits that
+wall three times:
+
+| Surface | Gap |
+|---------|-----|
+| `server-core.ts:131` onStep | Branches on `text` + `tool_call` only — reasoning ignored. Add an `onReasoning` passthrough |
+| REST response shape | `{ text, usage, finishReason }` — no reasoning |
+| SSE (`toSSEStream`) | Shares `StreamManager` with SDK — a single `reasoning` event here covers **both** adapters (`stream-manager.ts:190`) |
+| **WebSocket** `ws-handlers.ts:296` | **Worst case**: collapses every non-text step to `{ type: "progress", activity: step.content ?? step.type }` — reasoning becomes a progress msg with `activity: "reasoning"` and undefined content. Needs a dedicated `{ type: "reasoning", ... }` message type |
+
+The WS layer is the real parity liability: even with a perfect provider +
+loop + SDK, reasoning is invisible to WS clients without a protocol addition.
+
+#### Shared `StreamManager` **[SURVIVES]**
+
+`toSSEStream()` emits `text`/`tool_call`/`tool_result`/`done` only
+(`stream-manager.ts:190`). One `reasoning` event addition covers both the SDK
+and Server SSE paths.
+
+### Streaming vs block design question **[PARTIAL]**
+
+Decides the scope. Does reasoning **stream** (token-by-token, like
+`text_delta`) or arrive **as a block** on completion?
+
+- The Risks section above already punts streaming ("Deferred — for v1, show
+  reasoning on completion").
+- pi-ai streams reasoning natively as part of its normalized event flow, so
+  the streaming path is cheap post-migration.
+- Against the hand-rolled provider, streaming adds a `reasoning_delta` to
+  `StreamDelta` and **6 touch points** (loop → `StreamManager` → SDK
+  `onReasoning` → server SSE → server WS → TUI live region). Block-only is
+  ~4 adapter changes.
+
+**Recommendation: ship block-only first (4 changes), add streaming in a
+follow-up post-migration** when pi-ai makes it ~trivial. Doing streaming now
+against the hand-rolled provider risks designing the `reasoning_delta` shape
+wrong against a detail pi-ai will obsolete.
+
+### Post-migration implementation checklist (~1 PR)
+
+When the pi-ai migration lands, T052 becomes:
+1. **[SURVIVES]** `StepResult` ← add `reasoning?: string` (`core/types.ts:48`)
+2. **[PARTIAL]** Agent loop ← pass pi-ai's `reasoning: { enabled: thinkingFlag }`;
+   emit reasoning into the text step (~5 lines)
+3. **[SURVIVES]** `FeedEntry` ← `reasoning?` on `AssistantMessageEntry` (`tui/types.ts:19`)
+4. **[SURVIVES]** `ReasoningBlock` component ← clone `ToolCallBlock`'s collapsed/expand pattern (`tool-call-block.tsx:54`)
+5. **[SURVIVES]** `use-agent.ts:128` `onStep` ← commit reasoning alongside assistant text
+6. **[SURVIVES]** `app.tsx` ← `/thinking` toggle + flag (mirrors `/models` dispatch at `app.tsx:224`); footer `contextTokens` accounts for reasoning tokens
+7. **[SURVIVES]** SDK ← add `AgentResponse.reasoning?` (`sdk/agent.ts:213`) + optional `onReasoning` callback
+8. **[SURVIVES]** `StreamManager.toSSEStream()` ← add a `reasoning` event (covers SDK + Server SSE; `stream-manager.ts:190`)
+9. **[SURVIVES]** Server ← `server-core.ts:131` `onReasoning` passthrough + REST shape field
+10. **[SURVIVES]** WS ← new `{ type: "reasoning", ... }` message type (`ws-handlers.ts:296`)
+11. **[THROWAWAY pre-migration]** Apply the pi-ai thinking claim correction to `docs/llm-provider-management-comparison.md` §2.7
+
 ---
 
 ## T049 — Session Selector Overlay
 
 ### Problem
 The TUI has no session management. The conversation is in-memory; if the user
-restarts zClaw, the conversation is lost. There's no way to list, preview,
+restarts Zoe Agent, the conversation is lost. There's no way to list, preview,
 resume, or export past sessions.
 
 ### Target UX
@@ -327,7 +486,7 @@ that lists saved sessions with:
 1. **Session persistence for the CLI Agent**: The CLI Agent currently has no
    persistence. The SDK Agent does (`opts.persist` → PersistenceBackend). The
    CLI Agent needs:
-   - A `PersistenceBackend` (file backend — `~/.zclaw/sessions/<id>.json`).
+   - A `PersistenceBackend` (file backend — `~/.zoe/sessions/<id>.json`).
    - Auto-save after each turn (like the SDK's `persistMessages()`).
    - Auto-load on startup (resume the last session or start fresh).
 

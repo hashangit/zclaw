@@ -1,5 +1,5 @@
 /**
- * ZClaw CLI — /settings Command Handler
+ * Zoe CLI — /settings Command Handler
  *
  * Read subcommands (list/get/reset/export/help) return their output for the
  * adapter to render. The interactive wizard and `set` use inquirer (own stdin)

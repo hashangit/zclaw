@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * ZClaw Server — Standalone Entry Point
+ * Zoe Server — Standalone Entry Point
  *
- * Starts the ZClaw remote server as a standalone process.
+ * Starts the Zoe remote server as a standalone process.
  * Suitable as a Docker CMD/ENTRYPOINT or direct CLI invocation.
  *
  * Usage:
@@ -10,11 +10,11 @@
  *   node dist/adapters/server/standalone.js --generate-api-key
  *
  * Environment variables:
- *   ZCLAW_PORT / PORT     — Port to listen on (default: 7337)
- *   ZCLAW_HOST            — Host to bind to (default: "0.0.0.0")
- *   ZCLAW_SESSION_DIR     — Directory for session storage
- *   ZCLAW_SESSION_TTL     — Session TTL in seconds (default: 86400)
- *   ZCLAW_API_KEYS_FILE   — Path to API key store file
+ *   ZOE_PORT / PORT     — Port to listen on (default: 7337)
+ *   ZOE_HOST            — Host to bind to (default: "0.0.0.0")
+ *   ZOE_SESSION_DIR     — Directory for session storage
+ *   ZOE_SESSION_TTL     — Session TTL in seconds (default: 86400)
+ *   ZOE_API_KEYS_FILE   — Path to API key store file
  */
 
 import * as fs from "fs";
@@ -43,7 +43,7 @@ function resolveVersion(): string {
 // ── API Key Generation ─────────────────────────────────────────────────
 
 function handleGenerateApiKey(): void {
-  const filePath = process.env.ZCLAW_API_KEYS_FILE || undefined;
+  const filePath = process.env.ZOE_API_KEYS_FILE || undefined;
   const entry = generateApiKey(["agent:run", "admin"], {
     label: "cli-generated",
     filePath,
@@ -52,7 +52,7 @@ function handleGenerateApiKey(): void {
   process.stdout.write(
     `Scopes: ${entry.scopes.join(", ")}\n` +
       `Created: ${entry.created}\n` +
-      `Stored in: ${filePath ?? "~/.zclaw/server-keys.json"}\n`,
+      `Stored in: ${filePath ?? "~/.zoe/server-keys.json"}\n`,
   );
   process.exit(0);
 }
@@ -69,14 +69,14 @@ async function main(): Promise<void> {
   const version = resolveVersion();
 
   // Resolve configuration from environment
-  const port = parseInt(process.env.ZCLAW_PORT ?? process.env.PORT ?? "", 10);
-  const host = process.env.ZCLAW_HOST ?? "0.0.0.0";
-  const sessionTTL = parseInt(process.env.ZCLAW_SESSION_TTL ?? "", 10);
-  const apiKeysFile = process.env.ZCLAW_API_KEYS_FILE;
+  const port = parseInt(process.env.ZOE_PORT ?? process.env.PORT ?? "", 10);
+  const host = process.env.ZOE_HOST ?? "0.0.0.0";
+  const sessionTTL = parseInt(process.env.ZOE_SESSION_TTL ?? "", 10);
+  const apiKeysFile = process.env.ZOE_API_KEYS_FILE;
 
   // Expose API keys file path for the auth module if provided
   if (apiKeysFile) {
-    process.env.ZCLAW_API_KEYS_FILE = apiKeysFile;
+    process.env.ZOE_API_KEYS_FILE = apiKeysFile;
   }
 
   const options: ServerOptions = {
@@ -85,7 +85,7 @@ async function main(): Promise<void> {
     ...(isNaN(sessionTTL) || sessionTTL <= 0 ? {} : { sessionTTL }),
   };
 
-  process.stdout.write(`[zclaw] Starting ZClaw server v${version}\n`);
+  process.stdout.write(`[zoe] Starting Zoe server v${version}\n`);
 
   try {
     // Initialize skills registry
@@ -96,26 +96,26 @@ async function main(): Promise<void> {
 
     const actualPort = (server.address() as any)?.port ?? options.port ?? 7337;
     process.stdout.write(
-      `[zclaw] Listening on ${host}:${actualPort}\n` +
-        `[zclaw] Session TTL: ${
+      `[zoe] Listening on ${host}:${actualPort}\n` +
+        `[zoe] Session TTL: ${
           isNaN(sessionTTL) || sessionTTL <= 0 ? 86400 : sessionTTL
         }s\n` +
-        `[zclaw] API keys: ${
-          apiKeysFile ?? "~/.zclaw/server-keys.json"
+        `[zoe] API keys: ${
+          apiKeysFile ?? "~/.zoe/server-keys.json"
         }\n`,
     );
 
     // Graceful shutdown
     const shutdown = (signal: string) => {
-      process.stdout.write(`[zclaw] Received ${signal}, shutting down...\n`);
+      process.stdout.write(`[zoe] Received ${signal}, shutting down...\n`);
       server.close(() => {
-        process.stdout.write("[zclaw] Server stopped.\n");
+        process.stdout.write("[zoe] Server stopped.\n");
         process.exit(0);
       });
       // Force exit after 5 seconds if connections don't drain
       setTimeout(() => {
         process.stdout.write(
-          "[zclaw] Force exiting after 5s timeout.\n",
+          "[zoe] Force exiting after 5s timeout.\n",
         );
         process.exit(0);
       }, 5000);
@@ -132,8 +132,8 @@ async function main(): Promise<void> {
       message.includes("EACCES")
     ) {
       process.stdout.write(
-        `[zclaw] Fatal: ${message}\n` +
-          `[zclaw] Check that port ${
+        `[zoe] Fatal: ${message}\n` +
+          `[zoe] Check that port ${
             isNaN(port) || port <= 0 ? 7337 : port
           } is available and you have permission to bind.\n`,
       );
@@ -142,13 +142,13 @@ async function main(): Promise<void> {
       message.includes("sessions")
     ) {
       process.stdout.write(
-        `[zclaw] Fatal: Cannot create session directory.\n` +
-          `[zclaw] Ensure ZCLAW_SESSION_DIR (${
-            process.env.ZCLAW_SESSION_DIR ?? "<cwd>/.zclaw/sessions"
+        `[zoe] Fatal: Cannot create session directory.\n` +
+          `[zoe] Ensure ZOE_SESSION_DIR (${
+            process.env.ZOE_SESSION_DIR ?? "<cwd>/.zoe/sessions"
           }) is writable.\n`,
       );
     } else {
-      process.stdout.write(`[zclaw] Fatal error: ${message}\n`);
+      process.stdout.write(`[zoe] Fatal error: ${message}\n`);
     }
 
     process.exit(1);

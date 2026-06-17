@@ -1,5 +1,5 @@
 /**
- * ZClaw Server — Gateway REST Route Handlers
+ * Zoe Server — Gateway REST Route Handlers
  *
  * Handles all /v1/gateway/* REST endpoints for target management,
  * audit logs, usage summaries, credentials, routes, and OpenAPI imports.

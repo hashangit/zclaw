@@ -1,5 +1,5 @@
 /**
- * ZClaw Gateway — Semantic Scorer
+ * Zoe Gateway — Semantic Scorer
  *
  * Keyword-based relevance scoring for tool injection.
  * Zero dependencies, deterministic, fast.

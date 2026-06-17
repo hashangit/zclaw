@@ -1,5 +1,5 @@
 /**
- * ZClaw Gateway — Public API
+ * Zoe Gateway — Public API
  *
  * Barrel export for the gateway subsystem.
  */

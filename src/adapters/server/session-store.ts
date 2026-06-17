@@ -1,5 +1,5 @@
 /**
- * ZClaw Server — Server-side Session Management
+ * Zoe Server — Server-side Session Management
  *
  * Wraps a PersistenceBackend for server-specific needs:
  *  - TTL-based session expiration

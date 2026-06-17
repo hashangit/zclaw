@@ -1,4 +1,4 @@
-# ZClaw Architecture
+# Zoe Agent Architecture
 
 Headless AI agent framework with CLI, SDK, and Server adapters. Multi-provider LLM support, skill plugin system, and Docker-native deployment.
 
@@ -216,7 +216,7 @@ Re-export hub for `provider-env.ts` (env var helpers, defaults, `resolveFromEnv(
 ```
 Explicit config (configureProviders())
   → Environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
-    → Legacy env vars (ZCLAW_API_KEY, OPENAI_BASE_URL) with deprecation warnings
+    → Legacy env vars (ZOE_API_KEY, OPENAI_BASE_URL) with deprecation warnings
       → Defaults (provider: openai, model: gpt-5.4)
 ```
 
@@ -280,16 +280,16 @@ Key behaviors:
 - **Atomic persistence**: Write to temp file → rename, with backup
 - **Deep merge**: Setting one provider key preserves sibling provider configs
 - **Validation**: Type coercion (string → number/boolean), enum constraints, URL parsing, hostname regex
-- **SettingsError**: Extends `ZclawError` with codes `SETTINGS_INVALID_KEY`, `SETTINGS_VALIDATION_FAILED`, `SETTINGS_WRITE_FAILED`
+- **SettingsError**: Extends `ZoeError` with codes `SETTINGS_INVALID_KEY`, `SETTINGS_VALIDATION_FAILED`, `SETTINGS_WRITE_FAILED`
 
 ### Session Store (`session-store.ts`)
 
-Composable persistence via `PersistenceBackend` interface: `save(id, SessionData)`, `load(id)`, `delete(id)`, `list()`. Factory function `createPersistenceBackend(config)` creates backends by type. `registerBackend(type, factory)` registers custom backends (Redis, SQLite, etc.). Built-in: `file` (JSON files in `~/.zclaw/sessions/`) and `memory` (Map-based, for testing). Legacy `SessionStore`-based API (`createSessionStore`, `createMemoryStore`) preserved for backward compatibility.
+Composable persistence via `PersistenceBackend` interface: `save(id, SessionData)`, `load(id)`, `delete(id)`, `list()`. Factory function `createPersistenceBackend(config)` creates backends by type. `registerBackend(type, factory)` registers custom backends (Redis, SQLite, etc.). Built-in: `file` (JSON files in `~/.zoe/sessions/`) and `memory` (Map-based, for testing). Legacy `SessionStore`-based API (`createSessionStore`, `createMemoryStore`) preserved for backward compatibility.
 
 ### Error Hierarchy (`errors.ts`)
 
 ```
-ZclawError (base: message, code, retryable)
+ZoeError (base: message, code, retryable)
 ├── ProviderError  (provider field)
 ├── ToolError      (tool field)
 ├── MaxStepsError  (steps field)
@@ -337,18 +337,18 @@ Two interactive modes, chosen by `resolveLaunchMode()` (the same predicate that 
 
 **Session management**: list / resume / delete / rename / export (JSON) / transcript (Markdown) via the session-selector overlay. Resume rebuilds the feed **and** the todo panel from persisted messages (`feed-serializer.ts` routes `manage_todos` to the persistent panel, not the feed).
 
-- **Config loading**: Global (`~/.zclaw/setting.json`) + local (`.zclaw/setting.json`) + env overrides
+- **Config loading**: Global (`~/.zoe/setting.json`) + local (`.zoe/setting.json`) + env overrides
 - **Interrupt handling**: ESC/Ctrl+C → `agent.abort()` (TUI owns raw stdin in TTY mode; the readline REPL uses `setupInterrupt()`)
 - **Slash commands**: registry-based dispatch (`/help`, `/clear`, `/exit`, `/compact`, `/sessions`, `/settings`, `/models`, …)
 - **Docker mode**: detects `.dockerenv`, switches to non-interactive + auto-approve shell
 
 ### SDK Adapter
 
-Programmatic library published as `zclaw-core` on npm.
+Programmatic library published as `zoe-agent` on npm.
 
 Two entry points:
-- `zclaw` → `generateText()`, `streamText()`, `createAgent()`
-- `zclaw/server` → Server adapter (imports core directly, no SDK dependency)
+- `zoe` → `generateText()`, `streamText()`, `createAgent()`
+- `zoe/server` → Server adapter (imports core directly, no SDK dependency)
 
 `createAgent()` returns `SdkAgent` with: `chat()`, `chatStream()`, `switchProvider()`, `abort()`, `clear()`, `getHistory()`, `getUsage()`. Supports session persistence via `persist` option.
 
@@ -356,9 +356,9 @@ Two entry points:
 
 Standalone HTTP + WebSocket server. Delegates directly to `runAgentLoop` in core (no SDK dependency). REST endpoints for generate/stream/agent operations. WebSocket for real-time bidirectional communication with reconnection support.
 
-- **Auth**: API key with scopes (`chat`, `admin`). Keys stored in `~/.zclaw/api-keys.json`
+- **Auth**: API key with scopes (`chat`, `admin`). Keys stored in `~/.zoe/api-keys.json`
 - **Sessions**: TTL-based expiration, per-key concurrency limits
-- **Deployment**: `zclaw-server` binary, Docker image, or `docker-compose`
+- **Deployment**: `zoe-server` binary, Docker image, or `docker-compose`
 
 ## Skills System
 
@@ -387,9 +387,9 @@ System prompt and instructions for the skill...
 
 Skills are discovered from multiple sources with priority (last wins):
 1. Built-in skills bundled with the package
-2. User skills in `~/.zclaw/skills/`
-3. Project skills in `.zclaw/skills/`
-4. Custom paths via `ZCLAW_SKILLS_PATH`
+2. User skills in `~/.zoe/skills/`
+3. Project skills in `.zoe/skills/`
+4. Custom paths via `ZOE_SKILLS_PATH`
 
 Discovery uses `parseFrontmatter()` which reads each skill file but discards the body text immediately, keeping only the YAML metadata and `filePath`. Bodies are loaded lazily from disk on first invocation via `registry.getBody()`, with an LRU cache (5 entries) in `DefaultSkillRegistry`.
 
@@ -442,8 +442,8 @@ Multi-layer merge with precedence (highest wins):
 
 ```
 Environment variables
-  → Local project config (.zclaw/setting.json)
-    → Global user config (~/.zclaw/setting.json)
+  → Local project config (.zoe/setting.json)
+    → Global user config (~/.zoe/setting.json)
       → Defaults
 ```
 
@@ -454,7 +454,7 @@ Env var mapping per provider:
 - OpenAI-compatible: `OPENAI_COMPAT_API_KEY`, `OPENAI_COMPAT_BASE_URL`, `OPENAI_COMPAT_MODEL`
 - General: `LLM_PROVIDER`, `LLM_MODEL`
 
-Legacy env vars (`ZCLAW_API_KEY`, `OPENAI_BASE_URL`, `ZCLAW_MODEL`) still work with deprecation warnings.
+Legacy env vars (`ZOE_API_KEY`, `OPENAI_BASE_URL`, `ZOE_MODEL`) still work with deprecation warnings.
 
 ## Build & Deployment
 
@@ -471,7 +471,7 @@ TypeScript (`tsc`) targeting ES2022 with NodeNext module resolution. No bundler 
 }
 ```
 
-Two binaries: `zclaw` (CLI) and `zclaw-server` (standalone server).
+Two binaries: `zoe` (CLI) and `zoe-server` (standalone server).
 
 ### Docker
 
@@ -479,7 +479,7 @@ Multi-stage build: build stage with full Node.js → production stage with compi
 
 Volumes: `/data/sessions` (session persistence), `/mnt/skills` (custom skills).
 
-Env var `ZCLAW_SHELL_APPROVE=auto` enables non-interactive shell tool approval.
+Env var `ZOE_SHELL_APPROVE=auto` enables non-interactive shell tool approval.
 
 ### CI/CD
 
@@ -539,7 +539,7 @@ Targets registered by agents (via `gateway_register_target`) cannot resolve `cre
 
 ### Settings Adapter
 
-The `GatewaySettingsAdapter` provides dedicated storage for dynamic gateway data (targets, credentials, routes) in `~/.zclaw/gateway/`. This bypasses the static `SettingsManager` which rejects unknown dot-keys. The 4 typed gateway settings (`gateway.enabled`, `gateway.semanticTopK`, `gateway.defaultRateLimitPerMin`, `gateway.maxAuditLogs`) go through `SettingsManager`; only the dynamic subtree uses the adapter.
+The `GatewaySettingsAdapter` provides dedicated storage for dynamic gateway data (targets, credentials, routes) in `~/.zoe/gateway/`. This bypasses the static `SettingsManager` which rejects unknown dot-keys. The 4 typed gateway settings (`gateway.enabled`, `gateway.semanticTopK`, `gateway.defaultRateLimitPerMin`, `gateway.maxAuditLogs`) go through `SettingsManager`; only the dynamic subtree uses the adapter.
 
 ### Gateway Adapter Wiring
 

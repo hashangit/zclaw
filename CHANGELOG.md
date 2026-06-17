@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — Project rename: zClaw → Zoe Agent
+
+The project has been renamed from **zClaw** to **Zoe Agent**. This is a
+**breaking change** across all surfaces. There are no backward-compatibility
+fallbacks — existing deployments must migrate.
+
+- **Package**: `zclaw-core` → `zoe-agent` (npm)
+- **Binaries**: `zclaw` → `zoe`, `zclaw-server` → `zoe-server`
+- **Environment variables**: all `ZCLAW_*` → `ZOE_*` (e.g. `ZOE_PERMISSION`,
+  `ZOE_SKILLS_PATH`, `ZOE_SESSION_DIR`, `ZOE_PORT`, `ZOE_API_KEY` legacy alias)
+- **Config directory**: `~/.zclaw/` → `~/.zoe/` (and project `.zclaw/` → `.zoe/`)
+- **Workspace**: `~/zclaw_documents` → `~/zoe_documents` (and `@zclaw_documents/`
+  → `@zoe_documents/` reference sigil)
+- **Legacy config file**: `~/.zclawrc.json` → `~/.zoerc.json`
+- **Error class**: `ZclawError` → `ZoeError` (and `toZclawError` → `toZoeError`)
+- **API key prefix**: `sk_zclaw_` → `sk_zoe_`
+- **Auth header**: `X-Zclaw-API-Key` → `X-Zoe-API-Key`
+- **MCP server name**: `zclaw-gateway` → `zoe-gateway`
+
+**Migration:** rename env vars (`ZCLAW_` → `ZOE_`), move
+`~/.zclaw` → `~/.zoe` and `~/zclaw_documents` → `~/zoe_documents`, update
+imports from `zclaw-core` to `zoe-agent`, re-issue API keys (old `sk_zclaw_`
+keys are no longer accepted), and update any `ZclawError` references to
+`ZoeError`.
+
 ## [v0.3.0] - 2026-06-10
 
 Major release adding the **Gateway subsystem** — a universal API hub that makes ZClaw act as an MCP client, secure REST proxy, and OpenAPI auto-adapter. This release also includes two security fixes found during code scrutiny, a new middleware pipeline, and 10 new agent-facing gateway tools.
