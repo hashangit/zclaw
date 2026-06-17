@@ -1,12 +1,13 @@
 /**
- * ZClaw CLI — System Prompts
+ * Zoe CLI — System Prompts
  *
  * Two system prompts, selected by launch mode:
  *   - non-interactive (headless / piped / docker / --no-interactive):
  *       the Docker-native "worker unit" prompt — byte-identical to the
  *       historical CLI system prompt.
- *   - interactive (TTY + interactive flag): a coding-agent prompt tuned
- *       for a live terminal session (the TUI, or interactive readline).
+ *   - interactive (TTY + interactive flag): a general-purpose agent
+ *       prompt tuned for a live terminal session (the TUI, or
+ *       interactive readline).
  *
  * Mode detection reuses the CLI's existing signals — Commander's
  * `options.interactive` (`--no-interactive`) and `isNonInteractive()`
@@ -42,7 +43,7 @@ System Information:
  * Byte-identical to the historical CLI system prompt.
  */
 export function buildSystemPrompt(): string {
-  return `You are ZClaw, a Docker-Native Autonomous Agent designed for massive scale automation.
+  return `You are Zoe, a Docker-Native Autonomous Agent designed for massive scale automation.
 You are likely running inside a container or headless server, possibly as one of thousands of parallel units in a swarm.
 
 CONTEXT:
@@ -67,10 +68,10 @@ GUIDELINES:
  * Role, tool list, numbered process, and output format follow the
  * interactive-agent conventions shared by tools like Command Code; the
  * working principles mirror this project's own engineering standards
- * (think before coding, surgical changes, simplicity, goal-driven).
+ * (think before acting, surgical changes, simplicity, goal-driven).
  */
 export function buildInteractiveSystemPrompt(): string {
-  return `You are ZClaw, an interactive coding agent in a terminal. You help the user understand, build, and change software through conversation, tool calls, and verified results.
+  return `You are Zoe — the user's AI person. You're a general-purpose assistant in a terminal who gains new capabilities through skills. Coding is one of the things you do, not the whole of it: you also research, write, automate, communicate, and generate media, and each loaded skill adds more. You work through conversation, tool calls, and verified results.
 
 CONTEXT:
 ${buildSystemInfoBlock()}
@@ -90,7 +91,7 @@ TOOL RULES:
 - Track multi-step work with manage_todos: for any task with 2 or more steps, call manage_todos FIRST with the full plan (every item status "pending"), mark one item "in_progress" when you start it, and mark items "completed" (or "blocked") as you finish. Replace the ENTIRE list on every call — do not append. This keeps the user informed of progress in the task panel. Treat "add N items to the todo/task list", "make a plan", and similar as an explicit request to use manage_todos.
 
 WORKING PRINCIPLES:
-1. Think before coding. State assumptions. If a request is ambiguous or a simpler approach exists, say so before implementing.
+1. Think before acting. State assumptions. If a request is ambiguous or a simpler approach exists, say so before implementing.
 2. Surgical changes. Touch only what the task requires. Match existing code style. Don't refactor working code unprompted.
 3. Simplicity first. Write the minimum code that solves the problem. No speculative features.
 4. Goal-driven. Know what "done" means, then verify it — run the tests, re-read the changed code, show the evidence.
@@ -117,10 +118,10 @@ The user is present and interactive. You may ask a clarifying question when trul
  * (i.e. not `--no-interactive`) AND the process is in an interactive
  * context (TTY, not docker, no non-interactive env). This matches every
  * documented launch path:
- *   - plain `zclaw` in a TTY               -> interactive
- *   - `zclaw -n` / `--no-interactive`      -> non-interactive
+ *   - plain `zoe` in a TTY               -> interactive
+ *   - `zoe -n` / `--no-interactive`      -> non-interactive
  *   - piped stdin                          -> non-interactive
- *   - `zclaw --docker`                     -> non-interactive
+ *   - `zoe --docker`                     -> non-interactive
  */
 export function resolveLaunchMode(options: { interactive?: boolean }): LaunchMode {
   if (options.interactive === false) return 'non-interactive';
